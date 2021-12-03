@@ -7,7 +7,7 @@ from .hypervolume import hypervolume
 # from numba.core.decorators import njit
 
 
-__author__ = ["Hao Wang", "Michael Emmerich"]
+__author__ = ["Hao Wang"]
 
 
 def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False):
@@ -32,17 +32,51 @@ def hypervolume_improvement(x: np.ndarray, pareto_front: np.ndarray, ref: np.nda
 
 
 class HypervolumeHessian:
-    def __init__(
-        self, pareto_front: Union[np.ndarray, List[List]], ref: Union[np.ndarray, List[List]]
-    ):
-        if not isinstance(pareto_front, np.ndarray):
-            pareto_front = np.atleast_2d(pareto_front)
-        if not isinstance(ref, np.ndarray):
-            ref = np.asarray(ref)
+    """Analytical Hessian matrix of hypervolume"""
 
-        self.pareto_front = pareto_front  # the Pareto approximation set
-        self.ref = ref  # reference point
+    def __init__(
+        self,
+        pareto_front: Union[np.ndarray, List[List]],
+        ref: Union[np.ndarray, List[List]],
+        maximization: bool = True,
+    ):
+        """Compute the hypervolume Hessian matrix
+
+        Parameters
+        ----------
+        pareto_front : Union[np.ndarray, List[List]]
+            the Pareto front
+        ref : Union[np.ndarray, List[List]]
+            the reference point
+        maximization : bool, optional
+            whether the MOP is subject to maximization, by default True
+        """
+        self.maximization = maximization
+        self.pareto_front = pareto_front
+        self.ref = ref
         self.N, self.dim = self.pareto_front.shape
+
+    @property
+    def ref(self):
+        return self._ref
+
+    @ref.setter
+    def ref(self, r):
+        if not isinstance(r, np.ndarray):
+            r = np.asarray(r)
+        self._ref = r if self.maximization else -1 * r
+
+    @property
+    def pareto_front(self):
+        return self._pareto_front
+
+    @pareto_front.setter
+    def pareto_front(self, pf):
+        if not isinstance(pf, np.ndarray):
+            pf = np.asarray(pf)
+        self._pareto_front = pf if self.maximization else -1 * pf
+        pf_indices = get_non_dominated(self._pareto_front, return_index=True)
+        self._dominated_indices = set(range(len(self._pareto_front))) - set(pf_indices)
 
     def project(
         self, axis: int, i: int, pareto_front: np.ndarray = None
@@ -63,8 +97,10 @@ class HypervolumeHessian:
 
     def compute(self) -> np.ndarray:
         H = np.zeros((self.N * self.dim, self.N * self.dim))
-        for k in range(self.dim):
-            for i in range(self.N):
+        for i in range(self.N):
+            if i in self._dominated_indices:
+                continue
+            for k in range(self.dim):
                 # project along `axis`
                 x_, pareto_front_, ref_, proj_idx = self.project(k, i)
                 # partial derivatives ∂(∂HV/∂y_k^i)/∂y^i
@@ -88,7 +124,7 @@ class HypervolumeHessian:
         return H
 
     def hypervolume_gradient(self, pareto_front: np.ndarray, ref: np.ndarray) -> np.ndarray:
-        if len(ref) == 2:
+        if len(ref) == 2:  # 2D is a simple case
             return self._2D_hypervolume_gradient(pareto_front, ref)
         # general HV gradient in higher dimensions
         N, dim = pareto_front.shape
