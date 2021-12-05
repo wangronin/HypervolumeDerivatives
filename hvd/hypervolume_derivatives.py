@@ -49,8 +49,21 @@ class HypervolumeDerivatives:
 
         Parameters
         ----------
+        dim_d : int
+            dimension of the decision space
+        dim_m : int
+            dimension of the objective space
         ref : Union[np.ndarray, List[List]]
             the reference point
+        func : callable, optional
+            the MOP which takes a decision point as input and returns a vector of shape `(dim_m, 1)`,
+            by default None, which evaluates to an identity function
+        jac : callable, optional
+            Jacobian of the MOP which takes a decision point as input and returns a matrix of
+            shape `(dim_m, dim_d)`, by default None, which evaluates an identity matrix
+        hessian : callable, optional
+            Hessian matrix of the MOP which takes a decision point as input and returns a tensor of
+            shape `(dim_m, dim_d, dim_d)`, by default None, which evaluates an zero tensor
         maximization : bool, optional
             whether the MOP is subject to maximization, by default True
         """
@@ -110,27 +123,26 @@ class HypervolumeDerivatives:
         return y_, pareto_front_, ref_, idx
 
     def compute(self, X: Union[np.ndarray, List[List]]) -> Dict[str, np.ndarray]:
-        """compute the Hessian matrix
+        """compute the hypervolume gradient and Hessian matrix
 
         Parameters
         ----------
         X : Union[np.ndarray, List[List]]
-            the decision points at which the Hessian is computed
+            the decision points at which the derivatives are computed
 
         Returns
         -------
         Dict[str, np.ndarray]
             {
-                "HdX": gradient w.r.t. the decision variable of shape (1, `N` * `dim_d`),
-                "HdY": gradient w.r.t. the objective variable of shape (1, `N` * `dim_m`),
-                "HdX2": Hessian w.r.t. the decision variable of shape (`N` * `dim_d`, `N` * `dim_d`),
-                "HdY2": Hessian w.r.t. the objective variable of shape (`N` * `dim_m`, `N` * `dim_m`)
+                "HVdX": gradient w.r.t. the decision variable of shape (1, `N` * `dim_d`),
+                "HVdY": gradient w.r.t. the objective variable of shape (1, `N` * `dim_m`),
+                "HVdX2": Hessian w.r.t. the decision variable of shape (`N` * `dim_d`, `N` * `dim_d`),
+                "HVdY2": Hessian w.r.t. the objective variable of shape (`N` * `dim_m`, `N` * `dim_m`)
             }
         """
         Y, YdX, YdX2 = self._copmute_objective_derivatives(X)
         self.objective_points = Y
-        HdX2 = np.zeros((self.N * self.dim_d, self.N * self.dim_d))
-        HdY2 = np.zeros((self.N * self.dim_m, self.N * self.dim_m))
+        HVdY2 = np.zeros((self.N * self.dim_m, self.N * self.dim_m))
 
         for i in range(self.N):
             if i in self._dominated_indices:  # if the point is dominated
@@ -144,7 +156,7 @@ class HypervolumeDerivatives:
                 pareto_indices = get_non_dominated(Y_, return_index=True)
                 idx = np.where(pareto_indices == 0)[0]
                 out = self.hypervolume_dY(Y_[pareto_indices], ref_)[idx]
-                HdY2[i * self.dim_m : (i + 1) * self.dim_m, i * self.dim_m + k] = np.insert(out, k, 0)
+                HVdY2[i * self.dim_m : (i + 1) * self.dim_m, i * self.dim_m + k] = np.insert(out, k, 0)
                 # partial derivatives ∂(∂HV/∂y_k^i)/∂y^{-i}
                 # of shape (len(proj_idx), dim), where the k-th element is zero
                 # ∂HV/∂y_k^i is the hypervolume improvement of `x_` w.r.t. `pareto_front_`
@@ -155,21 +167,21 @@ class HypervolumeDerivatives:
                 # hypervolume improvement of points in `pareto_front_` decreases ∂HV/∂y_k^i
                 out = np.insert(-1.0 * out, k, 0, axis=1)
                 for s, j in enumerate(proj_idx):
-                    HdY2[j * self.dim_m : (j + 1) * self.dim_m, i * self.dim_m + k] = out[s]
+                    HVdY2[j * self.dim_m : (j + 1) * self.dim_m, i * self.dim_m + k] = out[s]
 
-        HdY = self.hypervolume_dY(self.objective_points, self.ref).reshape(1, -1)
-        HdX = HdY @ YdX
+        HVdY = self.hypervolume_dY(self.objective_points, self.ref).reshape(1, -1)
+        HVdX = HVdY @ YdX
         if not self.maximization:
-            HdY *= -1
+            HVdY *= -1
         # TODO: use sparse matrix multiplication here
-        HdX2 = YdX.T @ HdY2 @ YdX + np.einsum("...i,i...", HdY, YdX2)
-        return dict(HdX=HdX, HdY=HdY, HdX2=HdX2, HdY2=HdY2)
+        HVdX2 = YdX.T @ HVdY2 @ YdX + np.einsum("...i,i...", HVdY, YdX2)
+        return dict(HVdX=HVdX, HVdY=HVdY, HVdX2=HVdX2, HVdY2=HVdY2)
 
     def hypervolume_dY(self, pareto_front: np.ndarray, ref: np.ndarray) -> np.ndarray:
         N, dim = pareto_front.shape
-        HdY = np.zeros((N, dim))
+        HVdY = np.zeros((N, dim))
         if len(ref) == 1:  # 1D case
-            HdY = np.array([[1]])
+            HVdY = np.array([[1]])
         elif len(ref) == 2:  # 2D case
             N = len(pareto_front)
             # sort the pareto front with repsect to y1
@@ -177,14 +189,14 @@ class HypervolumeDerivatives:
             sorted_pareto_front = pareto_front[idx]
             y1 = sorted_pareto_front[:, 0]
             y2 = sorted_pareto_front[:, 1]
-            HdY[idx, 0] = y2 - np.r_[y2[1:], ref[1]]
-            HdY[idx, 1] = y1 - np.r_[ref[0], y1[0:-1]]
+            HVdY[idx, 0] = y2 - np.r_[y2[1:], ref[1]]
+            HVdY[idx, 1] = y1 - np.r_[ref[0], y1[0:-1]]
         else:  # higher dimensional cases
             for i in range(N):
                 for k in range(dim):
                     y_, pareto_front_, ref_, _ = self.project(k, i, pareto_front)
-                    HdY[i, k] = hypervolume_improvement(y_, pareto_front_, ref_)
-        return HdY
+                    HVdY[i, k] = hypervolume_improvement(y_, pareto_front_, ref_)
+        return HVdY
 
     def _copmute_objective_derivatives(
         self, X: Union[np.ndarray, List[List]]
