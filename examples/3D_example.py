@@ -25,7 +25,7 @@ def hessian(x):
 ref = np.array([0, 0, 0])
 hvh = HypervolumeDerivatives(dim_d=3, dim_m=3, ref=ref, func=func, jac=jac, hessian=hessian)
 out = hvh.compute(X=np.random.rand(2, 3))
-HdY2, HdX2 = out["HdY2"], out["HdX2"]
+HdY2, HdX2 = out["HVdY2"], out["HVdX2"]
 print(HdY2)
 print(HdX2)
 assert np.allclose(HdY2, HdY2.T)

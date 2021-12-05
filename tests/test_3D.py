@@ -11,7 +11,7 @@ def test_3D_case1():
     hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([[5, 1, 7], [2, 3, 10]]))
     assert np.all(
-        out["HdY2"]
+        out["HVdY2"]
         == np.array(
             [
                 [0, 5, 9, 0, -2, -7],
@@ -30,7 +30,7 @@ def test_3D_case2():
     hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([[-1, 5, 7], [2, 3, 10]]))
     assert np.all(
-        out["HdY2"]
+        out["HVdY2"]
         == np.array(
             [
                 [0, 5, 5, 0, 0, -0],
@@ -49,7 +49,7 @@ def test_3D_case3():
     hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([[5, 3, 7], [2, 1, 10]]))
     assert np.all(
-        out["HdY2"]
+        out["HVdY2"]
         == np.array(
             [
                 [0, 3, 7, 0, 0, -7],
@@ -67,9 +67,9 @@ def test_3D_case4():
     ref = np.array([10, 13, 23])
     hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([(8, 7, 10), (4, 11, 17), (2, 9, 21)]))
-    assert np.all(out["HdY"] == np.array([-62, -26, -12, -8, -16, -8, -8, -12, -16]))
+    assert np.all(out["HVdY"] == np.array([-62, -26, -12, -8, -16, -8, -8, -12, -16]))
     assert np.all(
-        out["HdY2"]
+        out["HVdY2"]
         == np.array(
             [
                 [0, 13, 6, 0, -4, -2, 0, -2, -2],
@@ -91,7 +91,7 @@ def test_with_dominated_points():
     hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([[-1, -2, 7], [2, 1, 10]]))
     assert np.all(
-        out["HdY2"]
+        out["HVdY2"]
         == np.array(
             [
                 [0, 5, 12, 0, 0, 0],
