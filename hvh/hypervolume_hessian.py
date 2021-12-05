@@ -160,25 +160,24 @@ class HypervolumeHessian:
             return self._2D_hypervolume_dY(pareto_front, ref)
         # general HV gradient in higher dimensions
         N, dim = pareto_front.shape
-        grad = np.zeros((N, dim))
+        HdY = np.zeros((N, dim))
         for i in range(N):
             for k in range(dim):
                 x_, pareto_front_, ref_, _ = self.project(k, i, pareto_front)
-                grad[i, k] = hypervolume_improvement(x_, pareto_front_, ref_)
-        return grad
+                HdY[i, k] = hypervolume_improvement(x_, pareto_front_, ref_)
+        return HdY
 
     def _2D_hypervolume_dY(self, pareto_front: np.ndarray, ref: np.ndarray) -> np.ndarray:
         N = len(pareto_front)
-        gradient = np.zeros((N, 2))
+        HdY = np.zeros((N, 2))
         # sort the pareto front with repsect to y1
         idx = np.argsort(pareto_front[:, 0])
         sorted_pareto_front = pareto_front[idx]
-
         y1 = sorted_pareto_front[:, 0]
         y2 = sorted_pareto_front[:, 1]
-        gradient[idx, 0] = y2 - np.r_[y2[1:], ref[1]]
-        gradient[idx, 1] = y1 - np.r_[ref[0], y1[0:-1]]
-        return gradient
+        HdY[idx, 0] = y2 - np.r_[y2[1:], ref[1]]
+        HdY[idx, 1] = y1 - np.r_[ref[0], y1[0:-1]]
+        return HdY
 
     def _copmute_objective_derivatives(
         self, X: Union[np.ndarray, List[List]]
