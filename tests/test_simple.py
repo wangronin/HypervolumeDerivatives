@@ -3,12 +3,11 @@ from hvh import HypervolumeHessian
 
 
 def test_3D_case1():
-    pareto_front = np.array([[5, 1, 7], [2, 3, 10]])
     ref = np.array([9, 10, 12])
-    hvh = HypervolumeHessian(pareto_front, ref, maximization=False)
-    H = hvh.compute()
+    hvh = HypervolumeHessian(3, 3, ref, maximization=False)
+    out = hvh.compute(X=np.array([[5, 1, 7], [2, 3, 10]]))
     assert np.all(
-        H
+        out["HdY2"]
         == np.array(
             [
                 [0, 5, 9, 0, -2, -7],
@@ -23,12 +22,11 @@ def test_3D_case1():
 
 
 def test_3D_case2():
-    pareto_front = np.array([[-1, 5, 7], [2, 3, 10]])
     ref = np.array([9, 10, 12])
-    hvh = HypervolumeHessian(pareto_front, ref, maximization=False)
-    H = hvh.compute()
+    hvh = HypervolumeHessian(3, 3, ref, maximization=False)
+    out = hvh.compute(X=np.array([[-1, 5, 7], [2, 3, 10]]))
     assert np.all(
-        H
+        out["HdY2"]
         == np.array(
             [
                 [0, 5, 5, 0, 0, -0],
@@ -43,12 +41,11 @@ def test_3D_case2():
 
 
 def test_3D_case3():
-    pareto_front = np.array([[5, 3, 7], [2, 1, 10]])
     ref = np.array([9, 10, 12])
-    hvh = HypervolumeHessian(pareto_front, ref, maximization=False)
-    H = hvh.compute()
+    hvh = HypervolumeHessian(3, 3, ref, maximization=False)
+    out = hvh.compute(X=np.array([[5, 3, 7], [2, 1, 10]]))
     assert np.all(
-        H
+        out["HdY2"]
         == np.array(
             [
                 [0, 3, 7, 0, 0, -7],
@@ -63,12 +60,11 @@ def test_3D_case3():
 
 
 def test_with_dominated_points():
-    pareto_front = np.array([[-1, -2, 7], [2, 1, 10]])
     ref = np.array([9, 10, 12])
-    hvh = HypervolumeHessian(pareto_front, ref, maximization=False)
-    H = hvh.compute()
+    hvh = HypervolumeHessian(3, 3, ref, maximization=False)
+    out = hvh.compute(X=np.array([[-1, -2, 7], [2, 1, 10]]))
     assert np.all(
-        H
+        out["HdY2"]
         == np.array(
             [
                 [0, 5, 12, 0, 0, 0],
