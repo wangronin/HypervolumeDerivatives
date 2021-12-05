@@ -63,7 +63,7 @@ class HypervolumeDerivatives:
             shape `(dim_m, dim_d)`, by default None, which evaluates an identity matrix
         hessian : callable, optional
             Hessian matrix of the MOP which takes a decision point as input and returns a tensor of
-            shape `(dim_m, dim_d, dim_d)`, by default None, which evaluates an zero tensor
+            shape `(dim_m, dim_d, dim_d)`, by default None, which evaluates a zero tensor
         maximization : bool, optional
             whether the MOP is subject to maximization, by default True
         """
