@@ -29,7 +29,7 @@ def hypervolume_improvement(x: np.ndarray, pareto_front: np.ndarray, ref: np.nda
     return hypervolume(np.vstack([x, pareto_front]), ref) - hypervolume(pareto_front, ref)
 
 
-class HypervolumeHessian:
+class HypervolumeDerivatives:
     """Analytical Hessian matrix of hypervolume indicator"""
 
     def __init__(
@@ -151,9 +151,10 @@ class HypervolumeHessian:
                     HdY2[j * self.dim_m : (j + 1) * self.dim_m, i * self.dim_m + k] = out[s]
 
         HdY = self.hypervolume_dY(self.objective_points, self.ref).reshape(1, -1)
+        HdX = HdY @ YdX
         # TODO: use sparse matrix multiplication here
         HdX2 = YdX.T @ HdY2 @ YdX + np.einsum("...i,i...", HdY, YdX2)
-        return dict(HdX2=HdX2, HdY2=HdY2)
+        return dict(HdX=HdX, HdY=HdY, HdX2=HdX2, HdY2=HdY2)
 
     def hypervolume_dY(self, pareto_front: np.ndarray, ref: np.ndarray) -> np.ndarray:
         if len(ref) == 2:  # 2D is a simple case

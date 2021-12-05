@@ -3,12 +3,12 @@ import sys
 import numpy as np
 
 sys.path.insert(0, './')
-from hvh import HypervolumeHessian
+from hvh import HypervolumeDerivatives
 
 
 def test_3D_case1():
     ref = np.array([9, 10, 12])
-    hvh = HypervolumeHessian(3, 3, ref, maximization=False)
+    hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([[5, 1, 7], [2, 3, 10]]))
     assert np.all(
         out["HdY2"]
@@ -27,7 +27,7 @@ def test_3D_case1():
 
 def test_3D_case2():
     ref = np.array([9, 10, 12])
-    hvh = HypervolumeHessian(3, 3, ref, maximization=False)
+    hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([[-1, 5, 7], [2, 3, 10]]))
     assert np.all(
         out["HdY2"]
@@ -46,7 +46,7 @@ def test_3D_case2():
 
 def test_3D_case3():
     ref = np.array([9, 10, 12])
-    hvh = HypervolumeHessian(3, 3, ref, maximization=False)
+    hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([[5, 3, 7], [2, 1, 10]]))
     assert np.all(
         out["HdY2"]
@@ -65,7 +65,7 @@ def test_3D_case3():
 
 def test_with_dominated_points():
     ref = np.array([9, 10, 12])
-    hvh = HypervolumeHessian(3, 3, ref, maximization=False)
+    hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
     out = hvh.compute(X=np.array([[-1, -2, 7], [2, 1, 10]]))
     assert np.all(
         out["HdY2"]
