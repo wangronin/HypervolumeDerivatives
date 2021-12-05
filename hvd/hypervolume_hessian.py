@@ -30,7 +30,7 @@ def hypervolume_improvement(x: np.ndarray, pareto_front: np.ndarray, ref: np.nda
 
 
 class HypervolumeDerivatives:
-    """Analytical Hessian matrix of hypervolume indicator"""
+    """Analytical gradient and Hessian matrix of hypervolume indicator"""
 
     def __init__(
         self,
@@ -117,8 +117,12 @@ class HypervolumeDerivatives:
         Returns
         -------
         Dict[str, np.ndarray]
-            {"HdX2": Hessian w.r.t. the decision variable of shape (`N` * `dim`, `N` * `dim`),
-             "HdY2": Hessian w.r.t. the decision variable of shape (`N` * `dim`, `N` * `dim`)}
+            {
+                "HdX": gradient w.r.t. the decision variable of shape (1, `N` * `dim_d`),
+                "HdY": gradient w.r.t. the objective variable of shape (1, `N` * `dim_m`),
+                "HdX2": Hessian w.r.t. the decision variable of shape (`N` * `dim_d`, `N` * `dim_d`),
+                "HdY2": Hessian w.r.t. the objective variable of shape (`N` * `dim_m`, `N` * `dim_m`)
+            }
         """
         Y, YdX, YdX2 = self._copmute_objective_derivatives(X)
         self.objective_points = Y

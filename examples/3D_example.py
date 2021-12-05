@@ -1,5 +1,5 @@
 import numpy as np
-from hvh import HypervolumeDerivatives, get_non_dominated
+from hvd import HypervolumeDerivatives, get_non_dominated
 
 np.random.seed(42)
 
