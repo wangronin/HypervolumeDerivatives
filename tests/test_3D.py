@@ -2,7 +2,7 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, './')
+sys.path.insert(0, "./")
 from hvd import HypervolumeDerivatives
 
 
@@ -58,6 +58,29 @@ def test_3D_case3():
                 [0, -0, 0, 0, 2, 9],
                 [-0, 0, 0, 2, 0, 7],
                 [-7, -4, 0, 9, 7, 0],
+            ]
+        )
+    )
+
+
+def test_3D_case4():
+    ref = np.array([10, 13, 23])
+    hvh = HypervolumeDerivatives(3, 3, ref, maximization=False)
+    out = hvh.compute(X=np.array([(8, 7, 10), (4, 11, 17), (2, 9, 21)]))
+    assert np.all(out["HdY"] == np.array([-62, -26, -12, -8, -16, -8, -8, -12, -16]))
+    assert np.all(
+        out["HdY2"]
+        == np.array(
+            [
+                [0, 13, 6, 0, -4, -2, 0, -2, -2],
+                [13, 0, 2, 0, 0, 0, 0, 0, 0],
+                [6, 2, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 4, 2, 0, 0, -2],
+                [-4, 0, 0, 4, 0, 4, 0, 0, -4],
+                [-2, 0, 0, 2, 4, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 2, 4],
+                [-2, 0, 0, 0, 0, 0, 2, 0, 6],
+                [-2, 0, 0, -2, -4, 0, 4, 6, 0],
             ]
         )
     )

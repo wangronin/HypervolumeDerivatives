@@ -26,7 +26,10 @@ def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False):
 
 
 def hypervolume_improvement(x: np.ndarray, pareto_front: np.ndarray, ref: np.ndarray):
-    return hypervolume(np.vstack([x, pareto_front]), ref) - hypervolume(pareto_front, ref)
+    x = -1 * x.copy()
+    pareto_front = -1 * pareto_front.copy()
+    ref = -1 * ref.copy()
+    return hypervolume(np.vstack([x, pareto_front]), ref) - hypervolume(pareto_front.copy(), ref)
 
 
 class HypervolumeDerivatives:
@@ -60,9 +63,9 @@ class HypervolumeDerivatives:
 
         self.dim_d = int(dim_d)
         self.dim_m = int(dim_m)
-        self.func = func
-        self.jac = jac
-        self.hessian = hessian
+        self.func = func if maximization else lambda x: -1 * func(x)
+        self.jac = jac if maximization else lambda x: -1 * jac(x)
+        self.hessian = hessian if maximization else lambda x: -1 * hessian(x)
         self.maximization = maximization
         self.ref = ref
 
@@ -84,7 +87,7 @@ class HypervolumeDerivatives:
     def objective_points(self, points):
         if not isinstance(points, np.ndarray):
             points = np.asarray(points)
-        self._objective_points = points if self.maximization else -1 * points
+        self._objective_points = points
         assert self.dim_m == self._objective_points.shape[1]
         self._nondominated_indices = get_non_dominated(self._objective_points, return_index=True)
         self._dominated_indices = set(range(len(self._objective_points))) - set(self._nondominated_indices)
@@ -156,32 +159,31 @@ class HypervolumeDerivatives:
 
         HdY = self.hypervolume_dY(self.objective_points, self.ref).reshape(1, -1)
         HdX = HdY @ YdX
+        if not self.maximization:
+            HdY *= -1
         # TODO: use sparse matrix multiplication here
         HdX2 = YdX.T @ HdY2 @ YdX + np.einsum("...i,i...", HdY, YdX2)
         return dict(HdX=HdX, HdY=HdY, HdX2=HdX2, HdY2=HdY2)
 
     def hypervolume_dY(self, pareto_front: np.ndarray, ref: np.ndarray) -> np.ndarray:
-        if len(ref) == 2:  # 2D is a simple case
-            return self._2D_hypervolume_dY(pareto_front, ref)
-        # general HV gradient in higher dimensions
         N, dim = pareto_front.shape
         HdY = np.zeros((N, dim))
-        for i in range(N):
-            for k in range(dim):
-                x_, pareto_front_, ref_, _ = self.project(k, i, pareto_front)
-                HdY[i, k] = hypervolume_improvement(x_, pareto_front_, ref_)
-        return HdY
-
-    def _2D_hypervolume_dY(self, pareto_front: np.ndarray, ref: np.ndarray) -> np.ndarray:
-        N = len(pareto_front)
-        HdY = np.zeros((N, 2))
-        # sort the pareto front with repsect to y1
-        idx = np.argsort(pareto_front[:, 0])
-        sorted_pareto_front = pareto_front[idx]
-        y1 = sorted_pareto_front[:, 0]
-        y2 = sorted_pareto_front[:, 1]
-        HdY[idx, 0] = y2 - np.r_[y2[1:], ref[1]]
-        HdY[idx, 1] = y1 - np.r_[ref[0], y1[0:-1]]
+        if len(ref) == 1:  # 1D case
+            HdY = np.array([[1]])
+        elif len(ref) == 2:  # 2D case
+            N = len(pareto_front)
+            # sort the pareto front with repsect to y1
+            idx = np.argsort(pareto_front[:, 0])
+            sorted_pareto_front = pareto_front[idx]
+            y1 = sorted_pareto_front[:, 0]
+            y2 = sorted_pareto_front[:, 1]
+            HdY[idx, 0] = y2 - np.r_[y2[1:], ref[1]]
+            HdY[idx, 1] = y1 - np.r_[ref[0], y1[0:-1]]
+        else:  # higher dimensional cases
+            for i in range(N):
+                for k in range(dim):
+                    y_, pareto_front_, ref_, _ = self.project(k, i, pareto_front)
+                    HdY[i, k] = hypervolume_improvement(y_, pareto_front_, ref_)
         return HdY
 
     def _copmute_objective_derivatives(
