@@ -1,5 +1,5 @@
 import numpy as np
-from hvh import HypervolumeHessian, get_non_dominated
+from hvh import HypervolumeDerivatives, get_non_dominated
 
 np.random.seed(42)
 
@@ -23,7 +23,7 @@ def hessian(x):
 
 
 ref = np.array([0, 0, 0])
-hvh = HypervolumeHessian(dim_d=3, dim_m=3, ref=ref, func=func, jac=jac, hessian=hessian)
+hvh = HypervolumeDerivatives(dim_d=3, dim_m=3, ref=ref, func=func, jac=jac, hessian=hessian)
 out = hvh.compute(X=np.random.rand(2, 3))
 HdY2, HdX2 = out["HdY2"], out["HdX2"]
 print(HdY2)
