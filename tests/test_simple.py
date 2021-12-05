@@ -3,7 +3,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, './')
-from hvh import HypervolumeDerivatives
+from hvd import HypervolumeDerivatives
 
 
 def test_3D_case1():
