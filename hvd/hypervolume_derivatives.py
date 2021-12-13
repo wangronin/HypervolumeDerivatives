@@ -108,7 +108,7 @@ class HypervolumeDerivatives:
     def project(
         self, axis: int, i: int, pareto_front: np.ndarray = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """projecting the pareto front along `axis` with respect to the i-th point"""
+        """projecting the Pareto front along `axis` with respect to the i-th point"""
         pareto_front = self.objective_points if pareto_front is None else pareto_front
         y = pareto_front[i, :]
         # projection: drop the `axis`-th dimension
