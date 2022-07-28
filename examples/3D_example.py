@@ -7,7 +7,7 @@ np.random.seed(42)
 def func(x):
     x = np.array(x)
     return np.array(
-        [np.sum(x ** 2), np.sum((x - np.array([1] * 3)) ** 2), np.sum((x - np.array([3] * 3)) ** 2)]
+        [np.sum(x**2), np.sum((x - np.array([1] * 3)) ** 2), np.sum((x - np.array([3] * 3)) ** 2)]
     )
 
 
@@ -26,6 +26,9 @@ ref = np.array([0, 0, 0])
 hvh = HypervolumeDerivatives(dim_d=3, dim_m=3, ref=ref, func=func, jac=jac, hessian=hessian)
 out = hvh.compute(X=np.random.rand(2, 3))
 HdY2, HdX2 = out["HVdY2"], out["HVdX2"]
+HdX = out["HVdX"]
+print(out["HV"])
+print(HdX.shape)
 print(HdY2)
 print(HdX2)
 assert np.allclose(HdY2, HdY2.T)
