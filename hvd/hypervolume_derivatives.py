@@ -9,15 +9,18 @@ __author__ = ["Hao Wang"]
 
 
 def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False):
-    """Find pareto front (undominated part) of the input performance data."""
+    """Find pareto front (undominated part) of the input performance data.
+    Minimization is assumed
+
+    """
     if len(pareto_front) == 0:
         return np.array([])
     sorted_indices = np.argsort(pareto_front[:, 0])
     pareto_indices = []
     for idx in sorted_indices:
         # check domination relationship
-        a = np.all(pareto_front >= pareto_front[idx], axis=1)
-        b = np.any(pareto_front > pareto_front[idx], axis=1)
+        a = np.all(pareto_front <= pareto_front[idx], axis=1)
+        b = np.any(pareto_front < pareto_front[idx], axis=1)
         if not np.any(np.logical_and(a, b)):
             pareto_indices.append(idx)
     pareto_indices = np.array(pareto_indices)
@@ -25,10 +28,8 @@ def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False):
     return pareto_indices if return_index else pareto_front
 
 
-def hypervolume_improvement(x: np.ndarray, pareto_front: np.ndarray, ref: np.ndarray):
-    x = -1 * x.copy()
-    pareto_front = -1 * pareto_front.copy()
-    ref = -1 * ref.copy()
+def hypervolume_improvement(x: np.ndarray, pareto_front: np.ndarray, ref: np.ndarray) -> float:
+    """minization is assumed"""
     return hypervolume(np.vstack([x, pareto_front]), ref) - hypervolume(pareto_front.copy(), ref)
 
 
@@ -43,7 +44,7 @@ class HypervolumeDerivatives:
         func: callable = None,
         jac: callable = None,
         hessian: callable = None,
-        maximization: bool = True,
+        minimization: bool = True,
     ):
         """Compute the hypervolume Hessian matrix
 
@@ -76,10 +77,10 @@ class HypervolumeDerivatives:
 
         self.dim_d = int(dim_d)
         self.dim_m = int(dim_m)
-        self.func = func if maximization else lambda x: -1 * func(x)
-        self.jac = jac if maximization else lambda x: -1 * jac(x)
-        self.hessian = hessian if maximization else lambda x: -1 * hessian(x)
-        self.maximization = maximization
+        self.func = func if minimization else lambda x: -1 * func(x)
+        self.jac = jac if minimization else lambda x: -1 * jac(x)
+        self.hessian = hessian if minimization else lambda x: -1 * hessian(x)
+        self.minimization = minimization
         self.ref = ref
 
     @property
@@ -90,7 +91,7 @@ class HypervolumeDerivatives:
     def ref(self, r):
         if not isinstance(r, np.ndarray):
             r = np.asarray(r)
-        self._ref = r if self.maximization else -1 * r
+        self._ref = r if self.minimization else -1 * r
 
     @property
     def objective_points(self):
@@ -114,7 +115,7 @@ class HypervolumeDerivatives:
         # projection: drop the `axis`-th dimension
         y_ = np.delete(y, obj=axis)
         ref_ = np.delete(self.ref, obj=axis)
-        idx = np.nonzero(self.objective_points[:, axis] > y[axis])[0]
+        idx = np.nonzero(self.objective_points[:, axis] < y[axis])[0]
         pareto_front_ = np.delete(self.objective_points[idx, :], obj=axis, axis=1)
         if len(pareto_front_) != 0:
             pareto_indices = get_non_dominated(pareto_front_, return_index=True)
@@ -122,13 +123,14 @@ class HypervolumeDerivatives:
             idx = idx[pareto_indices]
         return y_, pareto_front_, ref_, idx
 
-    def compute(self, X: Union[np.ndarray, List[List]]) -> Dict[str, np.ndarray]:
+    def compute(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
         """compute the hypervolume gradient and Hessian matrix
 
         Parameters
         ----------
         X : Union[np.ndarray, List[List]]
             the decision points at which the derivatives are computed
+            It should have a shape of (#number of points, dim_d)
 
         Returns
         -------
@@ -140,7 +142,7 @@ class HypervolumeDerivatives:
                 "HVdY2": Hessian w.r.t. the objective variable of shape (`N` * `dim_m`, `N` * `dim_m`)
             }
         """
-        Y, YdX, YdX2 = self._copmute_objective_derivatives(X)
+        Y, YdX, YdX2 = self._copmute_objective_derivatives(X, Y)
         self.objective_points = Y
         HVdY2 = np.zeros((self.N * self.dim_m, self.N * self.dim_m))
 
@@ -149,39 +151,47 @@ class HypervolumeDerivatives:
                 continue
             for k in range(self.dim_m):
                 # project along `axis`; `*_` indicates variables in the projected subspace
-                y_, pareto_front_, ref_, proj_idx = self.project(k, i)
+                y_, pareto_front_, ref_, proj_idx = self.project(axis=k, i=i)
                 # partial derivatives ∂(∂HV/∂y_k^i)/∂y^i
                 # of shape (1, dim), where the k-th element is zero
                 Y_ = np.vstack([y_, pareto_front_])
                 pareto_indices = get_non_dominated(Y_, return_index=True)
                 idx = np.where(pareto_indices == 0)[0]
                 out = self.hypervolume_dY(Y_[pareto_indices], ref_)[idx]
-                HVdY2[i * self.dim_m : (i + 1) * self.dim_m, i * self.dim_m + k] = np.insert(out, k, 0)
+                HVdY2[i * self.dim_m : (i + 1) * self.dim_m, i * self.dim_m + k] = np.insert(-1.0 * out, k, 0)
                 # partial derivatives ∂(∂HV/∂y_k^i)/∂y^{-i}
                 # of shape (len(proj_idx), dim), where the k-th element is zero
                 # ∂HV/∂y_k^i is the hypervolume improvement of `x_` w.r.t. `pareto_front_`
-                out = self.hypervolume_dY(np.clip(pareto_front_, ref_, y_), ref=ref_)
+                out = self.hypervolume_dY(np.clip(pareto_front_, y_, ref_), ref=ref_)
                 # get the dimension of points in `pareto_front_` that are not dominated by `x_`
-                idx = pareto_front_ > y_
+                idx = pareto_front_ < y_
                 out[idx] = 0
                 # hypervolume improvement of points in `pareto_front_` decreases ∂HV/∂y_k^i
-                out = np.insert(-1.0 * out, k, 0, axis=1)
+                out = np.insert(out, k, 0, axis=1)
                 for s, j in enumerate(proj_idx):
                     HVdY2[j * self.dim_m : (j + 1) * self.dim_m, i * self.dim_m + k] = out[s]
 
-        HVdY = self.hypervolume_dY(self.objective_points, self.ref).reshape(1, -1)
+        HVdY = np.zeros((self.N, self.dim_m))
+        HVdY[self._nondominated_indices] = self.hypervolume_dY(
+            self.objective_points[self._nondominated_indices], self.ref
+        )
+        HVdY = HVdY.reshape(1, -1)
         HVdX = HVdY @ YdX
-        if not self.maximization:
-            HVdY *= -1
         # TODO: use sparse matrix multiplication here
         HVdX2 = YdX.T @ HVdY2 @ YdX + np.einsum("...i,i...", HVdY, YdX2)
-        return dict(HVdX=HVdX, HVdY=HVdY, HVdX2=HVdX2, HVdY2=HVdY2)
+        return dict(
+            Y=self.objective_points if self.minimization else -1 * self.objective_points,
+            HVdX=HVdX,
+            HVdY=HVdY if self.minimization else -1 * HVdY,
+            HVdX2=HVdX2,
+            HVdY2=HVdY2,
+        )
 
     def hypervolume_dY(self, pareto_front: np.ndarray, ref: np.ndarray) -> np.ndarray:
         N, dim = pareto_front.shape
         HVdY = np.zeros((N, dim))
         if len(ref) == 1:  # 1D case
-            HVdY = np.array([[1]])
+            HVdY = np.array([[-1]])
         elif len(ref) == 2:  # 2D case
             N = len(pareto_front)
             # sort the pareto front with repsect to y1
@@ -189,27 +199,28 @@ class HypervolumeDerivatives:
             sorted_pareto_front = pareto_front[idx]
             y1 = sorted_pareto_front[:, 0]
             y2 = sorted_pareto_front[:, 1]
-            HVdY[idx, 0] = y2 - np.r_[y2[1:], ref[1]]
-            HVdY[idx, 1] = y1 - np.r_[ref[0], y1[0:-1]]
+            HVdY[idx, 0] = y2 - np.r_[ref[1], y2[0:-1]]
+            HVdY[idx, 1] = y1 - np.r_[y1[1:], ref[0]]
         else:  # higher dimensional cases
             for i in range(N):
                 for k in range(dim):
                     y_, pareto_front_, ref_, _ = self.project(k, i, pareto_front)
-                    HVdY[i, k] = hypervolume_improvement(y_, pareto_front_, ref_)
+                    HVdY[i, k] = -1.0 * hypervolume_improvement(y_, pareto_front_, ref_)
         return HVdY
 
     def _copmute_objective_derivatives(
-        self, X: Union[np.ndarray, List[List]]
+        self, X: np.ndarray, Y: np.ndarray = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         if not isinstance(X, np.ndarray):
             X = np.asarray(X)
         if X.shape[1] != self.dim_d:
             X = X.T
         self.N = X.shape[0]  # number of points
-        Y = np.array([self.func(x) for x in X])  # `(N, dim_m)`
+        if Y is None:  # do not evaluate the function when `Y` is provided
+            Y = np.array([self.func(x) for x in X])  # `(N, dim_m)`
         # Jacobians
         YdX = np.array([self.jac(x) for x in X])  # `(N, dim_m, dim_d)`
-        YdX = block_diag(*YdX)  # `(N * dim_m, N * dim_d)`
+        YdX = block_diag(*YdX)  # `(N * dim_m, N * dim_d)` grouped by points
         # Hessians
         _YdX2 = np.array([self.hessian(x) for x in X])  # `(N, dim_m, dim_d, dim_d)`
         YdX2 = np.zeros((self.N * self.dim_m, self.N * self.dim_d, self.N * self.dim_d))
@@ -217,3 +228,95 @@ class HypervolumeDerivatives:
             idx = slice(i * self.dim_d, (i + 1) * self.dim_d)
             YdX2[i * self.dim_m : (i + 1) * self.dim_m, idx, idx] = _YdX2[i, ...]
         return Y, YdX, YdX2
+
+    def compute_HVdY_FD(self, Y: np.ndarray, epsilon: float = 1e-4) -> np.ndarray:
+        """Finite Difference (FD) method for computing the HV gradient
+
+        Args:
+            X Union[np.ndarray: the input decision points of shape (N, dim_d)
+
+        Returns:
+            np.ndarray:
+        """
+        grad = np.zeros((self.N, self.dim_m))
+        I = np.eye(self.dim_m)
+        func = lambda Y: hypervolume(Y, self.ref)
+        for i in range(self.N):
+            for k in range(self.dim_d):
+                Y_minus = Y.copy()
+                Y_minus[i] -= epsilon * I[k]
+                Y_plus = Y.copy()
+                Y_plus[i] += epsilon * I[k]
+                grad[i, k] = (func(Y_plus) - func(Y_minus)) / (2 * epsilon)
+        return grad
+
+    def compute_HVdY2_FD(self, Y: np.ndarray, epsilon: float = 1e-4) -> np.ndarray:
+        N = self.N * self.dim_m
+        # Y_ = Y.reshape(N, -1).ravel()
+        H = np.zeros((N, N))
+        I = np.eye(self.dim_m)
+        # f = lambda A: hypervolume(A.reshape(self.N, -1), self.ref)
+        # for i in range(N):
+        #     for j in range(N):
+        #         f1 = f(Y_ + epsilon * I[i] + epsilon * I[j])
+        #         f2 = f(Y_ + epsilon * I[i] - epsilon * I[j])
+        #         f3 = f(Y_ - epsilon * I[i] + epsilon * I[j])
+        #         f4 = f(Y_ - epsilon * I[i] - epsilon * I[j])
+        #         numdiff = (f1 - f2 - f3 + f4) / (4 * epsilon**2)
+        #         H[i, j] = numdiff
+        for i in range(self.N):
+            for k in range(self.dim_m):
+                Y_minus = Y.copy()
+                Y_minus[i] -= epsilon * I[k]
+                Y_plus = Y.copy()
+                Y_plus[i] += epsilon * I[k]
+                H[:, i * self.dim_m + k] = (
+                    ((self.compute_HVdY_FD(Y_plus) - self.compute_HVdY_FD(Y_minus)) / (2 * epsilon))
+                    .reshape(-1, 1)
+                    .ravel()
+                )
+                # H[:, i * self.dim_d + k] = h.reshape(-1, 1).ravel()
+        return (H + H.T) / 2
+
+    def compute_HVdX_FD(self, X: np.ndarray, epsilon: float = 1e-6) -> np.ndarray:
+        """Finite Difference (FD) method for computing the HV gradient
+
+        Args:
+            X Union[np.ndarray: the input decision points of shape (N, dim_d)
+
+        Returns:
+            np.ndarray:
+        """
+        grad = np.zeros((self.N, self.dim_d))
+        I = np.eye(self.dim_d)
+        func = lambda X: hypervolume(np.array([self.func(x) for x in X]), self.ref)
+        for i in range(self.N):
+            for k in range(self.dim_d):
+                X_minus = X.copy()
+                X_minus[i] -= epsilon * I[k]
+                X_plus = X.copy()
+                X_plus[i] += epsilon * I[k]
+                grad[i, k] = (func(X_plus) - func(X_minus)) / (2 * epsilon)
+        return grad
+
+    def compute_HVdX2_FD(self, X: np.ndarray, epsilon: float = 1e-5) -> np.ndarray:
+        N = self.N * self.dim_d
+        X_ = X.reshape(N, -1).ravel()
+        H = np.zeros((N, N))
+        I = np.eye(N)
+        f = lambda A: hypervolume(np.array([self.func(x) for x in A.reshape(self.N, -1)]), self.ref)
+        for i in range(N):
+            for j in range(N):
+                f1 = f(X_ + epsilon * I[i] + epsilon * I[j])
+                f2 = f(X_ + epsilon * I[i] - epsilon * I[j])
+                f3 = f(X_ - epsilon * I[i] + epsilon * I[j])
+                f4 = f(X_ - epsilon * I[i] - epsilon * I[j])
+                numdiff = (f1 - f2 - f3 + f4) / (4 * epsilon**2)
+                H[i, j] = numdiff
+                # X_minus = X.copy()
+                # X_minus[i] -= epsilon * I[k]
+                # X_plus = X.copy()
+                # X_plus[i] += epsilon * I[k]
+                # h = (self.compute_HVdX_FD(X_plus) - self.compute_HVdX_FD(X_minus)) / (2 * epsilon)
+                # H[:, i * self.dim_d + k] = h.reshape(-1, 1).ravel()
+        return (H + H.T) / 2
