@@ -254,9 +254,11 @@ class HVN:
         # Newton-Raphson method for each front
         for _, idx in fronts.items():
             N = len(idx)
-            X, Y = self.X[idx, :], self.Y[idx, :]
-            lambdas = self.dual_vars[idx, :] if self.h is not None else None
-            out = self._compute_netwon_step(X, Y, lambdas)
+            out = self._compute_netwon_step(
+                X=self.X[idx, :],
+                Y=self.Y[idx, :],
+                dual_vars=self.dual_vars[idx, :] if self.h is not None else None,
+            )
             self.X[idx, :] -= out["step_X"].reshape(N, -1)
             if self.h is not None:
                 self.dual_vars[idx, :] -= out["step_dual"].reshape(N, -1)
