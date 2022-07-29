@@ -229,7 +229,7 @@ class HypervolumeDerivatives:
             YdX2[i * self.dim_m : (i + 1) * self.dim_m, idx, idx] = _YdX2[i, ...]
         return Y, YdX, YdX2
 
-    def compute_HVdY_FD(self, Y: np.ndarray, epsilon: float = 1e-4) -> np.ndarray:
+    def compute_HVdY_FD(self, Y: np.ndarray, epsilon: float = 1e-8) -> np.ndarray:
         """Finite Difference (FD) method for computing the HV gradient
 
         Args:
@@ -242,7 +242,7 @@ class HypervolumeDerivatives:
         I = np.eye(self.dim_m)
         func = lambda Y: hypervolume(Y, self.ref)
         for i in range(self.N):
-            for k in range(self.dim_d):
+            for k in range(self.dim_m):
                 Y_minus = Y.copy()
                 Y_minus[i] -= epsilon * I[k]
                 Y_plus = Y.copy()
@@ -250,32 +250,33 @@ class HypervolumeDerivatives:
                 grad[i, k] = (func(Y_plus) - func(Y_minus)) / (2 * epsilon)
         return grad
 
-    def compute_HVdY2_FD(self, Y: np.ndarray, epsilon: float = 1e-4) -> np.ndarray:
+    def compute_HVdY2_FD(self, Y: np.ndarray, epsilon: float = 1e-3) -> np.ndarray:
         N = self.N * self.dim_m
-        # Y_ = Y.reshape(N, -1).ravel()
+        Y_ = Y.reshape(N, -1).ravel()
         H = np.zeros((N, N))
-        I = np.eye(self.dim_m)
-        # f = lambda A: hypervolume(A.reshape(self.N, -1), self.ref)
-        # for i in range(N):
-        #     for j in range(N):
-        #         f1 = f(Y_ + epsilon * I[i] + epsilon * I[j])
-        #         f2 = f(Y_ + epsilon * I[i] - epsilon * I[j])
-        #         f3 = f(Y_ - epsilon * I[i] + epsilon * I[j])
-        #         f4 = f(Y_ - epsilon * I[i] - epsilon * I[j])
-        #         numdiff = (f1 - f2 - f3 + f4) / (4 * epsilon**2)
-        #         H[i, j] = numdiff
-        for i in range(self.N):
-            for k in range(self.dim_m):
-                Y_minus = Y.copy()
-                Y_minus[i] -= epsilon * I[k]
-                Y_plus = Y.copy()
-                Y_plus[i] += epsilon * I[k]
-                H[:, i * self.dim_m + k] = (
-                    ((self.compute_HVdY_FD(Y_plus) - self.compute_HVdY_FD(Y_minus)) / (2 * epsilon))
-                    .reshape(-1, 1)
-                    .ravel()
-                )
-                # H[:, i * self.dim_d + k] = h.reshape(-1, 1).ravel()
+        # I = np.eye(self.dim_m)
+        I = np.eye(N)
+        f = lambda A: hypervolume(A.reshape(self.N, -1), self.ref)
+        for i in range(N):
+            for j in range(N):
+                f1 = f(Y_ + epsilon * I[i] + epsilon * I[j])
+                f2 = f(Y_ + epsilon * I[i] - epsilon * I[j])
+                f3 = f(Y_ - epsilon * I[i] + epsilon * I[j])
+                f4 = f(Y_ - epsilon * I[i] - epsilon * I[j])
+                numdiff = (f1 - f2 - f3 + f4) / (4 * epsilon**2)
+                H[i, j] = numdiff
+        # for i in range(self.N):
+        #     for k in range(self.dim_m):
+        #         Y_minus = Y.copy()
+        #         Y_minus[i] -= epsilon * I[k]
+        #         Y_plus = Y.copy()
+        #         Y_plus[i] += epsilon * I[k]
+        #         H[:, i * self.dim_m + k] = (
+        #             ((self.compute_HVdY_FD(Y_plus) - self.compute_HVdY_FD(Y_minus)) / (2 * epsilon))
+        #             .reshape(-1, 1)
+        #             .ravel()
+        #         )
+        # H[:, i * self.dim_d + k] = h.reshape(-1, 1).ravel()
         return (H + H.T) / 2
 
     def compute_HVdX_FD(self, X: np.ndarray, epsilon: float = 1e-6) -> np.ndarray:

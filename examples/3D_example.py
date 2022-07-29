@@ -1,35 +1,25 @@
 import numpy as np
-from hvd import HypervolumeDerivatives, get_non_dominated
+from hvd import HypervolumeDerivatives
+from hvd.problems import Eq1DTLZ1
 
 np.random.seed(42)
 
+f = Eq1DTLZ1()
+dim = 7
+X = np.random.rand(2, dim)
+Y = np.array([f.objective(x) for x in X])
+ref = np.array([300, 300, 300])
 
-def func(x):
-    x = np.array(x)
-    return np.array(
-        [np.sum(x**2), np.sum((x - np.array([1] * 3)) ** 2), np.sum((x - np.array([3] * 3)) ** 2)]
-    )
+hvh = HypervolumeDerivatives(
+    dim_d=dim, dim_m=3, ref=ref, func=f.objective, jac=f.objective_jacobian, hessian=f.objective_hessian
+)
+out = hvh.compute(X)
 
+HVdY_FD = hvh.compute_HVdY_FD(Y)
+HVdY2_FD = hvh.compute_HVdY2_FD(Y)
+HVdX_FD = hvh.compute_HVdX_FD(X)
+HVdX2_FD = hvh.compute_HVdX2_FD(X)
 
-def jac(x):
-    x = np.array(x)
-    return np.array([2 * x, 2 * (x - np.array([1] * 3)), (x - np.array([3] * 3))])
-
-
-def hessian(x):
-    d = len(x)
-    x = np.array(x)
-    return np.array([2 * np.eye(d), 2 * np.eye(d), 2 * np.eye(d)])
-
-
-ref = np.array([0, 0, 0])
-hvh = HypervolumeDerivatives(dim_d=3, dim_m=3, ref=ref, func=func, jac=jac, hessian=hessian)
-out = hvh.compute(X=np.random.rand(2, 3))
-HdY2, HdX2 = out["HVdY2"], out["HVdX2"]
-HdX = out["HVdX"]
-print(out["HV"])
-print(HdX.shape)
-print(HdY2)
-print(HdX2)
-assert np.allclose(HdY2, HdY2.T)
-assert np.allclose(HdX2, HdX2.T)
+assert np.all(np.isclose(HVdY_FD.ravel(), out["HVdY"]))
+assert np.all(np.isclose(HVdY2_FD, out["HVdY2"], atol=1e-3))
+assert np.all(np.isclose(HVdX2_FD.ravel(), out["HVdX2"]))
