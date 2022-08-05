@@ -1,47 +1,34 @@
+import matplotlib.pyplot as plt
 import numpy as np
 from hvd.algorithm import HVN
+from hvd.problems import Eq1DTLZ1
 
-np.random.seed(55)
+np.random.seed(42)
 
-dim = 3
-ref = np.array([30, 30, 30])
-
-
-def MOP1(x):
-    x = np.array(x)
-    return np.array(
-        [
-            np.sum((x - np.array([1, 1, 0])) ** 2),
-            np.sum((x - np.array([-1, -1, 0])) ** 2),
-            np.sum((x - np.array([1, -1, 0])) ** 2),
-        ]
-    )
-
-
-def MOP1_Jacobian(x):
-    x = np.array(x)
-    return np.array(
-        [2 * (x - np.array([1, 1, 0])), 2 * np.array([-1, -1, 0]), 2 * (x - np.array([1, -1, 0]))]
-    )
-
-
-def MOP1_Hessian(x):
-    x = np.array(x)
-    return np.array([2 * np.eye(dim), 2 * np.eye(dim), 2 * np.eye(dim)])
-
+f = Eq1DTLZ1()
+dim = 7
+ref = np.array([500, 500, 500])
+max_iters = 100
 
 opt = HVN(
     dim=dim,
     n_objective=3,
     ref=ref,
-    func=MOP1,
-    jac=MOP1_Jacobian,
-    hessian=MOP1_Hessian,
-    mu=2,
-    lower_bounds=-1,
+    func=f.objective,
+    jac=f.objective_jacobian,
+    hessian=f.objective_hessian,
+    mu=10,
+    lower_bounds=0,
     upper_bounds=1,
     minimization=True,
-    max_iters=30,
+    x0=np.c_[np.random.rand(10, 2), np.tile(0.49, (10, 5))],
+    # x0=np.array([np.r_[np.random.rand(2), [0.48] * 5], np.r_[np.random.rand(2), [0.48] * 5]]),
+    max_iters=max_iters,
+    verbose=True,
 )
 X, Y, stop = opt.run()
+
+plt.semilogy(range(1, max_iters + 1), opt.hist_HV, "r-")
+plt.show()
+
 breakpoint()

@@ -106,6 +106,23 @@ class HypervolumeDerivatives:
         self._nondominated_indices = get_non_dominated(self._objective_points, return_index=True)
         self._dominated_indices = set(range(len(self._objective_points))) - set(self._nondominated_indices)
 
+    def _check_X(self, X: np.ndarray):
+        X = np.atleast_2d(X)
+        if X.shape[1] != self.dim_d:
+            X = X.reshape(-1, self.dim_d)
+        return X
+
+    def _check_Y(self, Y: np.ndarray):
+        Y = np.atleast_2d(Y)
+        if Y.shape[1] != self.dim_m:
+            Y = Y.reshape(-1, self.dim_d)
+        return Y
+
+    def HV(self, X: np.ndarray):
+        X = self._check_X(X)
+        Y = np.array([self.func(x) for x in X])
+        return hypervolume(Y, self.ref)
+
     def project(
         self, axis: int, i: int, pareto_front: np.ndarray = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -142,6 +159,7 @@ class HypervolumeDerivatives:
                 "HVdY2": Hessian w.r.t. the objective variable of shape (`N` * `dim_m`, `N` * `dim_m`)
             }
         """
+        X = self._check_X(X)
         Y, YdX, YdX2 = self._copmute_objective_derivatives(X, Y)
         self.objective_points = Y
         HVdY2 = np.zeros((self.N * self.dim_m, self.N * self.dim_m))
@@ -229,7 +247,7 @@ class HypervolumeDerivatives:
             YdX2[i * self.dim_m : (i + 1) * self.dim_m, idx, idx] = _YdX2[i, ...]
         return Y, YdX, YdX2
 
-    def compute_HVdY_FD(self, Y: np.ndarray, epsilon: float = 1e-8) -> np.ndarray:
+    def compute_HVdY_FD(self, Y: np.ndarray, epsilon: float = 1e-3) -> np.ndarray:
         """Finite Difference (FD) method for computing the HV gradient
 
         Args:
@@ -250,7 +268,7 @@ class HypervolumeDerivatives:
                 grad[i, k] = (func(Y_plus) - func(Y_minus)) / (2 * epsilon)
         return grad
 
-    def compute_HVdY2_FD(self, Y: np.ndarray, epsilon: float = 1e-3) -> np.ndarray:
+    def compute_HVdY2_FD(self, Y: np.ndarray, epsilon: float = 1e-2) -> np.ndarray:
         N = self.N * self.dim_m
         Y_ = Y.reshape(N, -1).ravel()
         H = np.zeros((N, N))
@@ -279,7 +297,7 @@ class HypervolumeDerivatives:
         # H[:, i * self.dim_d + k] = h.reshape(-1, 1).ravel()
         return (H + H.T) / 2
 
-    def compute_HVdX_FD(self, X: np.ndarray, epsilon: float = 1e-6) -> np.ndarray:
+    def compute_HVdX_FD(self, X: np.ndarray, epsilon: float = 1e-4) -> np.ndarray:
         """Finite Difference (FD) method for computing the HV gradient
 
         Args:
@@ -300,7 +318,7 @@ class HypervolumeDerivatives:
                 grad[i, k] = (func(X_plus) - func(X_minus)) / (2 * epsilon)
         return grad
 
-    def compute_HVdX2_FD(self, X: np.ndarray, epsilon: float = 1e-5) -> np.ndarray:
+    def compute_HVdX2_FD(self, X: np.ndarray, epsilon: float = 1e-4) -> np.ndarray:
         N = self.N * self.dim_d
         X_ = X.reshape(N, -1).ravel()
         H = np.zeros((N, N))

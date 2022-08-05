@@ -1,7 +1,7 @@
 import numpy as np
 from hvd.algorithm import HVN
 
-np.random.seed(55)
+np.random.seed(42)
 
 dim = 2
 ref = np.array([20, 20])
@@ -43,10 +43,10 @@ opt = HVN(
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
-    h=h,
-    h_jac=h_Jacobian,
-    h_hessian=h_Hessian,
-    mu=5,
+    # h=h,
+    # h_jac=h_Jacobian,
+    # h_hessian=h_Hessian,
+    mu=50,
     # x0=np.array([[1.5, -0.5], [1.25, -0.75], [1, -1], [0.75, -1.25], [0.5, -1.5]]),
     lower_bounds=-2,
     upper_bounds=2,
