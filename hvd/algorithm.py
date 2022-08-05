@@ -3,6 +3,8 @@ from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.linalg import block_diag
+from scipy.optimize.linesearch import line_search_wolfe1, line_search_wolfe2
+from scipy.spatial.distance import cdist
 
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
@@ -37,7 +39,7 @@ class HVN:
         minimization: bool = True,
         xtol: float = 1e-3,
         HVtol: float = -np.inf,
-        verbose: bool = False,
+        verbose: bool = True,
         **kwargs,
     ):
         """Hereafter, we use the following customized
@@ -122,8 +124,18 @@ class HVN:
         self.iter_count: int = 0
         self.max_iters = max_iters
         self.verbose: bool = verbose
+        self.eps = 1e-3 * np.max(self.upper_bounds - self.lower_bounds)
         self._initialize(x0)
         self._init_logging_var()
+
+        # self._cumulation = np.zeros(self.mu)
+        # self._step_size = 0.01 * np.ones(self.mu) * np.max((self.upper_bounds - self.lower_bounds))
+        # self._pre_step = np.zeros((self.mu, self.dim))
+        # self._grad_norm = np.zeros(self.mu)
+        self._cumulation = 0
+        self._step_size = 0.001 * np.max((self.upper_bounds - self.lower_bounds))
+        self._pre_step = np.zeros((self.mu, self.dim))
+        self._grad_norm = 0
 
     def _initialize(self, X0):
         if X0 is not None:
@@ -196,8 +208,8 @@ class HVN:
 
     def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
         while not self.terminate():
-            self.log()
             self.step()
+            self.log()
         return self.X, self.Y, self.stop_dict
 
     def restart(self):
@@ -209,6 +221,13 @@ class HVN:
     def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray, dual_vars: np.ndarray = None) -> Dict:
         out = self.hypervolume_derivatives.compute(X, Y)
         dHV, ddHV = out["HVdX"], out["HVdX2"]
+
+        def f(x):
+            return self.hypervolume_derivatives.HV(x)
+
+        def fprime(x):
+            out = self.hypervolume_derivatives.compute(x)
+            return out["HVdX"]
 
         if self.h is not None and dual_vars is not None:  # with equality constraints
             mud = int(X.shape[0] * self.dim)
@@ -230,27 +249,67 @@ class HVN:
             # newton_step = cho_solve(cho_factor(dG), G)
             return dict(step_X=newton_step[0:mud], step_dual=newton_step[mud:], H=H)
         else:
-            try:
-                newton_step = np.linalg.solve(ddHV, dHV.ravel())
-                # newton_step = cho_solve(cho_factor(ddHV), dHV)
-            except:
-                breakpoint()
-            # TODO: check if the `ddHV` is negtive definite
+            # try:
+            newton_step = np.linalg.solve(ddHV, dHV.ravel())
+            # breakpoint()
+            # x = X.ravel()
+            # try:
+            #     alphak, fc, gc, old_fval, old_old_fval, gfkp1 = line_search_wolfe2(
+            #         f,
+            #         fprime,
+            #         x,
+            #         -1 * newton_step,
+            #         dHV,
+            #     )
+            # except Exception as ex:
+            #     # Line search failed to find a better solution.
+            #     breakpoint()
+            # if alphak is None:
+            #     alphak = 1
+            # print(alphak)
             # (w, _) = np.linalg.eigh(ddHV)
-            return dict(step_X=newton_step)
+            # print(w)
+            # newton_step = cho_solve(cho_factor(ddHV), dHV)
+            # except:
+            # breakpoint()
+            # TODO: check if the `ddHV` is negtive definite
+            return dict(step_X=newton_step, grad=dHV.ravel())
 
     def step(self):
-        # get unique points
-        idx = np.unique(self.X, axis=0, return_index=True)[1]
-        if len(idx) != self.mu:
-            breakpoint()
+        # get unique points: if some points converge to the same location
+        D = cdist(self.X, self.X)
+        drop_idx_X = set([])
+        for i in range(self.mu):
+            if i not in drop_idx_X:
+                drop_idx_X |= set(np.nonzero(D[i, :] < self.eps)[0]) - set([i])
+
+        # get rid of weakly-dominated points
+        drop_idx_Y = set([])
+        for i in range(self.mu):
+            if i not in drop_idx_Y:
+                drop_idx_Y |= set(np.nonzero(np.isclose(self.Y[i, :], self.Y))[0]) - set([i])
+
+        idx = list(set(range(self.mu)) - (drop_idx_X | drop_idx_Y))
         self.mu = len(idx)
-        self.X, self.Y, self.dual_vars = self.X[idx, :], self.Y[idx, :], self.dual_vars[idx, :]
-        # partition approximation set to anti-chains
-        fronts = non_domin_sort(self.Y, only_front_indices=True)
+        self.X = self.X[idx, :]
+        self.Y = self.Y[idx, :]
+
+        # self._cumulation = self._cumulation[idx]
+        # self._step_size = self._step_size[idx]
+        self._pre_step = self._pre_step[idx, :]
+        # self._grad_norm = self._grad_norm[idx]
         if self.h is not None:
+            self.dual_vars = self.dual_vars[idx, :]
             self.eq_cstr_value = np.zeros((self.mu, self.n_eq_cstr))
 
+        alpha = 0.8  # used for general purpose
+        c = 0.7
+
+        step = np.zeros((self.mu, self.dim))
+        grad = np.zeros((self.mu, self.dim))
+        # _range = np.max((self.upper_bounds - self.lower_bounds))
+        # partition approximation set to anti-chains
+        fronts = non_domin_sort(self.Y, only_front_indices=True)
         # Newton-Raphson method for each front
         for _, idx in fronts.items():
             N = len(idx)
@@ -259,10 +318,55 @@ class HVN:
                 Y=self.Y[idx, :],
                 dual_vars=self.dual_vars[idx, :] if self.h is not None else None,
             )
-            self.X[idx, :] -= out["step_X"].reshape(N, -1)
-            if self.h is not None:
-                self.dual_vars[idx, :] -= out["step_dual"].reshape(N, -1)
-                self.eq_cstr_value[idx, :] = out["H"]
+            step[idx, :] = out["step_X"].reshape(N, -1)
+            grad[idx, :] = out["grad"].reshape(N, -1)
+
+        self._step = step.copy()
+        _grad = grad.ravel()
+        _norm = np.linalg.norm(_grad)
+        self._grad_norm = _norm
+        if not np.isclose(_norm, 0):
+            _grad /= _norm
+
+        _step = step.ravel()
+        _norm = np.linalg.norm(_step)
+        if not np.isclose(_norm, 0):
+            _step /= _norm
+
+        _step = _step.reshape(self.mu, -1)
+
+        self._cumulation = (1 - c) * self._cumulation + c * np.inner(_grad, self._pre_step.ravel())
+        self._step_size *= np.exp(self._cumulation * alpha)
+        self.X -= self._step_size * _step
+        # self.X -= step
+        self._pre_step = _step
+        # # normalize the newton step and the gradient
+        # grad = out["grad"].reshape(N, -1)
+        # _norm = np.sqrt(np.sum(grad**2, axis=1))
+        # self._grad_norm[idx] = _norm
+        # _idx = ~np.isclose(_norm, 0)
+        # grad[_idx, :] /= _norm[_idx].reshape(-1, 1)
+
+        # step = out["step_X"].reshape(N, -1)
+        # _norm = np.sqrt(np.sum(step**2, axis=1))
+        # _idx = ~np.isclose(_norm, 0)
+        # step[_idx, :] /= _norm[_idx].reshape(-1, 1)
+
+        # self._cumulation[idx] = (1 - c) * self._cumulation[idx] + c * np.array(
+        #     [np.inner(grad[i, :], self._pre_step[_, :]) for i, _ in enumerate(idx)]
+        # )
+        # self._step_size[idx] *= np.exp((self._cumulation[idx]) * alpha)
+        # print(self._step_size)
+        # _idx = np.nonzero(_norm > _range)[0]
+        # if len(_idx) > 0:
+        # breakpoint()
+        # step[_idx, :] = 2 * step[_idx, :] / _norm[_idx].reshape(-1, 1)
+        # self.X[idx, :] -= self._step_size[idx].reshape(-1, 1) * step
+        # if self.h is not None:
+        #     self.dual_vars[idx, :] -= out["step_dual"].reshape(N, -1)
+        #     self.eq_cstr_value[idx, :] = out["H"]
+
+        # self._pre_step[idx, :] = step
 
         # evaluation
         self.Y = np.array([self.func(x) for x in self.X])
@@ -270,6 +374,7 @@ class HVN:
 
     def log(self):
         HV = hypervolume(self.Y, self.ref)
+        # print(np.sum(self.Y, axis=1))
         self.hist_Y += [self.Y.copy()]
         self.hist_X += [self.X.copy()]
         self.hist_HV += [HV]
@@ -278,11 +383,19 @@ class HVN:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"X {self.X.ravel()}")
             self.logger.info(f"HV {HV}")
+            self.logger.info(f"step size {self._step_size}")
+            self.logger.info(f"cumulation {self._cumulation}")
+            self.logger.info(f"grad norm {self._grad_norm}")
+            if self.iter_count >= 1:
+                self.logger.info(f"step norm {np.linalg.norm(self._step.ravel())}")
 
         if self.iter_count >= 1:
-            self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
-            self._delta_Y = np.mean(np.sqrt(np.sum((self.hist_Y[-1] - self.hist_Y[-2]) ** 2, axis=1)))
-            self._delta_HV = np.abs(self.hist_HV[-1] - self.hist_HV[-2])
+            try:
+                self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
+                self._delta_Y = np.mean(np.sqrt(np.sum((self.hist_Y[-1] - self.hist_Y[-2]) ** 2, axis=1)))
+                self._delta_HV = np.abs(self.hist_HV[-1] - self.hist_HV[-2])
+            except:
+                pass
 
         if self.h is not None:
             eq_cstr_norm = np.mean(np.linalg.norm(self.eq_cstr_value, axis=1))
@@ -296,23 +409,12 @@ class HVN:
         if self.iter_count >= self.max_iters:
             self.stop_dict["iter_count"] = self.iter_count
 
-        if self._delta_HV < self.HVtol:
-            self.stop_dict["HVtol"] = self._delta_HV
-            self.stop_dict["iter_count"] = self.iter_count
+        # if self._delta_HV < self.HVtol:
+        #     self.stop_dict["HVtol"] = self._delta_HV
+        #     self.stop_dict["iter_count"] = self.iter_count
 
-        if self._delta_X < self.xtol:
-            self.stop_dict["xtol"] = self._delta_X
-            self.stop_dict["iter_count"] = self.iter_count
+        # if self._delta_X < self.xtol:
+        #     self.stop_dict["xtol"] = self._delta_X
+        #     self.stop_dict["iter_count"] = self.iter_count
 
         return bool(self.stop_dict)
-
-
-# TODO: check if we need line search for the step-size
-# try:
-#     alphak, fc, gc, old_fval, old_old_fval, gfkp1 = _line_search_wolfe12(
-#         f, fprime, xk, pk, gfk, old_fval, old_old_fval
-#     )
-# except _LineSearchError:
-#     # Line search failed to find a better solution.
-#     msg = "Warning: " + _status_message["pr_loss"]
-#     return terminate(2, msg)
