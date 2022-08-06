@@ -51,15 +51,25 @@ class Eq1DTLZ1(MOOAnalytical):
         return np.abs(np.sum(xx**2) - r**2) - 1e-4
 
 
-# if __name__ == "__main__":
-#     f = Eq1DTLZ1()
-#     np.set_printoptions(edgeitems=30, linewidth=100000)
-#     # x = np.random.rand(20)
-#     x = np.array([0.6324, 0.0975, 0.2785, 0.5469, 0.9575, 0.9649, 0.1576, 0.9706, 0.9572, 0.4854])
-#     print(x)
-#     print(f.objective(x))
-#     print(f.constraint(x))
-#     print(f.objective_jacobian(x))
-#     print(f.objective_hessian(x))
-#     print(f.constraint_jacobian(x).shape)
-#     print(f.constraint_hessian(x).shape)
+class Eq1DTLZ2(MOOAnalytical):
+    def __init__(self):
+        self.n_objectives = 3
+        self.n_decision_vars = self.n_objectives + 9
+        self.lower_bounds = np.zeros(self.n_decision_vars)
+        self.upper_bounds = np.ones(self.n_decision_vars)
+        super().__init__()
+
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        M = self.n_objectives
+        g = np.sum((x[M - 1 :] - 0.5) ** 2)
+        return (
+            (1 + g)
+            * _cumprod(np.concatenate([[1], np.cos(x[0 : M - 1] * np.pi / 2)]))[::-1]
+            * np.concatenate([[1], np.sin(x[0 : M - 1][::-1] * np.pi / 2)])
+        )
+
+    def constraint(self, x: np.ndarray) -> float:
+        M = self.n_objectives
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return np.abs(np.sum(xx**2) - r**2) - 1e-4

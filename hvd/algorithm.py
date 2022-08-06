@@ -2,6 +2,7 @@ import logging
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
+from autograd import hessian, jacobian
 from scipy.linalg import block_diag
 from scipy.optimize.linesearch import line_search_wolfe1, line_search_wolfe2
 from scipy.spatial.distance import cdist
@@ -128,14 +129,14 @@ class HVN:
         self._initialize(x0)
         self._init_logging_var()
 
-        # self._cumulation = np.zeros(self.mu)
-        # self._step_size = 0.01 * np.ones(self.mu) * np.max((self.upper_bounds - self.lower_bounds))
-        # self._pre_step = np.zeros((self.mu, self.dim))
-        # self._grad_norm = np.zeros(self.mu)
-        self._cumulation = 0
-        self._step_size = 0.001 * np.max((self.upper_bounds - self.lower_bounds))
+        self._cumulation = np.zeros(self.mu)
+        self._step_size = 0.05 * np.ones(self.mu) * np.max((self.upper_bounds - self.lower_bounds))
         self._pre_step = np.zeros((self.mu, self.dim))
-        self._grad_norm = 0
+        self._grad_norm = np.zeros(self.mu)
+        # self._cumulation = 0
+        # self._step_size = 0.001 * np.max((self.upper_bounds - self.lower_bounds))
+        # self._pre_step = np.zeros((self.mu, self.dim))
+        # self._grad_norm = 0
 
     def _initialize(self, X0):
         if X0 is not None:
@@ -158,9 +159,41 @@ class HVN:
             self.n_eq_cstr = 1 if isinstance(v, float) else len(v)
             # TODO: what is the best way to initialize lambdas
             self.dual_vars = np.ones((self.mu, self.n_eq_cstr)) / self.mu  # of size (mu, p)
-            self.eq_cstr_value = np.atleast_2d([self.h(_) for _ in self.X])
+            self.eq_cstr_value = np.atleast_2d([[self.h(_)] for _ in self.X])
             # to make the Hessian of Eq. constraints always a 3D tensor
             self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim, -1)
+
+        (
+            self._box_constraint,
+            self._box_constraint_jacobian,
+            self._box_constraint_hessian,
+        ) = self._set_box_constraint()
+
+        self._max_HV = np.product(self.ref)
+        # self.t = 1e-5
+
+    def _set_box_constraint(self):
+        # set the box constraint function
+        def _box_constraint(x):
+            # return np.concatenate(
+            #     [
+            #         np.min(-np.exp(self.lower_bounds - x) + 1, 0),
+            #         np.min(-np.exp(x - self.upper_bounds) + 1, 0),
+            #     ]
+            # )
+            return np.sum(
+                1 / (1 + np.exp(self.lower_bounds - x)) - 1 + 1 / (1 + np.exp(x - self.upper_bounds)) - 1
+            )
+
+        _box_constraint_jacobian = jacobian(_box_constraint)
+        _box_constraint_hessian = hessian(_box_constraint)
+        # def _box_constraint_jacobian(x):
+        #     return np.exp(self.lower_bounds - x) - np.exp(x - self.upper_bounds)
+
+        # def _box_constraint_hessian(x):
+        #     return np.diag(-1.0 * np.exp(self.lower_bounds - x) - np.exp(x - self.upper_bounds))
+
+        return _box_constraint, _box_constraint_jacobian, _box_constraint_hessian
 
     def _init_logging_var(self):
         """parameters for logging the history"""
@@ -209,7 +242,7 @@ class HVN:
     def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
         while not self.terminate():
             self.step()
-            self.log()
+            # self.log()
         return self.X, self.Y, self.stop_dict
 
     def restart(self):
@@ -220,6 +253,8 @@ class HVN:
 
     def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray, dual_vars: np.ndarray = None) -> Dict:
         out = self.hypervolume_derivatives.compute(X, Y)
+        # normalize the HV value to avoid large gradient values
+        # dHV, ddHV = out["HVdX"] / self._max_HV, out["HVdX2"] / self._max_HV
         dHV, ddHV = out["HVdX"], out["HVdX2"]
 
         def f(x):
@@ -240,18 +275,25 @@ class HVN:
             G = np.concatenate([dHV.ravel() + dual_vars.ravel() @ dH, H.ravel()])
             dG = np.concatenate(
                 [
-                    np.concatenate([ddHV + ddH, dH.T], axis=1),
+                    np.concatenate([ddHV, dH.T], axis=1),
                     np.concatenate([dH, np.zeros((mup, mup))], axis=1),
                 ],
             )
             newton_step = np.linalg.solve(dG, G)  # compute the Netwon's step
             # TODO: perhaps using Cholesky decomposition to speed up
             # newton_step = cho_solve(cho_factor(dG), G)
-            return dict(step_X=newton_step[0:mud], step_dual=newton_step[mud:], H=H)
+            return dict(step_X=newton_step[0:mud], step_dual=newton_step[mud:], grad=dHV.ravel(), H=H)
         else:
             # try:
-            newton_step = np.linalg.solve(ddHV, dHV.ravel())
+            B = np.array([self._box_constraint(x) for x in X])
+            # if self.iter_count == 14:
             # breakpoint()
+
+            # dB = np.array([self._box_constraint_jacobian(x) for x in X]).ravel()
+            # ddB = block_diag(*[self._box_constraint_hessian(x) for x in X])
+            G = dHV
+            dG = ddHV
+            newton_step = np.linalg.solve(dG, G.ravel())
             # x = X.ravel()
             # try:
             #     alphak, fc, gc, old_fval, old_old_fval, gfkp1 = line_search_wolfe2(
@@ -294,16 +336,21 @@ class HVN:
         self.X = self.X[idx, :]
         self.Y = self.Y[idx, :]
 
-        # self._cumulation = self._cumulation[idx]
-        # self._step_size = self._step_size[idx]
+        # self.ref = np.maximum(self.ref, 1.2 * np.max(self.Y, axis=0))
+        # self.hypervolume_derivatives.ref = self.ref
+
+        self._cumulation = self._cumulation[idx]
+        self._step_size = self._step_size[idx]
         self._pre_step = self._pre_step[idx, :]
         # self._grad_norm = self._grad_norm[idx]
         if self.h is not None:
             self.dual_vars = self.dual_vars[idx, :]
-            self.eq_cstr_value = np.zeros((self.mu, self.n_eq_cstr))
+            self.eq_cstr_value = self.eq_cstr_value[idx, :]
+            dual_step = np.zeros((self.mu, self.n_eq_cstr))
 
-        alpha = 0.8  # used for general purpose
-        c = 0.7
+        self.log()
+        alpha = 0.7  # used for general purpose
+        c = 0.2
 
         step = np.zeros((self.mu, self.dim))
         grad = np.zeros((self.mu, self.dim))
@@ -320,26 +367,32 @@ class HVN:
             )
             step[idx, :] = out["step_X"].reshape(N, -1)
             grad[idx, :] = out["grad"].reshape(N, -1)
+            if self.h is not None:
+                dual_step[idx, :] = out["step_dual"].reshape(N, -1)
+                self.eq_cstr_value[idx, :] = out["H"]
 
-        self._step = step.copy()
-        _grad = grad.ravel()
-        _norm = np.linalg.norm(_grad)
-        self._grad_norm = _norm
-        if not np.isclose(_norm, 0):
-            _grad /= _norm
+        self._grad_norm = np.linalg.norm(grad.ravel())
+        step_norm = np.sqrt(np.sum(step**2, axis=1))
+        self.logger.info(f"step norm {step_norm}")
 
-        _step = step.ravel()
-        _norm = np.linalg.norm(_step)
-        if not np.isclose(_norm, 0):
-            _step /= _norm
-
-        _step = _step.reshape(self.mu, -1)
-
-        self._cumulation = (1 - c) * self._cumulation + c * np.inner(_grad, self._pre_step.ravel())
-        self._step_size *= np.exp(self._cumulation * alpha)
-        self.X -= self._step_size * _step
         # self.X -= step
-        self._pre_step = _step
+        # if self.h is not None:
+        #     self.dual_vars -= dual_step
+
+        # for i in range(self.mu):
+        #     _step = step[i, :]
+        #     _norm = np.linalg.norm(_step)
+        #     if not np.isclose(_norm, 0):
+        #         _step /= _norm
+
+        #     self._cumulation[i] = (1 - c) * self._cumulation[i] + c * np.inner(_step, self._pre_step[i, :])
+        #     self._step_size[i] *= np.exp(self._cumulation[i] * alpha)
+
+        #     self.X[i, :] -= self._step_size[i] * _step
+        #     self.X[i, :] = np.clip(self.X[i, :], 1.2 * self.lower_bounds, 0.9 * self.upper_bounds)
+        #     self._pre_step[i, :] = _step
+
+        # self.X -= step
         # # normalize the newton step and the gradient
         # grad = out["grad"].reshape(N, -1)
         # _norm = np.sqrt(np.sum(grad**2, axis=1))
@@ -371,6 +424,7 @@ class HVN:
         # evaluation
         self.Y = np.array([self.func(x) for x in self.X])
         self.iter_count += 1
+        # self.t *= 1.5
 
     def log(self):
         HV = hypervolume(self.Y, self.ref)
@@ -383,11 +437,11 @@ class HVN:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"X {self.X.ravel()}")
             self.logger.info(f"HV {HV}")
-            self.logger.info(f"step size {self._step_size}")
-            self.logger.info(f"cumulation {self._cumulation}")
+            # self.logger.info(f"step size {self._step_size}")
+            # self.logger.info(f"cumulation {self._cumulation}")
             self.logger.info(f"grad norm {self._grad_norm}")
-            if self.iter_count >= 1:
-                self.logger.info(f"step norm {np.linalg.norm(self._step.ravel())}")
+            # if self.iter_count >= 1:
+            # self.logger.info(f"step norm {np.linalg.norm(self._step.ravel())}")
 
         if self.iter_count >= 1:
             try:
