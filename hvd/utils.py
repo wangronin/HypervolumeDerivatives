@@ -13,7 +13,8 @@ __all__ = ["non_domin_sort", "set_bounds"]
 
 import statistics
 from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
+                    Tuple, Union)
 
 import numpy as np
 
@@ -29,6 +30,47 @@ def set_bounds(bound, dim):
             bound *= dim
     assert len(bound) == dim
     return np.asarray(bound)
+
+
+def handle_box_constraint(x: np.ndarray, lb: np.ndarray, ub: np.ndarray) -> np.ndarray:
+    """This function transforms x to t w.r.t. the low and high
+    boundaries lb and ub. It implements the function T^{r}_{[a,b]} as
+    described in Rui Li's PhD thesis "Mixed-Integer Evolution Strategies
+    for Parameter Optimization and Their Applications to Medical Image
+    Analysis" as alorithm 6.
+
+    """
+    x = np.asarray(x, dtype="float")
+    shape_ori = x.shape
+    x = np.atleast_2d(x)
+    lb = np.atleast_1d(lb)
+    ub = np.atleast_1d(ub)
+
+    transpose = False
+    if x.shape[0] != len(lb):
+        x = x.T
+        transpose = True
+
+    lb, ub = lb.flatten(), ub.flatten()
+    lb_index = np.isfinite(lb)
+    up_index = np.isfinite(ub)
+
+    valid = np.bitwise_and(lb_index, up_index)
+
+    LB = lb[valid][:, np.newaxis]
+    UB = ub[valid][:, np.newaxis]
+
+    y = (x[valid, :] - LB) / (UB - LB)
+    I = np.mod(np.floor(y), 2) == 0
+    yprime = np.zeros(y.shape)
+    yprime[I] = np.abs(y[I] - np.floor(y[I]))
+    yprime[~I] = 1.0 - np.abs(y[~I] - np.floor(y[~I]))
+
+    x[valid, :] = LB + (UB - LB) * yprime
+
+    if transpose:
+        x = x.T
+    return x.reshape(shape_ori)
 
 
 def is_dominate(leftv: Sequence[Any], rightv: Sequence[Any]) -> bool:

@@ -8,7 +8,7 @@ np.random.seed(42)
 f = Eq1DTLZ2()
 dim = 3
 ref = np.array([300, 300, 300])
-max_iters = 50
+max_iters = 60
 
 opt = HVN(
     dim=dim,
