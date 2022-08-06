@@ -268,7 +268,7 @@ class HypervolumeDerivatives:
                 grad[i, k] = (func(Y_plus) - func(Y_minus)) / (2 * epsilon)
         return grad
 
-    def compute_HVdY2_FD(self, Y: np.ndarray, epsilon: float = 1e-2) -> np.ndarray:
+    def compute_HVdY2_FD(self, Y: np.ndarray, epsilon: float = 1e-3) -> np.ndarray:
         N = self.N * self.dim_m
         Y_ = Y.reshape(N, -1).ravel()
         H = np.zeros((N, N))
