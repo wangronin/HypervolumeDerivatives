@@ -6,8 +6,8 @@ np.random.seed(42)
 
 
 dim = 3
-ref = np.array([20, 20, 20])
-max_iters = 70
+ref = np.array([10, 10, 10])
+max_iters = 30
 
 
 def MOP1(x):
@@ -40,10 +40,9 @@ opt = HVN(
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
-    mu=30,
+    mu=60,
     lower_bounds=-1,
     upper_bounds=1,
-    # x0=np.array([[0.5, 0.4, 0], [0.5, -0.4, 0], [0.3, 0.2, 0], [0.3, -0.2, 0], [0.2, 0.1, 0]]),
     minimization=True,
     max_iters=max_iters,
     verbose=True,
