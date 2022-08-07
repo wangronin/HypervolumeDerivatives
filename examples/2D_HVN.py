@@ -51,7 +51,7 @@ opt = HVN(
     lower_bounds=-2,
     upper_bounds=2,
     minimization=True,
-    max_iters=50,
+    max_iters=15,
     verbose=True,
 )
 X, Y, stop = opt.run()

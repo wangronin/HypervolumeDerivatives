@@ -7,7 +7,7 @@ np.random.seed(42)
 
 dim = 3
 ref = np.array([10, 10, 10])
-max_iters = 30
+max_iters = 15
 
 
 def MOP1(x):

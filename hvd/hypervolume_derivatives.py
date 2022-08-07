@@ -118,7 +118,7 @@ class HypervolumeDerivatives:
             Y = Y.reshape(-1, self.dim_d)
         return Y
 
-    def HV(self, X: np.ndarray):
+    def HV(self, X: np.ndarray) -> float:
         X = self._check_X(X)
         Y = np.array([self.func(x) for x in X])
         return hypervolume(Y, self.ref)
