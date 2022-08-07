@@ -5,6 +5,7 @@ np.random.seed(42)
 
 dim = 2
 ref = np.array([20, 20])
+mu = 10
 
 
 def MOP1(x):
@@ -24,16 +25,19 @@ def MOP1_Hessian(x):
 
 def h(x):
     x = np.array(x)
-    return np.sum(x**2) - 1
+    return np.abs(np.sum(x**2) - 1)
 
 
 def h_Jacobian(x):
     x = np.array(x)
-    return 2 * x
+    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
+    return 2 * x * sign
 
 
 def h_Hessian(x):
-    return 2 * np.eye(dim)
+    x = np.array(x)
+    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
+    return 2 * np.eye(dim) * sign
 
 
 opt = HVN(
@@ -43,15 +47,15 @@ opt = HVN(
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
-    # h=h,
-    # h_jac=h_Jacobian,
-    # h_hessian=h_Hessian,
-    mu=50,
-    # x0=np.array([[1.5, -0.5], [1.25, -0.75], [1, -1], [0.75, -1.25], [0.5, -1.5]]),
+    h=h,
+    h_jac=h_Jacobian,
+    h_hessian=h_Hessian,
+    mu=mu,
+    x0=np.random.rand(mu, 2) * 2 - 1,
     lower_bounds=-2,
     upper_bounds=2,
     minimization=True,
-    max_iters=15,
+    max_iters=25,
     verbose=True,
 )
 X, Y, stop = opt.run()
