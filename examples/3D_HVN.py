@@ -3,13 +3,13 @@ import numpy as np
 from hvd.algorithm import HVN
 from hvd.problems import Eq1DTLZ1, Eq1DTLZ2
 
-np.random.seed(666)
+np.random.seed(42)
 
 f = Eq1DTLZ2()
 dim = 3
-ref = np.array([50, 50, 50])
-max_iters = 50
-mu = 5
+ref = np.array([100, 100, 100])
+max_iters = 30
+mu = 20
 
 opt = HVN(
     dim=dim,
@@ -18,22 +18,39 @@ opt = HVN(
     func=f.objective,
     jac=f.objective_jacobian,
     hessian=f.objective_hessian,
-    # h=f.constraint,
-    # h_jac=f.constraint_jacobian,
-    # h_hessian=f.constraint_hessian,
+    h=f.constraint,
+    h_jac=f.constraint_jacobian,
+    h_hessian=f.constraint_hessian,
     mu=mu,
     lower_bounds=0,
     upper_bounds=1,
     minimization=True,
-    x0=np.c_[np.random.rand(mu, 2), np.tile(0.5, (mu, 1))],
-    # x0=np.array([np.r_[[-0.5, 0.5], [0.48] * 1], np.r_[[2, -1.2], [0.48] * 1]]),
-    # x0=np.array([np.r_[[-0.5, 0.5], [0.48] * 1], np.r_[[2, -1.2], [0.48] * 1]]),
+    x0=np.c_[np.random.rand(mu, 2), np.tile(0.48, (mu, 1))],
     max_iters=max_iters,
     verbose=True,
 )
 X, Y, stop = opt.run()
 
-plt.semilogy(range(1, max_iters + 1), opt.hist_HV, "r-")
-plt.show()
+fig = plt.figure(figsize=plt.figaspect(0.5))
+ax = fig.add_subplot(1, 2, 1, projection="3d")
+ax.plot(X[:, 0], X[:, 1], X[:, 2], "k.")
 
+ax.set_xlabel("x1")
+ax.set_ylabel("x2")
+ax.set_zlabel("x3")
+ax.set_xlim([0, 1])
+ax.set_ylim([0, 1])
+ax.set_zlim([0, 1])
+
+ax = fig.add_subplot(1, 2, 2, projection="3d")
+ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r.")
+
+ax.set_xlabel("f1")
+ax.set_ylabel("f2")
+ax.set_zlabel("f3")
+ax.set_xlim([0, 1])
+ax.set_ylim([0, 1])
+ax.set_zlim([0, 1])
+
+plt.show()
 breakpoint()
