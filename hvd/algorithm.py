@@ -407,7 +407,7 @@ class HVN:
         #     self.step_size[i] = alpha
 
         # handle the box constraints
-        # self.X = handle_box_constraint(self.X, self.lower_bounds, self.upper_bounds)
+        self.X = handle_box_constraint(self.X, self.lower_bounds, self.upper_bounds)
         # self.X = np.clip(self.X, self.lower_bounds, self.upper_bounds)
         # self.X -= step
         # if self.h is not None:
