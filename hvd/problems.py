@@ -73,3 +73,54 @@ class Eq1DTLZ2(MOOAnalytical):
         r = 0.4
         xx = x[0 : M - 1] - 0.5
         return np.abs(np.sum(xx**2) - r**2) - 1e-4
+
+
+class Eq1DTLZ3(MOOAnalytical):
+    def __init__(self):
+        self.n_objectives = 3
+        self.n_decision_vars = self.n_objectives + 9
+        self.lower_bounds = np.zeros(self.n_decision_vars)
+        self.upper_bounds = np.ones(self.n_decision_vars)
+        super().__init__()
+
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        M = self.n_objectives
+        D = len(x)
+        g = 100 * (D - M + 1 + np.sum((x[M - 1 :] - 0.5) ** 2 - np.cos(20.0 * np.pi * (x[M - 1 :] - 0.5))))
+        return (
+            (1 + g)
+            * _cumprod(np.concatenate([[1], np.cos(x[0 : M - 1] * np.pi / 2)]))[::-1]
+            * np.concatenate([[1], np.sin(x[0 : M - 1][::-1] * np.pi / 2)])
+        )
+
+    def constraint(self, x: np.ndarray) -> float:
+        M = self.n_objectives
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return np.abs(np.sum(xx**2) - r**2) - 1e-4
+
+
+class Eq1DTLZ4(MOOAnalytical):
+    def __init__(self):
+        self.n_objectives = 3
+        self.n_decision_vars = self.n_objectives + 9
+        self.lower_bounds = np.zeros(self.n_decision_vars)
+        self.upper_bounds = np.ones(self.n_decision_vars)
+        super().__init__()
+
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        x_ = x.copy()
+        M = self.n_objectives
+        x_[0 : M - 1] = x_[0 : M - 1] ** 100
+        g = np.sum((x[M - 1 :] - 0.5) ** 2)
+        return (
+            (1 + g)
+            * _cumprod(np.concatenate([[1], np.cos(x_[0 : M - 1] * np.pi / 2)]))[::-1]
+            * np.concatenate([[1], np.sin(x_[0 : M - 1][::-1] * np.pi / 2)])
+        )
+
+    def constraint(self, x: np.ndarray) -> float:
+        M = self.n_objectives
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return np.abs(np.sum(xx**2) - r**2) - 1e-4

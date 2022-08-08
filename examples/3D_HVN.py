@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from hvd.algorithm import HVN
-from hvd.problems import Eq1DTLZ1, Eq1DTLZ2
+from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3
 
 np.random.seed(42)
 
-f = Eq1DTLZ2()
+f = Eq1DTLZ3()
 dim = 3
 ref = np.array([100, 100, 100])
 max_iters = 30
@@ -18,14 +18,14 @@ opt = HVN(
     func=f.objective,
     jac=f.objective_jacobian,
     hessian=f.objective_hessian,
-    h=f.constraint,
-    h_jac=f.constraint_jacobian,
-    h_hessian=f.constraint_hessian,
+    # h=f.constraint,
+    # h_jac=f.constraint_jacobian,
+    # h_hessian=f.constraint_hessian,
     mu=mu,
     lower_bounds=0,
     upper_bounds=1,
     minimization=True,
-    x0=np.c_[np.random.rand(mu, 2), np.tile(0.48, (mu, 1))],
+    x0=np.c_[np.random.rand(mu, 2), np.tile(0.5, (mu, 1))],
     max_iters=max_iters,
     verbose=True,
 )
