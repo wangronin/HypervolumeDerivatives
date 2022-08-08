@@ -257,7 +257,7 @@ class HVN:
             g = np.concatenate([dHV.ravel() + dual_vars.ravel() @ dH, eq_cstr.ravel()])
             H = np.concatenate(
                 [
-                    np.concatenate([ddHV + ddH, dH.T], axis=1),
+                    np.concatenate([ddHV, dH.T], axis=1),
                     np.concatenate([dH, np.zeros((mup, mup))], axis=1),
                 ],
             )
