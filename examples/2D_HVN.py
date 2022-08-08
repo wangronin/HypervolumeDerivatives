@@ -1,11 +1,12 @@
+import matplotlib.pyplot as plt
 import numpy as np
 from hvd.algorithm import HVN
 
-np.random.seed(42)
+np.random.seed(66)
 
-dim = 2
+dim = 5
 ref = np.array([20, 20])
-mu = 10
+mu = 15
 
 
 def MOP1(x):
@@ -51,12 +52,18 @@ opt = HVN(
     h_jac=h_Jacobian,
     h_hessian=h_Hessian,
     mu=mu,
-    x0=np.random.rand(mu, 2) * 2 - 1,
+    x0=np.random.rand(mu, dim) * 2 - 1,
     lower_bounds=-2,
     upper_bounds=2,
     minimization=True,
-    max_iters=25,
+    max_iters=50,
     verbose=True,
 )
 X, Y, stop = opt.run()
-breakpoint()
+
+
+fig, ax1 = plt.subplots(1, 1, figsize=(12, 6))
+ax1.plot(opt.Y[:, 0], opt.Y[:, 1], "b.")
+# ax0.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "r-")
+# ax0.plot(opt.X[:, 0], opt.X[:, 1], "b.")
+plt.show()

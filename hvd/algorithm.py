@@ -2,15 +2,13 @@ import logging
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from autograd import hessian, jacobian
-from scipy.linalg import block_diag, cho_solve, cholesky
-from scipy.optimize.linesearch import line_search_wolfe1, line_search_wolfe2
+from scipy.linalg import block_diag, cholesky
 from scipy.spatial.distance import cdist
 
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .logger import get_logger
-from .utils import handle_box_constraint, non_domin_sort, set_bounds
+from .utils import non_domin_sort, set_bounds
 
 __authors__ = ["Hao Wang"]
 
@@ -215,6 +213,15 @@ class HVN:
         self.n_restart -= 1
 
     def _precondition_hessian(self, H: np.ndarray, g: np.ndarray) -> np.ndarray:
+        """Precondition the Hessian matrix to make sure it is negative definite
+
+        Args:
+            H (np.ndarray): the Hessian matrix
+            g (np.ndarray): the gradient
+
+        Returns:
+            np.ndarray: the preconditioned Hessian
+        """
         # pre-condition the Hessian
         beta = 1e-3
         v = np.min(np.diag(-H))
@@ -222,7 +229,7 @@ class HVN:
         I = np.eye(H.shape[0])
         for _ in range(50):
             try:
-                L = cholesky(-H + tau * I, lower=True)
+                _ = cholesky(-H + tau * I, lower=True)
                 break
             except:
                 tau = max(2 * tau, beta)
@@ -235,7 +242,7 @@ class HVN:
         # normalize the HV value to avoid large gradient values
         dHV, ddHV = out["HVdX"] / self._max_HV, out["HVdX2"] / self._max_HV
         # dHV, ddHV = out["HVdX"], out["HVdX2"]
-        # ddHV = self._precondition_hessian(ddHV, dHV)
+        ddHV = self._precondition_hessian(ddHV, dHV)
         H, g = ddHV, dHV.ravel()
 
         if self.h is not None:  # with equality constraints
