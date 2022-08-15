@@ -5,11 +5,11 @@ from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3
 
 np.random.seed(42)
 
-f = Eq1DTLZ3()
+f = Eq1DTLZ1()
 dim = 3
 ref = np.array([100, 100, 100])
 max_iters = 30
-mu = 20
+mu = 10
 
 opt = HVN(
     dim=dim,
@@ -18,9 +18,9 @@ opt = HVN(
     func=f.objective,
     jac=f.objective_jacobian,
     hessian=f.objective_hessian,
-    # h=f.constraint,
-    # h_jac=f.constraint_jacobian,
-    # h_hessian=f.constraint_hessian,
+    h=f.constraint,
+    h_jac=f.constraint_jacobian,
+    h_hessian=f.constraint_hessian,
     mu=mu,
     lower_bounds=0,
     upper_bounds=1,
