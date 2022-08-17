@@ -265,7 +265,6 @@ class HypervolumeDerivatives:
         N = self.N * self.dim_m
         Y_ = Y.reshape(N, -1).ravel()
         H = np.zeros((N, N))
-        # I = np.eye(self.dim_m)
         I = np.eye(N)
         f = lambda A: hypervolume(A.reshape(self.N, -1), self.ref)
         for i in range(N):
