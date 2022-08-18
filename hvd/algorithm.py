@@ -298,7 +298,7 @@ class HVN:
         #     if i not in drop_idx_Y:
         #         drop_idx_Y |= set(np.nonzero(np.isclose(self.Y[i, :], self.Y))[0]) - set([i])
 
-        idx = list(set(range(self.mu)) - (drop_idx_X | drop_idx_Y))
+        idx = list(set(range(self.mu)) - (drop_idx_X))
         self.mu = len(idx)
         self.X = self.X[idx, :]
         self.Y = self.Y[idx, :]
@@ -336,7 +336,7 @@ class HVN:
                 self.dH[idx, :] = out["dH"].reshape(N, self.n_eq_cstr, -1)
 
             # backtracking line search with Armijo's condition for each point
-            c = 1e-5
+            c = 1e-3
             normal_vectors = np.c_[np.eye(self.dim), -1 * np.eye(self.dim)]
             for k, i in enumerate(idx):
                 # calculate the maximal step-size
@@ -364,6 +364,10 @@ class HVN:
                 if self.h is not None:
                     self.dual_vars[i, :] += alpha0 * self.step_dual[i, :]
 
+            # self.X += self.step_size.reshape(-1, 1) * self.step_X
+            # if self.h is not None:
+            #     self.dual_vars += self.step_size.reshape(-1, 1) * self.step_dual
+
         # evaluation
         self.Y = np.array([self.func(x) for x in self.X])
         self.iter_count += 1
@@ -378,7 +382,7 @@ class HVN:
             self.logger.info(f"iteration {self.iter_count} ---")
             # self.logger.info(f"X: {self.X.ravel()}")
             self.logger.info(f"HV: {HV}")
-            self.logger.info(f"step size: {self.step_size}")
+            # self.logger.info(f"step size: {self.step_size}")
 
         if self.iter_count >= 1:
             try:

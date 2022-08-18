@@ -8,20 +8,21 @@ from .hypervolume import hypervolume
 __author__ = ["Hao Wang"]
 
 
-def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False):
+def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False, weakly_dominated: bool = True):
     """Find pareto front (undominated part) of the input performance data.
     Minimization is assumed
 
     """
-    if len(pareto_front) == 0:
-        return np.array([])
-    sorted_indices = np.argsort(pareto_front[:, 0])
     pareto_indices = []
-    for idx in sorted_indices:
-        # check domination relationship
-        a = np.all(pareto_front <= pareto_front[idx], axis=1)
-        b = np.any(pareto_front < pareto_front[idx], axis=1)
-        if not np.any(np.logical_and(a, b)):
+    for idx, p in enumerate(pareto_front):
+        if weakly_dominated:
+            cond = np.all(pareto_front < p, axis=1)
+        else:
+            cond = np.logical_and(
+                np.all(pareto_front <= pareto_front[idx], axis=1),
+                np.any(pareto_front < pareto_front[idx], axis=1),
+            )
+        if not np.any(cond):
             pareto_indices.append(idx)
     pareto_indices = np.array(pareto_indices)
     pareto_front = pareto_front[pareto_indices].copy()
@@ -140,6 +141,18 @@ class HypervolumeDerivatives:
             idx = idx[pareto_indices]
         return y_, pareto_front_, ref_, idx
 
+    def compute_gradient(self, X):
+        X = self._check_X(X)
+        Y, YdX, _ = self._copmute_objective_derivatives(X)
+        self.objective_points = Y
+        HVdY = np.zeros((self.N, self.dim_m))
+        HVdY[self._nondominated_indices] = self.hypervolume_dY(
+            self.objective_points[self._nondominated_indices], self.ref
+        )
+        HVdY = HVdY.reshape(1, -1)
+        HVdX = HVdY @ YdX
+        return HVdX, HVdY
+
     def compute(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
         """compute the hypervolume gradient and Hessian matrix
 
@@ -212,9 +225,14 @@ class HypervolumeDerivatives:
         if len(ref) == 1:  # 1D case
             HVdY = np.array([[-1]])
         elif len(ref) == 2:  # 2D case
-            N = len(pareto_front)
-            # sort the pareto front with repsect to y1
-            idx = np.argsort(pareto_front[:, 0])
+            # sort the pareto front with repsect to increasing y1 and decreasing y2
+            # NOTE: weakly dominbated pointed are handled here
+            _, tags = np.unique(pareto_front[:, 0], return_inverse=True)
+            idx1 = np.argsort(-tags, kind="stable")[::-1]
+            _, tags = np.unique(pareto_front[idx1, 1], return_inverse=True)
+            idx2 = np.argsort(-tags, kind="stable")
+            idx = idx1[idx2]
+            # idx = np.argsort(pareto_front[:, 0])
             sorted_pareto_front = pareto_front[idx]
             y1 = sorted_pareto_front[:, 0]
             y2 = sorted_pareto_front[:, 1]

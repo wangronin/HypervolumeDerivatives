@@ -3,7 +3,6 @@ import matplotlib.tri as mtri
 import numpy as np
 from hvd.algorithm import HVN
 from matplotlib import rcParams
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 np.random.seed(42)
 
@@ -22,12 +21,15 @@ rcParams["ytick.major.width"] = 1
 
 
 dim = 3
-ref = np.array([90, 90, 90])
+ref = np.array([24, 24, 24])
 max_iters = 20
 
-c1 = np.array([-1, -1, -1])
-c2 = np.array([-1, 0, 0])
-c3 = np.array([-2, -2, 4])
+c1 = np.array([1.5, 0, np.sqrt(3) / 3])
+c2 = np.array([1.5, 0.5, -1 * np.sqrt(3) / 6])
+c3 = np.array([1.5, -0.5, -1 * np.sqrt(3) / 6])
+c1_n = c1 / np.linalg.norm(c1)
+c2_n = c2 / np.linalg.norm(c2)
+c3_n = c3 / np.linalg.norm(c3)
 
 
 def MOP1(x):
@@ -57,45 +59,49 @@ def MOP1_Hessian(x):
     return np.array([2 * np.eye(dim), 2 * np.eye(dim), 2 * np.eye(dim)])
 
 
-tol = 1e-3
-
-
 def h(x):
-    return x[0] if x[0] < tol else 0.0
+    x = np.array(x)
+    return np.abs(np.sum(x**2) - 1)
 
 
 def h_Jacobian(x):
-    v = np.zeros(len(x))
-    v[0] = 1
-    return v if x[0] < tol else np.zeros(len(x))
+    x = np.array(x)
+    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
+    return 2 * x * sign
 
 
 def h_Hessian(x):
-    dim = len(x)
-    return np.zeros((dim, dim))
+    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
+    return 2 * np.eye(dim) * sign
 
 
-pareto_set = np.array([[0, -1, -1], [0, 0, 0], [0, -2, 4]])
-point_set = [np.array([[0, -1, -1], [0, 0, 0], [0, -2, 4]])]
-for z in np.linspace(-1.01, 3.99, 50):
-    _y = z / -2 if z >= 0 else z
-    y_ = (z + 6) / -5
-    N = int(10 * (_y - y_))
-    point_set.append(np.stack([np.array([0] * N), np.linspace(y_ - 0.01, _y + 0.01, N), np.array([z] * N)]).T)
-point_set = np.concatenate(point_set, axis=0)
-pareto_front = np.array([MOP1(x) for x in point_set])
+pareto_set = [np.atleast_2d(c1)]
+for s in np.arange(1, 13):
+    v = s * np.sqrt(3) / 2 / 12
+    y = v * np.tan(np.pi / 6)
+    N = s * 2
+    pareto_set.append(
+        np.stack([np.array([1.5] * N), np.linspace(-y, y, N), np.array([np.sqrt(3) / 3 - v] * N)]).T
+    )
+pareto_set = np.concatenate(pareto_set, axis=0)
+pareto_set /= np.linalg.norm(pareto_set, axis=1).reshape(-1, 1)
+pareto_front = np.array([MOP1(x) for x in pareto_set])
 
 x0 = np.array(
     [
-        [0.7, -1.8, -1],
-        [0.65, 0, -1.2],
-        [1.01, -2, 0.5],
-        [1, 0.5, 1],
-        [0.7, 1.5, -1.5],
-        [1.2, 1.5, 2],
+        # [-1, 0, 0],
+        [-1.2, 1.2, 0],
+        [-1.1, -1.2, 0],
+        [-1.22, 0, 1.2],
+        [-1.25, 1.2, 1.2],
+        [-1, -1.25, 1.2],
+        [-1.2, 1.2, -1.2],
+        [-1.2, -1, -1.2],
+        [-1.15, 0.5, -1.1],
     ]
 )
 y0 = np.array([MOP1(_) for _ in x0])
+
 
 opt = HVN(
     dim=dim,
@@ -109,36 +115,45 @@ opt = HVN(
     h_hessian=h_Hessian,
     mu=len(x0),
     x0=x0,
-    lower_bounds=-4,
-    upper_bounds=4,
+    lower_bounds=-2,
+    upper_bounds=2,
     minimization=True,
     max_iters=max_iters,
     verbose=True,
 )
 X, Y, stop = opt.run()
 
-fig = plt.figure(figsize=plt.figaspect(1 / 3))
+fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
-ax.view_init(25, -55)
+ax.view_init(25, -35)
 
-# plot the constraint boundary
-yy, zz = np.mgrid[-2.5:2:5j, -1.5:4.5:5j]
-xx = np.zeros(yy.shape)
-ax.plot_surface(xx, yy, zz, alpha=0.2)
-# plot the efficient set
-ax.add_collection3d(Poly3DCollection([pareto_set], color="k", alpha=0.3))
-# plot the initial points
-ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=10)
+u, v = np.mgrid[0 : 2 * np.pi : 16j, 0 : np.pi : 16j]
+x = np.cos(u) * np.sin(v)
+y = np.sin(u) * np.sin(v)
+z = np.cos(v)
+ax.plot_wireframe(x, y, z, alpha=0.4)
+ax.scatter(
+    pareto_set[:, 0],
+    pareto_set[:, 1],
+    pareto_set[:, 2],
+    color="k",
+    marker="o",
+    edgecolors="none",
+    alpha=0.1,
+    linewidths=1.2,
+)
+
+ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
 # plot the final decision points
 ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=6)
-# ax.plot(point_set[:, 0], point_set[:, 1], point_set[:, 2], "r.", ms=8)
 ax.set_title("decision space")
 ax.set_xlabel(r"$x_1$")
 ax.set_ylabel(r"$x_2$")
 ax.set_zlabel(r"$x_3$")
-ax.set_ylim([-2.5, 2])
-ax.set_xlim([-1.5, 1.5])
+ax.set_xlim([-1.3, 1.3])
+ax.set_ylim([-1.3, 1.3])
+ax.set_zlim([-1.3, 1.3])
 
 trajectory = np.atleast_3d([x0] + opt.hist_X)
 for i in range(len(x0)):
@@ -151,13 +166,13 @@ for i in range(len(x0)):
         y[1:] - y[:-1],
         z[1:] - z[:-1],
         color="k",
-        arrow_length_ratio=0.08,
-        alpha=0.35,
+        arrow_length_ratio=0.1,
+        alpha=0.3,
     )
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
-ax.view_init(30, 13)
+ax.view_init(20, -110)
 
 x, y, z = pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2]
 triang = mtri.Triangulation(x, y)
@@ -167,28 +182,26 @@ zmid = z[triang.triangles].mean(axis=1)
 
 p = np.c_[xmid, ymid, zmid]
 mask = np.array([np.any(np.all(pp > p, axis=1)) for pp in p])
+mask[np.nonzero(mask)[0][8]] = False
 triang.set_mask(mask)
 
-# ax.plot(x, y, z, "r.", ms=8)
 ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
-# plot the initial points
-ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=10)
 ax.plot_trisurf(triang, z, color="k", alpha=0.2)
 
-trajectory = np.atleast_3d([y0] + opt.hist_Y)
-for i in range(len(x0)):
-    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-    ax.quiver(
-        x[:-1],
-        y[:-1],
-        z[:-1],
-        x[1:] - x[:-1],
-        y[1:] - y[:-1],
-        z[1:] - z[:-1],
-        color="k",
-        arrow_length_ratio=0.05,
-        alpha=0.35,
-    )
+# trajectory = np.atleast_3d([y0] + opt.hist_Y)
+# for i in range(len(x0)):
+#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+#     ax.quiver(
+#         x[:-1],
+#         y[:-1],
+#         z[:-1],
+#         x[1:] - x[:-1],
+#         y[1:] - y[:-1],
+#         z[1:] - z[:-1],
+#         color="k",
+#         arrow_length_ratio=0.05,
+#         alpha=0.35,
+#     )
 
 ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
@@ -197,7 +210,7 @@ ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
+ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
 ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
 ax.set_ylabel("HV", color="b")
 ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
@@ -206,4 +219,5 @@ ax.set_xlabel("iteration")
 ax.set_xticks(range(1, max_iters + 1))
 
 plt.tight_layout()
-plt.savefig("3D-example2.pdf", dpi=100)
+plt.subplots_adjust(wspace=0.1)
+plt.savefig("3D-example1.pdf", dpi=100)
