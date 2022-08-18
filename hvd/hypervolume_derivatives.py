@@ -197,6 +197,7 @@ class HypervolumeDerivatives:
         HVdX = HVdY @ YdX
         # TODO: use sparse matrix multiplication here
         HVdX2 = YdX.T @ HVdY2 @ YdX + np.einsum("...i,i...", HVdY, YdX2)
+        HVdX2 = (HVdX2 + HVdX2.T) / 2
         return dict(
             Y=self.objective_points if self.minimization else -1 * self.objective_points,
             HVdX=HVdX,
@@ -283,18 +284,6 @@ class HypervolumeDerivatives:
                 f4 = f(Y_ - epsilon * I[i] - epsilon * I[j])
                 numdiff = (f1 - f2 - f3 + f4) / (4 * epsilon**2)
                 H[i, j] = numdiff
-        # for i in range(self.N):
-        #     for k in range(self.dim_m):
-        #         Y_minus = Y.copy()
-        #         Y_minus[i] -= epsilon * I[k]
-        #         Y_plus = Y.copy()
-        #         Y_plus[i] += epsilon * I[k]
-        #         H[:, i * self.dim_m + k] = (
-        #             ((self.compute_HVdY_FD(Y_plus) - self.compute_HVdY_FD(Y_minus)) / (2 * epsilon))
-        #             .reshape(-1, 1)
-        #             .ravel()
-        #         )
-        # H[:, i * self.dim_d + k] = h.reshape(-1, 1).ravel()
         return (H + H.T) / 2
 
     def compute_HVdX_FD(self, X: np.ndarray, epsilon: float = 1e-4) -> np.ndarray:
@@ -332,10 +321,4 @@ class HypervolumeDerivatives:
                 f4 = f(X_ - epsilon * I[i] - epsilon * I[j])
                 numdiff = (f1 - f2 - f3 + f4) / (4 * epsilon**2)
                 H[i, j] = numdiff
-                # X_minus = X.copy()
-                # X_minus[i] -= epsilon * I[k]
-                # X_plus = X.copy()
-                # X_plus[i] += epsilon * I[k]
-                # h = (self.compute_HVdX_FD(X_plus) - self.compute_HVdX_FD(X_minus)) / (2 * epsilon)
-                # H[:, i * self.dim_d + k] = h.reshape(-1, 1).ravel()
         return (H + H.T) / 2

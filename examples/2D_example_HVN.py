@@ -21,7 +21,7 @@ np.random.seed(66)
 dim = 2
 ref = np.array([20, 20])
 mu = 5
-max_iters = 8
+max_iters = 10
 
 
 def MOP1(x):
@@ -166,9 +166,9 @@ ax1.set_ylabel(r"$f_2$")
 
 ax22 = ax2.twinx()
 ax2.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax22.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_eq_cstr_norm, "g--")
+ax22.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
 ax2.set_ylabel("HV", color="b")
-ax22.set_ylabel(r"$||h(\mathbf{X})||$", color="g")
+ax22.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
