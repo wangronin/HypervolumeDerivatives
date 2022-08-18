@@ -335,9 +335,10 @@ class HVN:
                 self.eq_cstr[idx, :] = out["eq_cstr"]
                 self.dH[idx, :] = out["dH"].reshape(N, self.n_eq_cstr, -1)
 
-            # backtracking line search with Armijo's condition for each point
-            c = 1e-3
-            normal_vectors = np.c_[np.eye(self.dim), -1 * np.eye(self.dim)]
+        # backtracking line search with Armijo's condition for each point
+        c = 1e-3
+        normal_vectors = np.c_[np.eye(self.dim), -1 * np.eye(self.dim)]
+        for _, idx in fronts.items():
             for k, i in enumerate(idx):
                 # calculate the maximal step-size
                 dist = np.r_[
@@ -360,13 +361,13 @@ class HVN:
                         alpha *= 0.5
 
                 self.step_size[i] = alpha
-                self.X[i, :] += alpha0 * self.step_X[i, :]
-                if self.h is not None:
-                    self.dual_vars[i, :] += alpha0 * self.step_dual[i, :]
+                # self.X[i, :] += alpha0 * self.step_X[i, :]
+                # if self.h is not None:
+                #     self.dual_vars[i, :] += alpha0 * self.step_dual[i, :]
 
-            # self.X += self.step_size.reshape(-1, 1) * self.step_X
-            # if self.h is not None:
-            #     self.dual_vars += self.step_size.reshape(-1, 1) * self.step_dual
+        self.X += self.step_size.reshape(-1, 1) * self.step_X
+        if self.h is not None:
+            self.dual_vars += self.step_size.reshape(-1, 1) * self.step_dual
 
         # evaluation
         self.Y = np.array([self.func(x) for x in self.X])
@@ -382,7 +383,7 @@ class HVN:
             self.logger.info(f"iteration {self.iter_count} ---")
             # self.logger.info(f"X: {self.X.ravel()}")
             self.logger.info(f"HV: {HV}")
-            # self.logger.info(f"step size: {self.step_size}")
+            self.logger.info(f"step size: {self.step_size}")
 
         if self.iter_count >= 1:
             try:
