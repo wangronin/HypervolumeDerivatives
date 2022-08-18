@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
+import pandas as pd
 from hvd.algorithm import HVN
 from matplotlib import rcParams
 
-np.random.seed(42)
+np.random.seed(66)
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 12
@@ -22,7 +23,8 @@ rcParams["ytick.major.width"] = 1
 
 dim = 3
 ref = np.array([24, 24, 24])
-max_iters = 20
+max_iters = 50
+mu = 100
 
 c1 = np.array([1.5, 0, np.sqrt(3) / 3])
 c2 = np.array([1.5, 0.5, -1 * np.sqrt(3) / 6])
@@ -87,22 +89,8 @@ pareto_set = np.concatenate(pareto_set, axis=0)
 pareto_set /= np.linalg.norm(pareto_set, axis=1).reshape(-1, 1)
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
-x0 = np.array(
-    [
-        # [-1, 0, 0],
-        [-1.2, 1.2, 0],
-        [-1.1, -1.2, 0],
-        [-1.22, 0, 1.2],
-        [-1.25, 1.2, 1.2],
-        [-1, -1.25, 1.2],
-        [-1.2, 1.2, -1.2],
-        [-1.2, -1, -1.2],
-        [-1.15, 0.5, -1.1],
-    ]
-)
-y0 = np.array([MOP1(_) for _ in x0])
 
-
+x0 = np.random.rand(mu, dim) * 4 - 2
 opt = HVN(
     dim=dim,
     n_objective=3,
@@ -113,7 +101,7 @@ opt = HVN(
     h=h,
     h_jac=h_Jacobian,
     h_hessian=h_Hessian,
-    mu=len(x0),
+    mu=mu,
     x0=x0,
     lower_bounds=-2,
     upper_bounds=2,
@@ -144,7 +132,6 @@ ax.scatter(
     linewidths=1.5,
 )
 
-ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
 # plot the final decision points
 ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=6)
 ax.set_title("decision space")
@@ -154,21 +141,6 @@ ax.set_zlabel(r"$x_3$")
 ax.set_xlim([-1.3, 1.3])
 ax.set_ylim([-1.3, 1.3])
 ax.set_zlim([-1.3, 1.3])
-
-trajectory = np.atleast_3d([x0] + opt.hist_X)
-for i in range(len(x0)):
-    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-    ax.quiver(
-        x[:-1],
-        y[:-1],
-        z[:-1],
-        x[1:] - x[:-1],
-        y[1:] - y[:-1],
-        z[1:] - z[:-1],
-        color="k",
-        arrow_length_ratio=0.1,
-        alpha=0.3,
-    )
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
@@ -188,21 +160,6 @@ triang.set_mask(mask)
 ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
 ax.plot_trisurf(triang, z, color="k", alpha=0.2)
 
-# trajectory = np.atleast_3d([y0] + opt.hist_Y)
-# for i in range(len(x0)):
-#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-#     ax.quiver(
-#         x[:-1],
-#         y[:-1],
-#         z[:-1],
-#         x[1:] - x[:-1],
-#         y[1:] - y[:-1],
-#         z[1:] - z[:-1],
-#         color="k",
-#         arrow_length_ratio=0.05,
-#         alpha=0.35,
-#     )
-
 ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
 ax.set_ylabel(r"$f_2$")
@@ -216,7 +173,10 @@ ax.set_ylabel("HV", color="b")
 ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
-ax.set_xticks(range(1, max_iters + 1))
 
 plt.tight_layout()
-plt.savefig("3D-example.pdf", dpi=100)
+plt.subplots_adjust(wspace=0.1)
+plt.savefig(f"3D-example1-{mu}.pdf", dpi=100)
+
+df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
+df.to_latex(buf=f"3D-example1-{mu}.tex", index=False)
