@@ -23,7 +23,7 @@ rcParams["ytick.major.width"] = 1
 
 dim = 3
 ref = np.array([90, 90, 90])
-max_iters = 10
+max_iters = 20
 
 c1 = np.array([-1, -1, -1])
 c2 = np.array([-1, 0, 0])
@@ -117,8 +117,8 @@ opt = HVN(
 )
 X, Y, stop = opt.run()
 
-fig = plt.figure(figsize=(12, 8))
-ax = fig.add_subplot(1, 2, 1, projection="3d")
+fig = plt.figure(figsize=plt.figaspect(1 / 3))
+ax = fig.add_subplot(1, 3, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
 ax.view_init(25, -55)
 
@@ -155,7 +155,7 @@ for i in range(len(x0)):
         alpha=0.35,
     )
 
-ax = fig.add_subplot(1, 2, 2, projection="3d")
+ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
 ax.view_init(30, 13)
 
@@ -194,6 +194,16 @@ ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
 ax.set_ylabel(r"$f_2$")
 ax.set_zlabel(r"$f_3$")
+
+ax = fig.add_subplot(1, 3, 3)
+ax_ = ax.twinx()
+ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
+ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
+ax.set_ylabel("HV", color="b")
+ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
+ax.set_title("Performance")
+ax.set_xlabel("iteration")
+ax.set_xticks(range(1, max_iters + 1))
 
 plt.tight_layout()
 plt.savefig("3D-example2.pdf", dpi=100)
