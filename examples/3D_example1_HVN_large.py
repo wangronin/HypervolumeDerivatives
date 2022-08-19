@@ -63,18 +63,16 @@ def MOP1_Hessian(x):
 
 def h(x):
     x = np.array(x)
-    return np.abs(np.sum(x**2) - 1)
+    return np.sum(x**2) - 1
 
 
 def h_Jacobian(x):
     x = np.array(x)
-    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
-    return 2 * x * sign
+    return 2 * x
 
 
 def h_Hessian(x):
-    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
-    return 2 * np.eye(dim) * sign
+    return 2 * np.eye(dim)
 
 
 pareto_set = [np.atleast_2d(c1)]
@@ -90,7 +88,8 @@ pareto_set /= np.linalg.norm(pareto_set, axis=1).reshape(-1, 1)
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
 
-x0 = np.random.rand(mu, dim) * 4 - 2
+# x0 = np.random.rand(mu, dim) * 4 - 2
+x0 = np.c_[np.random.rand(mu, 1) * 0.5 + 0.8, np.random.rand(mu, dim - 1) - 0.5]
 opt = HVN(
     dim=dim,
     n_objective=3,

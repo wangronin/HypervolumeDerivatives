@@ -3,6 +3,7 @@ import matplotlib.tri as mtri
 import numpy as np
 import pandas as pd
 from hvd.algorithm import HVN
+from hvd.hypervolume_derivatives import get_non_dominated
 from matplotlib import rcParams
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
@@ -25,7 +26,7 @@ rcParams["ytick.major.width"] = 1
 dim = 3
 ref = np.array([90, 90, 90])
 max_iters = 50
-mu = 100
+mu = 50
 
 c1 = np.array([-1, -1, -1])
 c2 = np.array([-1, 0, 0])
@@ -59,11 +60,11 @@ def MOP1_Hessian(x):
     return np.array([2 * np.eye(dim), 2 * np.eye(dim), 2 * np.eye(dim)])
 
 
-tol = 1e-3
+tol = 1e-8
 
 
 def h(x):
-    return x[0] if x[0] < tol else 0.0
+    return x[0] - tol if x[0] < tol else 0.0
 
 
 def h_Jacobian(x):
@@ -87,7 +88,13 @@ for z in np.linspace(-1.01, 3.99, 50):
 point_set = np.concatenate(point_set, axis=0)
 pareto_front = np.array([MOP1(x) for x in point_set])
 
-x0 = np.c_[np.random.rand(mu, 1), np.random.rand(mu, dim - 1) * 3 - 1.5]
+# only start with non-dominated points
+mu = 100
+x0 = np.c_[np.random.rand(mu, 1) * 0.3, np.random.rand(mu, dim - 1) * 2 - 1]
+y0 = np.array([MOP1(_) for _ in x0])
+idx = get_non_dominated(y0, return_index=True, weakly_dominated=False)
+x0 = x0[idx]
+
 opt = HVN(
     dim=dim,
     n_objective=3,
@@ -98,7 +105,7 @@ opt = HVN(
     h=h,
     h_jac=h_Jacobian,
     h_hessian=h_Hessian,
-    mu=mu,
+    mu=len(x0),
     x0=x0,
     lower_bounds=-4,
     upper_bounds=4,
@@ -153,9 +160,9 @@ ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
+ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_N_nondominated, "b-")
 ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
-ax.set_ylabel("HV", color="b")
+ax.set_ylabel("N dominated", color="b")
 ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
