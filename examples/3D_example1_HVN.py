@@ -2,9 +2,10 @@ import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
 from hvd.algorithm import HVN
+from hvd.hypervolume_derivatives import get_non_dominated
 from matplotlib import rcParams
 
-np.random.seed(42)
+np.random.seed(66)
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 12
@@ -22,7 +23,7 @@ rcParams["ytick.major.width"] = 1
 
 dim = 3
 ref = np.array([24, 24, 24])
-max_iters = 20
+max_iters = 40
 
 c1 = np.array([1.5, 0, np.sqrt(3) / 3])
 c2 = np.array([1.5, 0.5, -1 * np.sqrt(3) / 6])
@@ -61,18 +62,16 @@ def MOP1_Hessian(x):
 
 def h(x):
     x = np.array(x)
-    return np.abs(np.sum(x**2) - 1)
+    return np.sum(x**2) - 1
 
 
 def h_Jacobian(x):
     x = np.array(x)
-    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
-    return 2 * x * sign
+    return 2 * x
 
 
 def h_Hessian(x):
-    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
-    return 2 * np.eye(dim) * sign
+    return 2 * np.eye(dim)
 
 
 pareto_set = [np.atleast_2d(c1)]
@@ -87,6 +86,8 @@ pareto_set = np.concatenate(pareto_set, axis=0)
 pareto_set /= np.linalg.norm(pareto_set, axis=1).reshape(-1, 1)
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
+# print(pareto_set)
+
 x0 = np.array(
     [
         # [-1, 0, 0],
@@ -100,8 +101,12 @@ x0 = np.array(
         [-1.15, 0.5, -1.1],
     ]
 )
+# only start with non-dominated points
+# mu = 500
+# x0 = np.c_[np.random.rand(mu, 1) * 0.5 + 0.8, np.random.rand(mu, dim - 1) - 0.5]
 y0 = np.array([MOP1(_) for _ in x0])
-
+# idx = get_non_dominated(y0, return_index=True, weakly_dominated=False)
+# x0 = x0[idx]
 
 opt = HVN(
     dim=dim,
@@ -144,7 +149,7 @@ ax.scatter(
     linewidths=1.2,
 )
 
-ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
+# ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
 # plot the final decision points
 ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=6)
 ax.set_title("decision space")
@@ -155,20 +160,20 @@ ax.set_xlim([-1.3, 1.3])
 ax.set_ylim([-1.3, 1.3])
 ax.set_zlim([-1.3, 1.3])
 
-trajectory = np.atleast_3d([x0] + opt.hist_X)
-for i in range(len(x0)):
-    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-    ax.quiver(
-        x[:-1],
-        y[:-1],
-        z[:-1],
-        x[1:] - x[:-1],
-        y[1:] - y[:-1],
-        z[1:] - z[:-1],
-        color="k",
-        arrow_length_ratio=0.1,
-        alpha=0.3,
-    )
+# trajectory = np.atleast_3d([x0] + opt.hist_X)
+# for i in range(len(x0)):
+#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+#     ax.quiver(
+#         x[:-1],
+#         y[:-1],
+#         z[:-1],
+#         x[1:] - x[:-1],
+#         y[1:] - y[:-1],
+#         z[1:] - z[:-1],
+#         color="k",
+#         arrow_length_ratio=0.1,
+#         alpha=0.3,
+#     )
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
@@ -208,15 +213,17 @@ ax.set_xlabel(r"$f_1$")
 ax.set_ylabel(r"$f_2$")
 ax.set_zlabel(r"$f_3$")
 
+v = opt.hist_G_norm
+
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
+ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_N_nondominated, "b-")
 ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
-ax.set_ylabel("HV", color="b")
+ax.set_ylabel("N_Nondominated", color="b")
 ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
-ax.set_xticks(range(1, max_iters + 1))
+# ax.set_xticks(range(1, max_iters + 1))
 
 plt.tight_layout()
 plt.subplots_adjust(wspace=0.1)
