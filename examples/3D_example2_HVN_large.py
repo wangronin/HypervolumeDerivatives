@@ -89,11 +89,9 @@ point_set = np.concatenate(point_set, axis=0)
 pareto_front = np.array([MOP1(x) for x in point_set])
 
 # only start with non-dominated points
-mu = 100
+mu = 20
 x0 = np.c_[np.random.rand(mu, 1) * 0.3, np.random.rand(mu, dim - 1) * 2 - 1]
 y0 = np.array([MOP1(_) for _ in x0])
-idx = get_non_dominated(y0, return_index=True, weakly_dominated=False)
-x0 = x0[idx]
 
 opt = HVN(
     dim=dim,

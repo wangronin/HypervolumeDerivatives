@@ -102,11 +102,9 @@ x0 = np.array(
     ]
 )
 # only start with non-dominated points
-# mu = 500
-# x0 = np.c_[np.random.rand(mu, 1) * 0.5 + 0.8, np.random.rand(mu, dim - 1) - 0.5]
+mu = 100
+x0 = np.c_[np.random.rand(mu, 1) * 0.5 + 0.8, np.random.rand(mu, dim - 1) * 2 - 0.5]
 y0 = np.array([MOP1(_) for _ in x0])
-# idx = get_non_dominated(y0, return_index=True, weakly_dominated=False)
-# x0 = x0[idx]
 
 opt = HVN(
     dim=dim,
@@ -149,9 +147,10 @@ ax.scatter(
     linewidths=1.2,
 )
 
+idx = opt._nondominated_idx
 # ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
 # plot the final decision points
-ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=6)
+ax.plot(X[idx, 0], X[idx, 1], X[idx, 2], "g*", ms=6)
 ax.set_title("decision space")
 ax.set_xlabel(r"$x_1$")
 ax.set_ylabel(r"$x_2$")
@@ -190,7 +189,7 @@ mask = np.array([np.any(np.all(pp > p, axis=1)) for pp in p])
 mask[np.nonzero(mask)[0][8]] = False
 triang.set_mask(mask)
 
-ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
+ax.plot(Y[idx, 0], Y[idx, 1], Y[idx, 2], "g*", ms=8)
 ax.plot_trisurf(triang, z, color="k", alpha=0.2)
 
 # trajectory = np.atleast_3d([y0] + opt.hist_Y)
