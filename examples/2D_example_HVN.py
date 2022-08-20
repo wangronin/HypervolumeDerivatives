@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from hvd.algorithm import HVN
 from matplotlib import rcParams
 
@@ -21,7 +22,7 @@ np.random.seed(66)
 dim = 2
 ref = np.array([20, 20])
 mu = 5
-max_iters = 10
+max_iters = 20
 
 
 def MOP1(x):
@@ -46,36 +47,37 @@ def h(x):
 
 def h_Jacobian(x):
     x = np.array(x)
-    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
     return 2 * x
-    #  * sign
 
 
 def h_Hessian(x):
     x = np.array(x)
-    sign = 1 if np.sum(x**2) - 1 >= 0 else -1
     return 2 * np.eye(dim)
-    # * sign
 
 
-x0 = np.random.rand(mu, dim) * 2 - 1
-idx = x0[:, 0] < x0[:, 1]
-a = x0[idx, 0]
-x0[idx, 0] = x0[idx, 1]
-x0[idx, 1] = a
+# example of Adrian
+# x0 = np.array(
+#     [
+#         [0.5, -1.5],
+#         [0.75, -1.25],
+#         [1, -1],
+#         [1.25, -0.75],
+#         [1.5, -0.5],
+#         # [-0.5, -0.75],
+#         # [-0.25, -0.5],
+#         # [0, -0.25],
+#     ]
+# )
+mu = 50
+# option1: linearly spacing
+p = np.linspace(0, 2, mu)
+# option2: logistic spacing/denser on two tails
+p = 2 / (1 + np.exp(-np.linspace(-3, 3, mu)))
+# option3: logit spacing/denser in the middle
+p = np.log(1 / (1 - np.linspace(0.09485175, 1.90514825, mu) / 2) - 1)
+p = 2 * (p - np.min(p)) / (np.max(p) - np.min(p))
 
-x0 = np.array(
-    [
-        [0.5, -1.5],
-        [0.75, -1.25],
-        [1, -1],
-        [1.25, -0.75],
-        [1.5, -0.5],
-        # [-0.5, -0.75],
-        # [-0.25, -0.5],
-        # [0, -0.25],
-    ]
-)
+x0 = np.c_[p, p - 2]
 y0 = np.array([MOP1(_) for _ in x0])
 
 opt = HVN(
@@ -88,7 +90,7 @@ opt = HVN(
     h=h,
     h_jac=h_Jacobian,
     h_hessian=h_Hessian,
-    mu=mu,
+    mu=len(x0),
     x0=x0,
     lower_bounds=-2,
     upper_bounds=2,
@@ -103,17 +105,17 @@ plt.subplots_adjust(right=0.95, left=0.05)
 ciricle = plt.Circle((0, 0), 1, color="r", fill=False, ls="--", lw=1.5)
 
 ax0.plot(opt.X[:, 0], opt.X[:, 1], "g*")
-ax0.plot(x0[:, 0], x0[:, 1], "g.", ms=8)
+ax0.plot(x0[:, 0], x0[:, 1], "g.", ms=8, clip_on=False)
 ax0.add_patch(ciricle)
-ax0.set_xlim([-1.55, 1.55])
-ax0.set_ylim([-1.55, 1.55])
+ax0.set_xlim([-2, 2])
+ax0.set_ylim([-2, 2])
 ax0.set_title("decision space")
 ax0.set_xlabel(r"$x_1$")
 ax0.set_ylabel(r"$x_2$")
 
 n_per_axis = 30
-x = np.linspace(-1.55, 1.55, n_per_axis)
-y = np.linspace(-1.55, 1.55, n_per_axis)
+x = np.linspace(-2, 2, n_per_axis)
+y = np.linspace(-2, 2, n_per_axis)
 X, Y = np.meshgrid(x, y)
 Z = np.array([MOP1(p) for p in np.array([X.flatten(), Y.flatten()]).T])
 Z1 = Z[:, 0].reshape(-1, len(x))
@@ -134,6 +136,7 @@ for i in range(mu):
         scale=1,
         color="k",
         width=0.005,
+        alpha=0.5,
         headlength=4.7,
         headwidth=2.7,
     )
@@ -153,6 +156,7 @@ for i in range(mu):
         scale=1,
         color="k",
         width=0.005,
+        alpha=0.5,
         headlength=4.7,
         headwidth=2.7,
     )
@@ -173,4 +177,7 @@ ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
 
-plt.savefig("2D-example.pdf", dpi=100)
+plt.savefig(f"2D-example-{mu}.pdf", dpi=100)
+
+df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
+df.to_latex(buf=f"2D-example2-{mu}.tex", index=False)
