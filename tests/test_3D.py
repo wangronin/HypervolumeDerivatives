@@ -44,10 +44,6 @@ def test_3D_case2():
     )
 
 
-# a = self.hypervolume_derivatives.compute_HVdY_FD(Y)
-# b = self.hypervolume_derivatives.compute_HVdY2_FD(Y)
-
-
 def test_3D_case3():
     ref = np.array([9, 10, 12])
     hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
@@ -293,10 +289,6 @@ def test_3D_case6():
             ]
         )
     )
-
-
-# HVdX22 = self.compute_HVdX2_FD(X)
-# print(np.isclose(HVdX2, HVdX22, rtol=1e-3))
 
 
 def test_with_dominated_points():
