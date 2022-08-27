@@ -9,14 +9,40 @@ A Provably Asymptotically Fast Version of the Generalized Jensen Algorithm for N
 
 """
 
-__all__ = ["non_domin_sort", "set_bounds"]
+__all__ = ["non_domin_sort", "set_bounds", "get_non_dominated"]
+__author__ = "Hao Wang"
 
 import statistics
 from collections import defaultdict
-from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
-                    Tuple, Union)
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import numpy as np
+
+
+def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False, weakly_dominated: bool = True):
+    """Find pareto front (undominated part) of the input performance data.
+    Minimization is assumed
+
+    """
+    pareto_indices = []
+    for idx, p in enumerate(pareto_front):
+        if weakly_dominated:
+            cond = np.all(np.any(pareto_front[:idx] > p, axis=1)) and np.all(
+                np.any(pareto_front[idx + 1 :] > p, axis=1)
+            )
+
+        else:
+            cond = np.all(
+                np.any(pareto_front[:idx] > p, axis=1) & np.all(~np.isclose(pareto_front[:idx], p), axis=1)
+            ) and np.all(
+                np.any(pareto_front[idx + 1 :] > p, axis=1)
+                & np.all(~np.isclose(pareto_front[idx + 1 :], p), axis=1)
+            )
+        if cond:
+            pareto_indices.append(idx)
+    pareto_indices = np.array(pareto_indices)
+    pareto_front = pareto_front[pareto_indices].copy()
+    return pareto_indices if return_index else pareto_front
 
 
 def set_bounds(bound, dim):

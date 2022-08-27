@@ -4,29 +4,9 @@ import numpy as np
 from scipy.linalg import block_diag
 
 from .hypervolume import hypervolume
+from .utils import get_non_dominated
 
 __author__ = ["Hao Wang"]
-
-
-def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False, weakly_dominated: bool = True):
-    """Find pareto front (undominated part) of the input performance data.
-    Minimization is assumed
-
-    """
-    pareto_indices = []
-    for idx, p in enumerate(pareto_front):
-        if weakly_dominated:
-            cond = np.all(pareto_front < p, axis=1)
-        else:
-            cond = np.logical_and(
-                np.all(pareto_front <= pareto_front[idx], axis=1),
-                np.any(pareto_front < pareto_front[idx], axis=1),
-            )
-        if not np.any(cond):
-            pareto_indices.append(idx)
-    pareto_indices = np.array(pareto_indices)
-    pareto_front = pareto_front[pareto_indices].copy()
-    return pareto_indices if return_index else pareto_front
 
 
 def hypervolume_improvement(x: np.ndarray, pareto_front: np.ndarray, ref: np.ndarray) -> float:

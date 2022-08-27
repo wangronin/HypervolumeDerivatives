@@ -1,8 +1,10 @@
+import itertools
+
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
+import pandas as pd
 from hvd.algorithm import HVN
-from hvd.hypervolume_derivatives import get_non_dominated
 from matplotlib import rcParams
 
 np.random.seed(66)
@@ -20,10 +22,6 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-
-dim = 3
-ref = np.array([24, 24, 24])
-max_iters = 40
 
 c1 = np.array([1.5, 0, np.sqrt(3) / 3])
 c2 = np.array([1.5, 0.5, -1 * np.sqrt(3) / 6])
@@ -70,8 +68,9 @@ def h_Jacobian(x):
     return 2 * x
 
 
-def h_Hessian(x):
-    return 2 * np.eye(dim)
+def h_Hessian(_):
+    return 2 * np.eye(3)
+
 
 
 pareto_set = [np.atleast_2d(c1)]
@@ -86,24 +85,36 @@ pareto_set = np.concatenate(pareto_set, axis=0)
 pareto_set /= np.linalg.norm(pareto_set, axis=1).reshape(-1, 1)
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
-# print(pareto_set)
+# x0 = np.array(
+#     [
+#         # [-1, 0, 0],
+#         [-1.2, 1.2, 0],
+#         [-1.1, -1.2, 0],
+#         [-1.22, 0, 1.2],
+#         [-1.25, 1.2, 1.2],
+#         [-1, -1.25, 1.2],
+#         [-1.3, 1.2, -1.2],
+#         [-1.23, -1, -1.2],
+#         # [-1.15, 0.5, -1.1],
+#     ]
+# )
 
-x0 = np.array(
-    [
-        # [-1, 0, 0],
-        [-1.2, 1.2, 0],
-        [-1.1, -1.2, 0],
-        [-1.22, 0, 1.2],
-        [-1.25, 1.2, 1.2],
-        [-1, -1.25, 1.2],
-        [-1.2, 1.2, -1.2],
-        [-1.2, -1, -1.2],
-        [-1.15, 0.5, -1.1],
-    ]
-)
+dim = 3
+ref = np.array([24, 24, 24])
+max_iters = 50
 # only start with non-dominated points
-mu = 100
-x0 = np.c_[np.random.rand(mu, 1) * 0.5 + 0.8, np.random.rand(mu, dim - 1) * 2 - 0.5]
+mu = 9
+# x0 = np.c_[np.random.rand(mu, 1) * 0.5 + 0.8, np.random.rand(mu, dim - 1) * 2 - 0.5]
+# p = 0.5 / (1 + np.exp(-np.linspace(-4, 4, 5))) - 0.25
+# a = np.array([e for e in itertools.product(p, p)])
+a = np.mgrid[-0.2:0.2:3j, -0.2:0.2:3j]
+x0 = np.c_[np.tile(1.5, (mu, 1)), np.array(list(zip(a[0].ravel(), a[1].ravel())))]
+x0 /= np.linalg.norm(x0, axis=1).reshape(-1, 1)
+# x0 *= 1.2
+
+# w = np.random.rand(mu, 3)
+# w /= np.sum(w, axis=1).reshape(-1, 1)
+# x0 = w @ np.vstack([c1, c2, c3])
 y0 = np.array([MOP1(_) for _ in x0])
 
 opt = HVN(
@@ -129,7 +140,7 @@ X, Y, stop = opt.run()
 fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
-ax.view_init(25, -35)
+ax.view_init(25, -50)
 
 u, v = np.mgrid[0 : 2 * np.pi : 16j, 0 : np.pi : 16j]
 x = np.cos(u) * np.sin(v)
@@ -148,9 +159,11 @@ ax.scatter(
 )
 
 idx = opt._nondominated_idx
-# ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
+dominated_idx = list(set(range(len(X))) - set(opt._nondominated_idx))
+ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
 # plot the final decision points
 ax.plot(X[idx, 0], X[idx, 1], X[idx, 2], "g*", ms=6)
+ax.plot(X[dominated_idx, 0], X[dominated_idx, 1], X[dominated_idx, 2], "r*", ms=6)
 ax.set_title("decision space")
 ax.set_xlabel(r"$x_1$")
 ax.set_ylabel(r"$x_2$")
@@ -176,7 +189,7 @@ ax.set_zlim([-1.3, 1.3])
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
-ax.view_init(20, -110)
+ax.view_init(-5, -140)
 
 x, y, z = pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2]
 triang = mtri.Triangulation(x, y)
@@ -212,13 +225,11 @@ ax.set_xlabel(r"$f_1$")
 ax.set_ylabel(r"$f_2$")
 ax.set_zlabel(r"$f_3$")
 
-v = opt.hist_G_norm
-
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_N_nondominated, "b-")
-ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
-ax.set_ylabel("N_Nondominated", color="b")
+ax.plot(range(1, len(opt.hist_N_nondominated) + 1), opt.hist_N_nondominated, "b-")
+# ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
+ax.set_ylabel("HV", color="b")
 ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
@@ -226,4 +237,8 @@ ax.set_xlabel("iteration")
 
 plt.tight_layout()
 plt.subplots_adjust(wspace=0.1)
-plt.savefig("3D-example1.pdf", dpi=100)
+plt.show()
+plt.savefig(f"3D-example-{mu}.pdf", dpi=100)
+
+# df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
+# df.to_latex(buf=f"3D-example-{mu}.tex", index=False)

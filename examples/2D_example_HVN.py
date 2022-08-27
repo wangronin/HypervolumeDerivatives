@@ -19,12 +19,6 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-dim = 2
-ref = np.array([20, 20])
-mu = 5
-max_iters = 20
-
-
 def MOP1(x):
     x = np.array(x)
     return np.array([np.sum((x - 1) ** 2), np.sum((x + 1) ** 2)])
@@ -37,7 +31,7 @@ def MOP1_Jacobian(x):
 
 def MOP1_Hessian(x):
     x = np.array(x)
-    return np.array([2 * np.eye(dim), 2 * np.eye(dim)])
+    return np.array([2 * np.eye(2), 2 * np.eye(2)])
 
 
 def h(x):
@@ -52,7 +46,7 @@ def h_Jacobian(x):
 
 def h_Hessian(x):
     x = np.array(x)
-    return 2 * np.eye(dim)
+    return 2 * np.eye(2)
 
 
 # example of Adrian
@@ -68,7 +62,9 @@ def h_Hessian(x):
 #         # [0, -0.25],
 #     ]
 # )
-mu = 50
+ref = np.array([20, 20])
+max_iters = 20
+mu = 5
 # option1: linearly spacing
 p = np.linspace(0, 2, mu)
 # option2: logistic spacing/denser on two tails
@@ -77,11 +73,13 @@ p = 2 / (1 + np.exp(-np.linspace(-3, 3, mu)))
 p = np.log(1 / (1 - np.linspace(0.09485175, 1.90514825, mu) / 2) - 1)
 p = 2 * (p - np.min(p)) / (np.max(p) - np.min(p))
 
+
 x0 = np.c_[p, p - 2]
+# x0 /= np.linalg.norm(x0, axis=1).reshape(-1, 1)
 y0 = np.array([MOP1(_) for _ in x0])
 
 opt = HVN(
-    dim=dim,
+    dim=2,
     n_objective=2,
     ref=ref,
     func=MOP1,
@@ -98,13 +96,17 @@ opt = HVN(
     max_iters=max_iters,
     verbose=True,
 )
-X, Y, stop = opt.run()
+X_, Y_, stop = opt.run()
+X = np.zeros(X_.shape)
+Y = np.zeros(Y_.shape)
+X[...] = X_
+Y[...] = opt.Y
 
 fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(18, 6.5))
 plt.subplots_adjust(right=0.95, left=0.05)
 ciricle = plt.Circle((0, 0), 1, color="r", fill=False, ls="--", lw=1.5)
 
-ax0.plot(opt.X[:, 0], opt.X[:, 1], "g*")
+ax0.plot(X[:, 0], X[:, 1], "g*")
 ax0.plot(x0[:, 0], x0[:, 1], "g.", ms=8, clip_on=False)
 ax0.add_patch(ciricle)
 ax0.set_xlim([-2, 2])
@@ -115,51 +117,51 @@ ax0.set_ylabel(r"$x_2$")
 
 n_per_axis = 30
 x = np.linspace(-2, 2, n_per_axis)
-y = np.linspace(-2, 2, n_per_axis)
-X, Y = np.meshgrid(x, y)
-Z = np.array([MOP1(p) for p in np.array([X.flatten(), Y.flatten()]).T])
+X1, X2 = np.meshgrid(x, x)
+Z = np.array([MOP1(p) for p in np.array([X1.flatten(), X2.flatten()]).T])
 Z1 = Z[:, 0].reshape(-1, len(x))
 Z2 = Z[:, 1].reshape(-1, len(x))
-CS1 = ax0.contour(X, Y, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
-CS2 = ax0.contour(X, Y, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
+CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
+CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
 
-trajectory = np.array([x0] + opt.hist_X)
-for i in range(mu):
-    x, y = trajectory[:, i, 0], trajectory[:, i, 1]
-    ax0.quiver(
-        x[:-1],
-        y[:-1],
-        x[1:] - x[:-1],
-        y[1:] - y[:-1],
-        scale_units="xy",
-        angles="xy",
-        scale=1,
-        color="k",
-        width=0.005,
-        alpha=0.5,
-        headlength=4.7,
-        headwidth=2.7,
-    )
 
-ax1.plot(opt.Y[:, 0], opt.Y[:, 1], "g*")
+# trajectory = np.array([x0] + opt.hist_X)
+# for i in range(mu):
+#     x, y = trajectory[:, i, 0], trajectory[:, i, 1]
+#     ax0.quiver(
+#         x[:-1],
+#         y[:-1],
+#         x[1:] - x[:-1],
+#         y[1:] - y[:-1],
+#         scale_units="xy",
+#         angles="xy",
+#         scale=1,
+#         color="k",
+#         width=0.005,
+#         alpha=0.5,
+#         headlength=4.7,
+#         headwidth=2.7,
+#     )
+
+ax1.plot(Y[:, 0], Y[:, 1], "g*")
 ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=8)
 trajectory = np.array([y0] + opt.hist_Y)
-for i in range(mu):
-    x, y = trajectory[:, i, 0], trajectory[:, i, 1]
-    ax1.quiver(
-        x[:-1],
-        y[:-1],
-        x[1:] - x[:-1],
-        y[1:] - y[:-1],
-        scale_units="xy",
-        angles="xy",
-        scale=1,
-        color="k",
-        width=0.005,
-        alpha=0.5,
-        headlength=4.7,
-        headwidth=2.7,
-    )
+# for i in range(mu):
+#     x, y = trajectory[:, i, 0], trajectory[:, i, 1]
+#     ax1.quiver(
+#         x[:-1],
+#         y[:-1],
+#         x[1:] - x[:-1],
+#         y[1:] - y[:-1],
+#         scale_units="xy",
+#         angles="xy",
+#         scale=1,
+#         color="k",
+#         width=0.005,
+#         alpha=0.5,
+#         headlength=4.7,
+#         headwidth=2.7,
+#     )
 
 x_vals = np.array([0, 6])
 y_vals = 6 - x_vals
@@ -180,4 +182,4 @@ ax2.set_xticks(range(1, max_iters + 1))
 plt.savefig(f"2D-example-{mu}.pdf", dpi=100)
 
 df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
-df.to_latex(buf=f"2D-example2-{mu}.tex", index=False)
+df.to_latex(buf=f"2D-example-{mu}.tex", index=False)
