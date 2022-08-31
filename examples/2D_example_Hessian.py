@@ -26,7 +26,7 @@ for i in range(200):
     X = np.random.rand(10, 2)
     Y = np.array([MOP1(_) for _ in X])
     idx = get_non_dominated(-1 * Y, return_index=True)
-    out = hvh.compute(X[idx, :])
+    out = hvh.compute_hessian(X[idx, :])
     HdY2, HdX2 = out["HVdY2"], out["HVdX2"]
     HdX = out["HVdX"]
     w, v = np.linalg.eigh(HdX2)

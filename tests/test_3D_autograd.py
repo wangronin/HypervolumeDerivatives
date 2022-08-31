@@ -70,7 +70,7 @@ def test_against_autograd():
         Y = numpy.array([MOP1(x) for x in X])
         idx = get_non_dominated(Y, return_index=True, weakly_dominated=False)
         X, Y = X[idx], Y[idx]
-        out = hvh.compute(X)
+        out = hvh.compute_hessian(X)
 
         assert np.all(np.isclose(HV_Jac(Y.ravel()), out["HVdY"]))
         assert np.all(np.isclose(HV_Hessian(Y.ravel()), out["HVdY2"]))
