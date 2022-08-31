@@ -8,7 +8,7 @@ from scipy.spatial.distance import cdist
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .logger import get_logger
-from .utils import non_domin_sort, set_bounds
+from .utils import get_non_dominated, non_domin_sort, set_bounds
 
 __authors__ = ["Hao Wang"]
 
@@ -118,7 +118,6 @@ class HVN:
             self.dim, self.n_objective, ref, func, jac, hessian, minimization=minimization
         )
         # set the initial search point
-        self.X = x0
         self.ref = ref
         self.iter_count: int = 0
         self.max_iters = max_iters
@@ -126,8 +125,6 @@ class HVN:
         self.eps = 1e-3 * np.max(self.upper_bounds - self.lower_bounds)
         self._initialize(x0)
         self._init_logging_var()
-
-        self._grad_norm = 0
 
     def _initialize(self, X0):
         if X0 is not None:
@@ -234,48 +231,18 @@ class HVN:
 
     def _compute_G(self, X: np.ndarray, dual_vars: np.ndarray) -> np.ndarray:
         N = len(X)
-        # mud = int(N * self.dim)
-        # dHV = np.zeros(mud)
-        # Y = np.array([self.func(x) for x in X])
-        # fronts = non_domin_sort(Y, only_front_indices=True)
-        # for i, front in fronts.items():
         out = self.hypervolume_derivatives.compute(X)
-        # normalize the HV value to avoid large gradient values
-        # idx = np.r_[tuple([slice(i * self.dim, (i + 1) * self.dim) for i in front])]
-        # dHV[idx] = out["HVdX"]
-        dHV = out["HVdX"].ravel()  # / self._max_HV
-
+        dHV = out["HVdX"].ravel()
         dH = block_diag(*[self.h_jac(x) for x in X])
         eq_cstr = np.array([self.h(_) for _ in X]).reshape(X.shape[0], -1)
         G = np.concatenate([dHV + dual_vars.ravel() @ dH, eq_cstr.ravel()])
-        G = np.c_[G[: N * self.dim].reshape(N, -1), G[N * self.dim :].reshape(N, -1)]
-        return G
+        return np.c_[G[: N * self.dim].reshape(N, -1), G[N * self.dim :].reshape(N, -1)]
 
     def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray, dual_vars: np.ndarray = None) -> Dict:
-        N = X.shape[0]
-        mud = int(N * self.dim)
-        # ddHV = np.zeros((mud, mud))
-        # dHV = np.zeros(mud)
         out = self.hypervolume_derivatives.compute(X, Y)
-        # normalize the HV value to avoid large gradient values
-        # dHV, ddHV = out["HVdX"] / self._max_HV, out["HVdX2"] / self._max_HV
-        # idx = np.r_[tuple([slice(i * self.dim, (i + 1) * self.dim) for i in front])]
-        # ddHV[np.ix_(idx, idx)] = out["HVdX2"]
-        # dHV[idx] = out["HVdX"]
         dHV, ddHV = out["HVdX"], out["HVdX2"]
         # ddHV = self._precondition_hessian(ddHV)
         H, g = ddHV, dHV.ravel()
-        w = np.linalg.eigh(H)[0]
-        # if np.any(w < 0):
-        #     from autograd import hessian
-
-        #     def _hypervolumeX(x):
-        #         return hypervolume(np.array([self.func(x_) for x_ in x.reshape(-1, 3)]), self.ref)
-
-        #     HVX_Hessian = hessian(_hypervolumeX)
-        #     H_ = HVX_Hessian(X.ravel())
-        #     w_ = np.linalg.eigh(H_)[0]
-        #     assert np.all(np.isclose(H, H_))
 
         if self.h is not None:  # with equality constraints
             N = X.shape[0]
@@ -288,7 +255,6 @@ class HVN:
             ddH = block_diag(
                 *[np.einsum("ijk,i->jk", self._h_hessian(x), dual_vars[i]) for i, x in enumerate(X)]
             )  # (mu * dim, mu * dim)
-            # M = self._precondition_hessian(ddHV + ddH)
             g = np.concatenate([dHV.ravel() + dual_vars.ravel() @ dH, eq_cstr.ravel()])
             H = np.concatenate(
                 [
@@ -308,25 +274,13 @@ class HVN:
             return dict(
                 step_X=newton_step[0:mud],
                 step_dual=newton_step[mud:],
-                # step_X=step_X,
-                # step_dual=step_dual,
                 grad=dHV.ravel(),
-                HVdX=out["HVdX"],
-                HVdY=out["HVdY"],
-                HVdY2=out["HVdY2"],
                 G=g,
-                w=w,
-                # eq_cstr=eq_cstr,
-                # dH=dH_,
-                # H=H,
             )
         else:
-            return dict(step_X=newton_step, grad=dHV.ravel(), w=w)
+            return dict(step_X=newton_step, grad=dHV.ravel())
 
     def step(self):
-        def _HV(x):
-            return self.hypervolume_derivatives.HV(x)  # / self._max_HV
-
         # get unique points: if some points converge to the same location
         D = cdist(self.X, self.X)
         drop_idx_X = set([])
@@ -358,85 +312,43 @@ class HVN:
         self.step_size = np.zeros(self.mu)
 
         # partition approximation set to anti-chains
-        fronts = non_domin_sort(self.Y, only_front_indices=True)
-        self._N_nondominated = len(fronts[0])
-        self._nondominated_idx = fronts[0]
-
-        for i, front in fronts.items():
-            N = len(front)
+        N = self.mu
+        eq_cstr = np.array([self.h(_) for _ in self.X]).reshape(N, -1)
+        feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-3, rtol=1e-3), axis=1)
+        # non-dominatd sorting of the feasible points
+        if np.any(feasible_mask):
+            feasible_idx = np.nonzero(feasible_mask)[0]
+            partitions = non_domin_sort(self.Y[feasible_mask], only_front_indices=True)
+            partitions = {k: feasible_idx[v] for k, v in partitions.items()}
+            partitions.update({0: np.sort(np.r_[partitions[0], np.nonzero(~feasible_mask)[0]])})
+        else:
+            partitions = {0: np.array(range(self.mu))}
+        # compute the Newton direction for each partition
+        for i, idx in partitions.items():
+            N = len(idx)
             out = self._compute_netwon_step(
-                X=self.X[front],
-                Y=self.Y[front],
-                dual_vars=self.dual_vars[front] if self.h is not None else None,
+                X=self.X[idx],
+                Y=self.Y[idx],
+                dual_vars=self.dual_vars[idx] if self.h is not None else None,
             )
-            self.step_X[front, :] = out["step_X"].reshape(N, -1)
-            self.grad[front, :] = out["grad"].reshape(N, -1)
+            self.step_X[idx, :] = out["step_X"].reshape(N, -1)
+            self.grad[idx, :] = out["grad"].reshape(N, -1)
 
             if self.h is not None:
-                self.step_dual[front, :] = out["step_dual"].reshape(N, -1)
-                self.G[front, :] = np.c_[
+                self.step_dual[idx, :] = out["step_dual"].reshape(N, -1)
+                self.G[idx, :] = np.c_[
                     out["G"][: N * self.dim].reshape(N, -1), out["G"][N * self.dim :].reshape(N, -1)
                 ]
-                # self.eq_cstr = out["eq_cstr"]
-                # self.dH = out["dH"].reshape(N, self.n_eq_cstr, -1)
-
         # backtracking line search with Armijo's condition for each point
-        c = 1e-5
-        for i, front in fronts.items():
-            N = len(front)
-            X = self.X[front]
-            step_X = self.step_X[front]
-            grad = self.grad[front]
-            if i == 0:
-                self._inner = np.inner(grad.ravel(), step_X.ravel()) / (
-                    np.linalg.norm(grad.ravel()) * np.linalg.norm(step_X.ravel())
-                )
-                self._n_positive_eigen = np.sum(out["w"] > 0)
-            # if np.inner(grad.ravel(), step_X.ravel()) < 0:
-            # self.logger.warn("Newton direction is not ascending")
-            # step_X = grad.copy()
-
-            if self.h is not None:
-                G = self.G[front]
-                step_dual = self.step_dual[front]
-                dual_vars = self.dual_vars[front]
-
-            normal_vectors = np.c_[np.eye(self.dim * N), -1 * np.eye(self.dim * N)]
-            # calculate the maximal step-size
-            dist = np.r_[
-                np.abs(X.ravel() - np.tile(self.lower_bounds, N)),
-                np.abs(np.tile(self.upper_bounds, N) - X.ravel()),
-            ]
-            v = step_X.ravel() @ normal_vectors
-            alpha0 = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
-            alpha = alpha0
-            for _ in range(10):
-                X_ = X + alpha * step_X
-                if self.h is None:
-                    impr = _HV(X_) - _HV(X)
-                    cond = impr >= c * alpha * np.inner(grad.ravel(), step_X.ravel())
-                else:
-                    dual_vars_ = dual_vars + alpha * step_dual
-                    G_ = self._compute_G(X_, dual_vars_)
-                    # cond = np.sum(G_[self._nondominated_idx] ** 2) <= (1 - 2 * c) * np.sum(
-                    #     self.G[self._nondominated_idx].ravel() ** 2
-                    # )
-                    cond = np.sum(G_**2) <= (1 - 2 * c) * np.sum(G.ravel() ** 2)
-                if cond:
-                    break
-                else:
-                    if 11 < 2:
-                        phi0 = np.sum(G**2) / 2
-                        phi1 = np.sum(G_**2) / 2
-                        phi0prime = -np.sum(G**2)
-                        tau = -phi0prime / (phi1 - phi0 - phi0prime) / 2
-                        alpha *= tau
-                    if 1 < 2:
-                        alpha *= 0.5
-            else:
-                self.logger.info("Armijo's backtracking line search failed")
-
-            self.step_size[front] = alpha
+        for i, idx in partitions.items():
+            self.step_size[idx] = self._linear_search(
+                self.X[idx],
+                self.step_X[idx],
+                self.grad[idx],
+                G=None if self.h is None else self.G[idx],
+                dual_vars=None if self.h is None else self.dual_vars[idx],
+                step_dual=None if self.h is None else self.step_dual[idx],
+            )
 
         self.X = self.X + self.step_size.reshape(-1, 1) * self.step_X
         if self.h is not None:
@@ -446,14 +358,49 @@ class HVN:
         self.Y = np.array([self.func(x) for x in self.X])
         self.iter_count += 1
 
+    def _linear_search(self, X, step_X, grad, G=None, dual_vars=None, step_dual=None) -> float:
+        """backtracking line search with Armijo's condition"""
+        c = 1e-5
+        N = len(X)
+        normal_vectors = np.c_[np.eye(self.dim * N), -1 * np.eye(self.dim * N)]
+        # calculate the maximal step-size
+        dist = np.r_[
+            np.abs(X.ravel() - np.tile(self.lower_bounds, N)),
+            np.abs(np.tile(self.upper_bounds, N) - X.ravel()),
+        ]
+        v = step_X.ravel() @ normal_vectors
+        alpha0 = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+        alpha = alpha0
+
+        for _ in range(10):
+            X_ = X + alpha * step_X
+            if self.h is None:
+                impr = self.hypervolume_derivatives.HV(X_) - self.hypervolume_derivatives.HV(X)
+                cond = impr >= c * alpha * np.inner(grad.ravel(), step_X.ravel())
+            else:
+                dual_vars_ = dual_vars + alpha * step_dual
+                G_ = self._compute_G(X_, dual_vars_)
+                cond = np.sum(G_**2) <= (1 - 2 * c) * np.sum(G.ravel() ** 2)
+            if cond:
+                break
+            else:
+                if 11 < 2:
+                    phi0 = np.sum(G**2) / 2
+                    phi1 = np.sum(G_**2) / 2
+                    phi0prime = -np.sum(G**2)
+                    tau = -phi0prime / (phi1 - phi0 - phi0prime) / 2
+                    alpha *= tau
+                if 1 < 2:
+                    alpha *= 0.5
+        else:
+            self.logger.warn("Armijo's backtracking line search failed")
+        return alpha
+
     def log(self):
         HV = hypervolume(self.Y, self.ref)
         self.hist_Y += [self.Y.copy()]
         self.hist_X += [self.X.copy()]
         self.hist_HV += [HV]
-        self.hist_N_nondominated += [self._N_nondominated]
-        self._hist_inner += [self._inner]
-        self._hist_n_positive_eigen += [self._n_positive_eigen]
 
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
@@ -470,14 +417,12 @@ class HVN:
                 pass
 
         if self.h is not None:
-            # self.logger.info(f"dual variables: {self.dual_vars.ravel()}")
-            # self.logger.info(f"Equality constraints: {self.eq_cstr.ravel()}")
             self.hist_dual_vars += [self.dual_vars]
             self.hist_eq_cstr += [self.eq_cstr]
-            self.hist_G_norm += [np.linalg.norm(self.G[self._nondominated_idx].ravel())]
-            self.logger.info(f"G norm: {np.linalg.norm(self.G[self._nondominated_idx].ravel())}")
-            # self.hist_G_norm += [np.linalg.norm(self.G.ravel())]
-            # self.logger.info(f"G norm: {np.linalg.norm(self.G.ravel())}")
+            # self.hist_G_norm += [np.linalg.norm(self.G[self._nondominated_idx].ravel())]
+            # self.logger.info(f"G norm: {np.linalg.norm(self.G[self._nondominated_idx].ravel())}")
+            self.hist_G_norm += [np.linalg.norm(self.G.ravel())]
+            self.logger.info(f"G norm: {np.linalg.norm(self.G.ravel())}")
 
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:
