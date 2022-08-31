@@ -9,7 +9,7 @@ from hvd import HypervolumeDerivatives
 def test_3D_case1():
     ref = np.array([9, 10, 12])
     hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
-    out = hvh.compute(X=np.array([[5.0, 1.0, 7.0], [2.0, 3.0, 10.0]]))
+    out = hvh.compute_hessian(X=np.array([[5.0, 1.0, 7.0], [2.0, 3.0, 10.0]]))
     assert np.all(
         out["HVdY2"]
         == np.array(
@@ -28,7 +28,7 @@ def test_3D_case1():
 def test_3D_case2():
     ref = np.array([9, 10, 12])
     hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
-    out = hvh.compute(X=np.array([[-1, 5, 7], [2, 3, 10]]))
+    out = hvh.compute_hessian(X=np.array([[-1, 5, 7], [2, 3, 10]]))
     assert np.all(
         out["HVdY2"]
         == np.array(
@@ -47,7 +47,7 @@ def test_3D_case2():
 def test_3D_case3():
     ref = np.array([9, 10, 12])
     hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
-    out = hvh.compute(X=np.array([[5, 3, 7], [2, 1, 10]]))
+    out = hvh.compute_hessian(X=np.array([[5, 3, 7], [2, 1, 10]]))
     assert np.all(
         out["HVdY2"]
         == np.array(
@@ -66,7 +66,7 @@ def test_3D_case3():
 def test_3D_case4():
     ref = np.array([10, 13, 23])
     hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
-    out = hvh.compute(X=np.array([(8, 7, 10), (4, 11, 17), (2, 9, 21)]))
+    out = hvh.compute_hessian(X=np.array([(8, 7, 10), (4, 11, 17), (2, 9, 21)]))
     assert np.all(out["HVdY"] == np.array([-62, -26, -12, -8, -16, -8, -8, -12, -16]))
     assert np.all(
         out["HVdY2"]
@@ -89,7 +89,7 @@ def test_3D_case4():
 def test_3D_case5():
     ref = np.array([17, 35, 7])
     hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
-    out = hvh.compute(
+    out = hvh.compute_hessian(
         X=np.array([(16, 23, 1), (14, 32, 2), (12, 27, 3), (10, 21, 4), (8, 33, 5), (6.5, 31, 6)])
     )
     assert np.all(
@@ -278,7 +278,7 @@ def test_3D_case5():
 def test_3D_case6():
     ref = np.array([3, 3, 3])
     hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
-    out = hvh.compute(X=np.array([(1, 2, -1)]))
+    out = hvh.compute_hessian(X=np.array([(1, 2, -1)]))
     assert np.all(
         out["HVdY2"]
         == np.array(
@@ -294,7 +294,7 @@ def test_3D_case6():
 def test_with_dominated_points():
     ref = np.array([9, 10, 12])
     hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
-    out = hvh.compute(X=np.array([[-1, -2, 7], [2, 1, 10]]))
+    out = hvh.compute_hessian(X=np.array([[-1, -2, 7], [2, 1, 10]]))
     assert np.all(
         out["HVdY2"]
         == np.array(

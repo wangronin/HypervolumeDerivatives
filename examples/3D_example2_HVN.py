@@ -85,7 +85,7 @@ pareto_front = np.array([MOP1(x) for x in point_set])
 
 dim = 3
 ref = np.array([90, 90, 90])
-max_iters = 50
+max_iters = 45
 
 # x0 = np.array(
 #     [
@@ -100,7 +100,7 @@ max_iters = 50
 # a = np.mgrid[-2.5:-0.5:7j, 0:3.5:7j]
 # a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
 
-w = np.abs(np.random.randn(10, 3))
+w = np.abs(np.random.randn(40, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
 x0 = w @ np.vstack([c1, c2, c3])
 x0[:, 0] = 0.5
@@ -131,7 +131,8 @@ opt = HVN(
     verbose=True,
 )
 X, Y, stop = opt.run()
-idx = opt._nondominated_idx
+# idx = opt._nondominated_idx
+print(len(X))
 
 fig = plt.figure(figsize=plt.figaspect(1 / 3))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
@@ -147,7 +148,7 @@ ax.add_collection3d(Poly3DCollection([pareto_set], color="k", alpha=0.3))
 # plot the initial points
 # ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=10)
 # plot the final decision points
-ax.plot(X[idx, 0], X[idx, 1], X[idx, 2], "g*", ms=6)
+ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=6)
 # ax.plot(point_set[:, 0], point_set[:, 1], point_set[:, 2], "r.", ms=8)
 ax.set_title("decision space")
 ax.set_xlabel(r"$x_1$")
@@ -186,7 +187,7 @@ mask = np.array([np.any(np.all(pp > p, axis=1)) for pp in p])
 triang.set_mask(mask)
 
 # ax.plot(x, y, z, "r.", ms=8)
-ax.plot(Y[idx, 0], Y[idx, 1], Y[idx, 2], "g*", ms=8)
+ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
 # plot the initial points
 # ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=10)
 ax.plot_trisurf(triang, z, color="k", alpha=0.2)
@@ -214,7 +215,7 @@ ax.set_zlabel(r"$f_3$")
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
 # ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_N_nondominated, "b-")
+ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
 ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
 # ax.set_ylabel("HV", color="b")
 ax.set_ylabel("N_Nondominated", color="b")

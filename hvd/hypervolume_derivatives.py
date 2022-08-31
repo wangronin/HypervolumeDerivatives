@@ -121,9 +121,9 @@ class HypervolumeDerivatives:
             idx = idx[pareto_indices]
         return y_, pareto_front_, ref_, idx
 
-    def compute_gradient(self, X):
+    def compute_gradient(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
         X = self._check_X(X)
-        Y, YdX, _ = self._copmute_objective_derivatives(X)
+        Y, YdX, YdX2 = self._copmute_objective_derivatives(X, Y)
         self.objective_points = Y
         HVdY = np.zeros((self.N, self.dim_m))
         HVdY[self._nondominated_indices] = self.hypervolume_dY(
@@ -131,9 +131,9 @@ class HypervolumeDerivatives:
         )
         HVdY = HVdY.reshape(1, -1)
         HVdX = HVdY @ YdX
-        return HVdX, HVdY
+        return dict(HVdX=HVdX, HVdY=HVdY, YdX=YdX, YdX2=YdX2)
 
-    def compute(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
+    def compute_hessian(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
         """compute the hypervolume gradient and Hessian matrix
 
         Parameters
@@ -152,11 +152,11 @@ class HypervolumeDerivatives:
                 "HVdY2": Hessian w.r.t. the objective variable of shape (`N` * `dim_m`, `N` * `dim_m`)
             }
         """
-        X = self._check_X(X)
-        Y, YdX, YdX2 = self._copmute_objective_derivatives(X, Y)
-        self.objective_points = Y
-        HVdY2 = np.zeros((self.N * self.dim_m, self.N * self.dim_m))
 
+        X = self._check_X(X)
+        res = self.compute_gradient(X, Y)
+        HVdY, HVdX, YdX, YdX2 = res["HVdY"], res["HVdX"], res["YdX"], res["YdX2"]
+        HVdY2 = np.zeros((self.N * self.dim_m, self.N * self.dim_m))
         for i in range(self.N):
             if i in self._dominated_indices:  # if the point is dominated
                 continue
@@ -182,12 +182,6 @@ class HypervolumeDerivatives:
                 for s, j in enumerate(proj_idx):
                     HVdY2[j * self.dim_m : (j + 1) * self.dim_m, i * self.dim_m + k] = out[s]
 
-        HVdY = np.zeros((self.N, self.dim_m))
-        HVdY[self._nondominated_indices] = self.hypervolume_dY(
-            self.objective_points[self._nondominated_indices], self.ref
-        )
-        HVdY = HVdY.reshape(1, -1)
-        HVdX = HVdY @ YdX
         # TODO: use sparse matrix multiplication here
         HVdX2 = YdX.T @ HVdY2 @ YdX + np.einsum("...i,i...", HVdY, YdX2)
         HVdX2 = (HVdX2 + HVdX2.T) / 2

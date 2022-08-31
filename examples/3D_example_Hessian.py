@@ -18,7 +18,7 @@ for _ in range(10):
     hvh = HypervolumeDerivatives(
         dim_d=dim, dim_m=3, ref=ref, func=f.objective, jac=f.objective_jacobian, hessian=f.objective_hessian
     )
-    out = hvh.compute(X)
+    out = hvh.compute_hessian(X)
 
     HVdY_FD = hvh.compute_HVdY_FD(Y)
     HVdY2_FD = hvh.compute_HVdY2_FD(Y)
