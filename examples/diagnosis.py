@@ -67,7 +67,7 @@ for i, x in enumerate(np.linspace(-0.95, 0.95, int(np.sqrt(N)))):
     )
 point_set = np.concatenate(point_set, axis=0)
 
-w = np.abs(np.random.rand(20, 3))
+w = np.abs(np.random.rand(30, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
 x0 = w @ np.vstack([c1, c2, c3])
 # x0 -= np.array([2 / np.sqrt(3) - 1, 0, -1.5])
@@ -76,8 +76,8 @@ x0 = w @ np.vstack([c1, c2, c3])
 # x0 = point_set
 y0 = np.array([MOP1(_) for _ in x0])
 idx = get_non_dominated(y0, return_index=True, weakly_dominated=True)
-ref = np.array([10, 10, 10])
-max_iters = 50
+ref = np.array([30, 30, 30])
+max_iters = 35
 
 opt = HVN(
     dim=3,
@@ -100,19 +100,11 @@ opt = HVN(
 
 X, Y, stop = opt.run()
 
-# out = opt._compute_netwon_step(x0, y0, opt.dual_vars)
-# HVdY = out["HVdY"].reshape(-1, 3) / 30
-# HVdX = out["HVdX"].reshape(-1, 3) / 50
-# w = out["w"].reshape(-1, 3)
-# print(x0)
-# print(y0)
-# print(w)
-# breakpoint()
 
-fig = plt.figure(figsize=plt.figaspect(1 / 2.0))
+fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
-ax.view_init(25, -50)
+ax.view_init(35, -50)
 
 ax.add_collection3d(Poly3DCollection([np.vstack([c1, c2, c3])], color="k", alpha=0.3))
 u, v = np.mgrid[0 : 2 * np.pi : 16j, 0 : np.pi : 16j]
@@ -125,9 +117,9 @@ z -= 1.5
 ax.plot_wireframe(x, y, z, alpha=0.4)
 
 # plot the initial decision points
-# ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
+# ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "r.", ms=8)
 # ax.plot(x0[-1, 0], x0[-1, 1], x0[-1, 2], "r.", ms=8)
-ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=8)
+ax.plot(X[:, 0], X[:, 1], X[:, 2], "g.", ms=8)
 ax.set_title("decision space")
 ax.set_xlabel(r"$x_1$")
 ax.set_ylabel(r"$x_2$")
@@ -166,7 +158,7 @@ ax.set_zlim([-2, 2])
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
-ax.view_init(-5, -140)
+ax.view_init(-7, -135)
 
 # ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=8)
 # ax.plot(y0[-1, 0], y0[-1, 1], y0[-1, 2], "r.", ms=8)
@@ -207,14 +199,15 @@ ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.plot(range(1, len(opt.hist_HV) + 1), opt._hist_n_positive_eigen, "b-")
+ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
 # ax_.plot(range(1, len(opt.hist_HV) + 1), opt._hist_inner, "g--")
 ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
-ax.set_ylabel("#positive eigenvalues of HV", color="b")
-ax_.set_ylabel(r"$\langle \nabla HV, \mathbf{n}\rangle$", color="g")
+ax.set_ylabel("HV", color="b")
+ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
 
 plt.tight_layout()
 plt.subplots_adjust(wspace=0.1)
 plt.show()
+# plt.savefig(f"3D-example1-{len(x0)}.pdf", dpi=100)
