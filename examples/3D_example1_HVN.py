@@ -5,6 +5,7 @@ import matplotlib.tri as mtri
 import numpy as np
 import pandas as pd
 from hvd.algorithm import HVN
+from hvd.hypervolume_derivatives import get_non_dominated
 from matplotlib import rcParams
 
 np.random.seed(66)
@@ -72,7 +73,6 @@ def h_Hessian(_):
     return 2 * np.eye(3)
 
 
-
 pareto_set = [np.atleast_2d(c1)]
 for s in np.arange(1, 13):
     v = s * np.sqrt(3) / 2 / 12
@@ -85,6 +85,17 @@ pareto_set = np.concatenate(pareto_set, axis=0)
 pareto_set /= np.linalg.norm(pareto_set, axis=1).reshape(-1, 1)
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
+
+u, v = np.mgrid[0 : 2 * np.pi : 150j, 0 : np.pi : 150j]
+x = np.cos(u) * np.sin(v)
+y = np.sin(u) * np.sin(v)
+z = np.cos(v)
+
+pareto_set = np.array(list(zip(x.ravel(), y.ravel(), z.ravel())))
+pareto_front = np.array([MOP1(x) for x in pareto_set])
+idx = get_non_dominated(pareto_front, return_index=True, weakly_dominated=True)
+pareto_set = pareto_set[idx]
+pareto_front = pareto_front[idx]
 # x0 = np.array(
 #     [
 #         # [-1, 0, 0],
@@ -101,21 +112,28 @@ pareto_front = np.array([MOP1(x) for x in pareto_set])
 
 dim = 3
 ref = np.array([24, 24, 24])
-max_iters = 50
+max_iters = 10
 # only start with non-dominated points
-mu = 9
+mu = 49
 # x0 = np.c_[np.random.rand(mu, 1) * 0.5 + 0.8, np.random.rand(mu, dim - 1) * 2 - 0.5]
 # p = 0.5 / (1 + np.exp(-np.linspace(-4, 4, 5))) - 0.25
 # a = np.array([e for e in itertools.product(p, p)])
-a = np.mgrid[-0.2:0.2:3j, -0.2:0.2:3j]
+a = np.mgrid[-0.5:0.5:7j, -0.5:0.5:7j]
 x0 = np.c_[np.tile(1.5, (mu, 1)), np.array(list(zip(a[0].ravel(), a[1].ravel())))]
-x0 /= np.linalg.norm(x0, axis=1).reshape(-1, 1)
+# x0 /= np.linalg.norm(x0, axis=1).reshape(-1, 1)
 # x0 *= 1.2
 
-# w = np.random.rand(mu, 3)
-# w /= np.sum(w, axis=1).reshape(-1, 1)
-# x0 = w @ np.vstack([c1, c2, c3])
+# r1, r2 = np.random.rand(mu, 1), np.random.rand(mu, 1)
+# s = np.sqrt(r1)
+# x0 = np.c_[1 - s, (1 - r2) * s, r2 * s] @ np.vstack([c1, c2, c3])
+
+# x0 = np.c_[np.random.rand(mu, 1) * 0.3 + 1.2, np.random.rand(mu, 2) * 1 - 0.5]
 y0 = np.array([MOP1(_) for _ in x0])
+idx = get_non_dominated(y0, return_index=True, weakly_dominated=True)
+x0 = x0[idx]
+y0 = y0[idx]
+mu = len(x0)
+
 
 opt = HVN(
     dim=dim,
@@ -154,15 +172,15 @@ ax.scatter(
     color="k",
     marker="o",
     edgecolors="none",
-    alpha=0.1,
-    linewidths=1.2,
+    alpha=0.4,
+    linewidths=0.8,
 )
 
 idx = opt._nondominated_idx
 dominated_idx = list(set(range(len(X))) - set(opt._nondominated_idx))
-ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
+# ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
 # plot the final decision points
-ax.plot(X[idx, 0], X[idx, 1], X[idx, 2], "g*", ms=6)
+# ax.plot(X[idx, 0], X[idx, 1], X[idx, 2], "g*", ms=6)
 ax.plot(X[dominated_idx, 0], X[dominated_idx, 1], X[dominated_idx, 2], "r*", ms=6)
 ax.set_title("decision space")
 ax.set_xlabel(r"$x_1$")
@@ -197,12 +215,13 @@ xmid = x[triang.triangles].mean(axis=1)
 ymid = y[triang.triangles].mean(axis=1)
 zmid = z[triang.triangles].mean(axis=1)
 
-p = np.c_[xmid, ymid, zmid]
-mask = np.array([np.any(np.all(pp > p, axis=1)) for pp in p])
-mask[np.nonzero(mask)[0][8]] = False
-triang.set_mask(mask)
+# p = np.c_[xmid, ymid, zmid]
+# mask = np.array([np.any(np.all(pp > p, axis=1)) for pp in p])
+# mask[np.nonzero(mask)[0][8]] = False
+# triang.set_mask(mask)
 
-ax.plot(Y[idx, 0], Y[idx, 1], Y[idx, 2], "g*", ms=8)
+# ax.plot(Y[idx, 0], Y[idx, 1], Y[idx, 2], "g*", ms=8)
+ax.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", ms=8)
 ax.plot_trisurf(triang, z, color="k", alpha=0.2)
 
 # trajectory = np.atleast_3d([y0] + opt.hist_Y)
@@ -228,7 +247,7 @@ ax.set_zlabel(r"$f_3$")
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
 ax.plot(range(1, len(opt.hist_N_nondominated) + 1), opt.hist_N_nondominated, "b-")
-# ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
+ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
 ax.set_ylabel("HV", color="b")
 ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")

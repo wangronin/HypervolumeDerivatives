@@ -30,7 +30,6 @@ def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False, weak
             cond = np.all(np.any(pareto_front[:idx] > p, axis=1)) and np.all(
                 np.any(pareto_front[idx + 1 :] > p, axis=1)
             )
-
         else:
             cond = np.all(
                 np.any(pareto_front[:idx] > p, axis=1) & np.all(~np.isclose(pareto_front[:idx], p), axis=1)
