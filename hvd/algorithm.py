@@ -301,9 +301,7 @@ class HVN:
             out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
             self.step[idx, :] = out["step"]
             self.G[idx, :] = out["G"]
-
-        # backtracking line search with Armijo's condition for each point
-        for _, idx in partitions.items():
+            # backtracking line search with Armijo's condition for each point
             self.step_size[idx] = self._linear_search(self.X[idx], self.step[idx], G=self.G[idx])
 
         self.X += self.step_size.reshape(-1, 1) * self.step
