@@ -67,17 +67,17 @@ for i, x in enumerate(np.linspace(-0.95, 0.95, int(np.sqrt(N)))):
     )
 point_set = np.concatenate(point_set, axis=0)
 
-w = np.abs(np.random.rand(7, 3))
+w = np.abs(np.random.rand(20, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
 x0 = w @ np.vstack([c1, c2, c3])
-x0 -= np.array([2 / np.sqrt(3) - 1, 0, -1.5])
-x0 /= np.linalg.norm(x0, axis=1).reshape(-1, 1)
-x0 += np.array([2 / np.sqrt(3) - 1, 0, -1.5])
+# x0 -= np.array([2 / np.sqrt(3) - 1, 0, -1.5])
+# x0 /= np.linalg.norm(x0, axis=1).reshape(-1, 1)
+# x0 += np.array([2 / np.sqrt(3) - 1, 0, -1.5])
 # x0 = point_set
 y0 = np.array([MOP1(_) for _ in x0])
 idx = get_non_dominated(y0, return_index=True, weakly_dominated=True)
-ref = np.array([20, 20, 20])
-max_iters = 20
+ref = np.array([10, 10, 10])
+max_iters = 50
 
 opt = HVN(
     dim=3,
@@ -97,9 +97,19 @@ opt = HVN(
     max_iters=max_iters,
     verbose=True,
 )
+
 X, Y, stop = opt.run()
 
-fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
+# out = opt._compute_netwon_step(x0, y0, opt.dual_vars)
+# HVdY = out["HVdY"].reshape(-1, 3) / 30
+# HVdX = out["HVdX"].reshape(-1, 3) / 50
+# w = out["w"].reshape(-1, 3)
+# print(x0)
+# print(y0)
+# print(w)
+# breakpoint()
+
+fig = plt.figure(figsize=plt.figaspect(1 / 2.0))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
 ax.view_init(25, -50)
@@ -114,14 +124,10 @@ x += 2 / np.sqrt(3) - 1
 z -= 1.5
 ax.plot_wireframe(x, y, z, alpha=0.4)
 
-idx = opt._nondominated_idx
-dominated_idx = list(set(range(len(X))) - set(opt._nondominated_idx))
 # plot the initial decision points
-ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
-# plot the final non-dominated decision points
-ax.plot(X[idx, 0], X[idx, 1], X[idx, 2], "g*", ms=6)
-# plot the final dominated decision points
-ax.plot(X[dominated_idx, 0], X[dominated_idx, 1], X[dominated_idx, 2], "r*", ms=6)
+# ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
+# ax.plot(x0[-1, 0], x0[-1, 1], x0[-1, 2], "r.", ms=8)
+ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=8)
 ax.set_title("decision space")
 ax.set_xlabel(r"$x_1$")
 ax.set_ylabel(r"$x_2$")
@@ -141,27 +147,43 @@ ax.set_zlim([-2, 2])
 #         y[1:] - y[:-1],
 #         z[1:] - z[:-1],
 #         color="k",
-#         arrow_length_ratio=0.1,
-#         alpha=0.3,
+#         arrow_length_ratio=0.08,
+#         alpha=0.35,
+#     )
+
+# for i, x in enumerate(x0):
+#     ax.quiver(
+#         x[0],
+#         x[1],
+#         x[2],
+#         HVdX[i, 0],
+#         HVdX[i, 1],
+#         HVdX[i, 2],
+#         color="k",
+#         arrow_length_ratio=0.05,
+#         alpha=0.35,
 #     )
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
 ax.view_init(-5, -140)
 
-# x, y, z = pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2]
-# triang = mtri.Triangulation(x, y)
-# xmid = x[triang.triangles].mean(axis=1)
-# ymid = y[triang.triangles].mean(axis=1)
-# zmid = z[triang.triangles].mean(axis=1)
+# ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=8)
+# ax.plot(y0[-1, 0], y0[-1, 1], y0[-1, 2], "r.", ms=8)
+ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
 
-# p = np.c_[xmid, ymid, zmid]
-# mask = np.array([np.any(np.all(pp > p, axis=1)) for pp in p])
-# mask[np.nonzero(mask)[0][8]] = False
-# triang.set_mask(mask)
-
-ax.plot(Y[idx, 0], Y[idx, 1], Y[idx, 2], "g*", ms=8)
-# ax.plot_trisurf(triang, z, color="k", alpha=0.2)
+# for i, y in enumerate(y0):
+#     ax.quiver(
+#         y[0],
+#         y[1],
+#         y[2],
+#         HVdY[i, 0],
+#         HVdY[i, 1],
+#         HVdY[i, 2],
+#         color="k",
+#         arrow_length_ratio=0.05,
+#         alpha=0.35,
+#     )
 
 # trajectory = np.atleast_3d([y0] + opt.hist_Y)
 # for i in range(len(x0)):
@@ -185,10 +207,11 @@ ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_N_nondominated, "b-")
-ax_.semilogy(range(1, len(opt.hist_G_norm) + 1), opt.hist_G_norm, "g--")
-ax.set_ylabel("HV", color="b")
-ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
+ax.plot(range(1, len(opt.hist_HV) + 1), opt._hist_n_positive_eigen, "b-")
+# ax_.plot(range(1, len(opt.hist_HV) + 1), opt._hist_inner, "g--")
+ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
+ax.set_ylabel("#positive eigenvalues of HV", color="b")
+ax_.set_ylabel(r"$\langle \nabla HV, \mathbf{n}\rangle$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
 
