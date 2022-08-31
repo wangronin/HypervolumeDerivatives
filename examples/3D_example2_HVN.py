@@ -100,7 +100,7 @@ max_iters = 45
 # a = np.mgrid[-2.5:-0.5:7j, 0:3.5:7j]
 # a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
 
-w = np.abs(np.random.randn(40, 3))
+w = np.abs(np.random.randn(20, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
 x0 = w @ np.vstack([c1, c2, c3])
 x0[:, 0] = 0.5
