@@ -284,9 +284,12 @@ class HVN:
         self.step_size = np.zeros(self.mu)
         self.G = np.zeros((self.mu, self.dim))
 
-        # partition approximation set to anti-chains
-        eq_cstr = np.array([self.h(_) for _ in self._get_primal_dual(self.X)[0]]).reshape(self.mu, -1)
-        feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-3, rtol=1e-3), axis=1)
+        # partition the approximation set to by feasibility
+        if self.h is None:
+            feasible_mask = np.array([True] * self.mu)
+        else:
+            eq_cstr = np.array([self.h(_) for _ in self._get_primal_dual(self.X)[0]]).reshape(self.mu, -1)
+            feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-3, rtol=1e-3), axis=1)
         # non-dominatd sorting of the feasible points
         if np.any(feasible_mask):
             feasible_idx = np.nonzero(feasible_mask)[0]
@@ -323,7 +326,7 @@ class HVN:
         v = step[:, : self.dim_primal].ravel() @ normal_vectors
         alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
 
-        for _ in range(10):
+        for _ in range(8):
             X_ = X + alpha * step
             if self.h is None:
                 HV = self.hypervolume_derivatives.HV(X)
