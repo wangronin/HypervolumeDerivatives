@@ -114,14 +114,14 @@ x += 2 / np.sqrt(3) - 1
 z -= 1.5
 ax.plot_wireframe(x, y, z, alpha=0.4)
 
-idx = opt._nondominated_idx
-dominated_idx = list(set(range(len(X))) - set(opt._nondominated_idx))
+# idx = opt._nondominated_idx
+# dominated_idx = list(set(range(len(X))) - set(opt._nondominated_idx))
 # plot the initial decision points
 ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
 # plot the final non-dominated decision points
-ax.plot(X[idx, 0], X[idx, 1], X[idx, 2], "g*", ms=6)
+ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=6)
 # plot the final dominated decision points
-ax.plot(X[dominated_idx, 0], X[dominated_idx, 1], X[dominated_idx, 2], "r*", ms=6)
+# ax.plot(X[dominated_idx, 0], X[dominated_idx, 1], X[dominated_idx, 2], "r*", ms=6)
 ax.set_title("decision space")
 ax.set_xlabel(r"$x_1$")
 ax.set_ylabel(r"$x_2$")
@@ -160,7 +160,7 @@ ax.view_init(-5, -140)
 # mask[np.nonzero(mask)[0][8]] = False
 # triang.set_mask(mask)
 
-ax.plot(Y[idx, 0], Y[idx, 1], Y[idx, 2], "g*", ms=8)
+ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
 # ax.plot_trisurf(triang, z, color="k", alpha=0.2)
 
 # trajectory = np.atleast_3d([y0] + opt.hist_Y)
@@ -185,7 +185,7 @@ ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_N_nondominated, "b-")
+ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
 ax_.semilogy(range(1, len(opt.hist_G_norm) + 1), opt.hist_G_norm, "g--")
 ax.set_ylabel("HV", color="b")
 ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")

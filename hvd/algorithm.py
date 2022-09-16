@@ -374,7 +374,7 @@ class HVN:
     def log(self):
         HV = hypervolume(self.Y, self.ref)
         self.hist_Y += [self.Y.copy()]
-        self.hist_X += [self.X.copy()]
+        self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
         self.hist_HV += [HV]
 
         if self.verbose:
