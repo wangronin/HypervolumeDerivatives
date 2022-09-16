@@ -85,7 +85,7 @@ pareto_front = np.array([MOP1(x) for x in point_set])
 
 dim = 3
 ref = np.array([90, 90, 90])
-max_iters = 45
+max_iters = 40
 
 # x0 = np.array(
 #     [
@@ -97,17 +97,18 @@ max_iters = 45
 #         [1.2, 1.5, 2],
 #     ]
 # )
-# a = np.mgrid[-2.5:-0.5:7j, 0:3.5:7j]
-# a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
 
-w = np.abs(np.random.randn(20, 3))
-w /= np.sum(w, axis=1).reshape(-1, 1)
-x0 = w @ np.vstack([c1, c2, c3])
-x0[:, 0] = 0.5
+w = np.abs(np.random.randn(50, 3))
+# w /= np.sum(w, axis=1).reshape(-1, 1)
+# x0 = w @ np.vstack([c1, c2, c3])
+# x0[:, 0] = 0.5
 
-# x0 = np.c_[np.tile(0.5, (len(a), 1)), a]
+a = np.mgrid[-2.5:-0.5:7j, 0:3.5:7j]
+a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
+
+x0 = np.c_[np.tile(0.5, (len(a), 1)), a]
 y0 = np.array([MOP1(_) for _ in x0])
-idx = get_non_dominated(y0, return_index=True, weakly_dominated=False)
+# idx = get_non_dominated(y0, return_index=True, weakly_dominated=False)
 # x0 = x0[idx]
 # y0 = y0[idx]
 mu = len(x0)
@@ -132,7 +133,6 @@ opt = HVN(
 )
 X, Y, stop = opt.run()
 # idx = opt._nondominated_idx
-print(len(X))
 
 fig = plt.figure(figsize=plt.figaspect(1 / 3))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
