@@ -1,8 +1,14 @@
+from typing import List
+
+import hvd.mp_utils as mpu
 import matplotlib.pyplot as plt
+import mpmath as mp
 import numpy as np
 import pandas as pd
 from hvd.algorithm import HVN
 from matplotlib import rcParams
+
+mp.mp.dps = 100
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 12
@@ -19,34 +25,38 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-def MOP1(x):
-    x = np.array(x)
-    return np.array([np.sum((x - 1) ** 2), np.sum((x + 1) ** 2)])
+
+def MOP1(x: mp.matrix) -> mp.matrix:
+    if isinstance(x, np.ndarray):
+        return np.array([np.sum((x - 1) ** 2), np.sum((x + 1) ** 2)])
+    else:
+        return mp.matrix([mp.fsum([(xx - 1) ** 2 for xx in x]), mp.fsum([(xx + 1) ** 2 for xx in x])]).T
 
 
-def MOP1_Jacobian(x):
-    x = np.array(x)
-    return np.array([2 * (x - 1), 2 * (x + 1)])
+def MOP1_Jacobian(x: mp.matrix) -> mp.matrix:
+    if isinstance(x, np.ndarray):
+        return np.array([2 * (x - 1), 2 * (x + 1)])
+    else:
+        return mpu.r_(2 * (x - 1), 2 * (x + 1))
 
 
-def MOP1_Hessian(x):
-    x = np.array(x)
-    return np.array([2 * np.eye(2), 2 * np.eye(2)])
+def MOP1_Hessian(x: mp.matrix) -> List[mp.matrix]:
+    if isinstance(x, np.ndarray):
+        return np.array([2 * np.eye(2), 2 * np.eye(2)])
+    else:
+        return [2 * mp.eye(2), 2 * mp.eye(2)]
 
 
-def h(x):
-    x = np.array(x)
-    return np.sum(x**2) - 1
+def h(x: mp.matrix) -> mp.mpf:
+    return mp.fsum([xx**2 for xx in x]) - 1
 
 
-def h_Jacobian(x):
-    x = np.array(x)
+def h_Jacobian(x: mp.matrix) -> mp.matrix:
     return 2 * x
 
 
-def h_Hessian(x):
-    x = np.array(x)
-    return 2 * np.eye(2)
+def h_Hessian(_) -> List[mp.matrix]:
+    return [2 * mp.eye(2)]
 
 
 # example of Adrian
@@ -62,9 +72,10 @@ def h_Hessian(x):
 #         # [0, -0.25],
 #     ]
 # )
+
 ref = np.array([20, 20])
 max_iters = 20
-mu = 5
+mu = 30
 # option1: linearly spacing
 p = np.linspace(0, 2, mu)
 # option2: logistic spacing/denser on two tails
@@ -97,10 +108,9 @@ opt = HVN(
     verbose=True,
 )
 X_, Y_, stop = opt.run()
-X = np.zeros(X_.shape)
-Y = np.zeros(Y_.shape)
-X[...] = X_
-Y[...] = opt.Y
+
+X = mpu.mp2np(X_)
+Y = mpu.mp2np(Y_)
 
 fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(18, 6.5))
 plt.subplots_adjust(right=0.95, left=0.05)

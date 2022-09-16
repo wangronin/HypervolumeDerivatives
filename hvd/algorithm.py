@@ -1,16 +1,20 @@
 import logging
 from typing import Callable, Dict, List, Tuple, Union
 
+import mpmath as mp
 import numpy as np
 from scipy.linalg import block_diag, cholesky
 from scipy.spatial.distance import cdist
 
+from . import mp_utils as mpu
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .logger import get_logger
 from .utils import non_domin_sort, set_bounds
 
 __authors__ = ["Hao Wang"]
+
+mp.mp.dps = 50
 
 
 class HVN:
@@ -143,17 +147,24 @@ class HVN:
         # initialize dual variables
         if self.h is not None:
             v = self.h(X0[0, :])
-            self.n_eq_cstr = 1 if isinstance(v, float) else len(v)
+            self.n_eq_cstr = 1 if isinstance(v, mp.mpf) else len(v)
             # to make the Hessian of Eq. constraints always a 3D tensor
-            self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
+
             X0 = np.c_[X0, np.ones((self.mu, self.n_eq_cstr)) / self.mu]
         else:
             self.n_eq_cstr = 0
 
         self._get_primal_dual = lambda X: (X[:, : self.dim_primal], X[:, self.dim_primal :])
         self.dim = self.dim_primal + self.n_eq_cstr
-        self.X = X0
-        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])  # (mu, n_objective)
+        self.X = mpu.np2mp(X0)
+        primal_vars = self._get_primal_dual(self.X)[0]
+        self.Y = mpu.r_(*[self.func(primal_vars[i, :]) for i in range(primal_vars.rows)])  # (mu, n_objective)
+
+    def _h_hessian(self, primal, dual):
+        out = mp.zeros(self.dim_primal * self.n_eq_cstr, self.dim_primal * self.n_eq_cstr)
+        for i, x in enumerate(self.h_hessian(primal)):
+            out += x * dual[i]
+        return out
 
     def _init_logging_var(self):
         """parameters for logging the history"""
@@ -203,97 +214,64 @@ class HVN:
             self.log()
         return self.X, self.Y, self.stop_dict
 
-    def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
-        """Precondition the Hessian matrix to make sure it is negative definite
-
-        Args:
-            H (np.ndarray): the Hessian matrix
-
-        Returns:
-            np.ndarray: the preconditioned Hessian
-        """
-        # pre-condition the Hessian
-        beta = 1e-6
-        v = np.min(np.diag(-H))
-        tau = 0 if v > 0 else -v + beta
-        I = np.eye(H.shape[0])
-        for _ in range(35):
-            try:
-                _ = cholesky(-H + tau * I, lower=True)
-                break
-            except:
-                tau = max(1.3 * tau, beta)
-        else:
-            self.logger.warn("Pre-conditioning the HV Hessian failed")
-        return H - tau * I
-
-    def _compute_G(self, X: np.ndarray) -> np.ndarray:
-        N = len(X)
+    def _compute_G(self, X: mp.matrix) -> mp.matrix:
+        N = X.rows
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
-        out = self.hypervolume_derivatives.compute_gradient(primal_vars)
-        HVdX = out["HVdX"].ravel()
-
-        dH = block_diag(*[self.h_jac(x) for x in primal_vars])
-        eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)
-        G = np.concatenate([HVdX + dual_vars.ravel() @ dH, eq_cstr.ravel()])
-        return np.c_[G[:mud].reshape(N, -1), G[mud:].reshape(N, -1)]
+        out = self.hypervolume_derivatives.compute_gradient(mpu.mp2np(primal_vars))
+        HVdX = out["HVdX"]
+        dH = mpu.block_diag(*[self.h_jac(primal_vars[i, :]) for i in range(primal_vars.rows)])
+        eq_cstr = mp.matrix([self.h(primal_vars[i, :]) for i in range(primal_vars.rows)]).T
+        G = mpu.c_(*[HVdX + mpu.flatten(dual_vars) @ dH, eq_cstr])
+        return mpu.c_(mpu.reshape(G[:mud], N, -1), mpu.reshape(G[mud:], N, -1))
 
     def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Dict[str, np.ndarray]:
-        N = X.shape[0]
+        N = X.rows
         primal_vars, dual_vars = self._get_primal_dual(X)
-        out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
-        HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
-        H, G = HVdX2, HVdX
+        out = self.hypervolume_derivatives.compute_hessian(mpu.mp2np(primal_vars), mpu.mp2np(Y))
+        HVdX, HVdX2 = mpu.np2mp(out["HVdX"].ravel()).T, mpu.np2mp(out["HVdX2"])
+        H, G = mpu.np2mp(HVdX2), mpu.np2mp(HVdX)
 
         if self.h is not None:  # with equality constraints
             mud = int(N * self.dim_primal)
             mup = int(N * self.n_eq_cstr)
-            eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)  # (mu, p)
-            dH = block_diag(*np.array([self.h_jac(x) for x in primal_vars]))  # (mu * p, dim)
-            ddH = block_diag(
-                *[np.einsum("ijk,i->jk", self._h_hessian(x), dual_vars[i]) for i, x in enumerate(primal_vars)]
+            eq_cstr = mp.matrix([self.h(primal_vars[i, :]) for i in range(primal_vars.rows)]).T
+            dH = mpu.block_diag(*[self.h_jac(primal_vars[i, :]) for i in range(primal_vars.rows)])
+            ddH = mpu.block_diag(
+                *[self._h_hessian(primal_vars[i, :], dual_vars[i, :]) for i in range(primal_vars.rows)]
             )  # (mu * dim, mu * dim)
-            G = np.concatenate([HVdX + dual_vars.ravel() @ dH, eq_cstr.ravel()])
+            G = mpu.c_(*[HVdX + mpu.flatten(dual_vars) @ dH, eq_cstr]).T
             # NOTE: if the Hessian of the constraint is dropped, then quadratic convergence is gone
-            H = np.concatenate(
-                [
-                    np.concatenate([HVdX2 + ddH, dH.T], axis=1),
-                    np.concatenate([dH, np.zeros((mup, mup))], axis=1),
-                ],
-            )
-        try:
-            step = -1 * np.linalg.solve(H, G)
-        except:
-            # NOTE: this part should not occur
-            w, V = np.linalg.eigh(H)
-            w[np.isclose(w, 0)] = 1e-6
-            D = np.diag(1 / w)
-            step = -1 * V @ D @ V.T @ G
+            H = mpu.r_(*[mpu.c_(HVdX2 + ddH, dH.T), mpu.c_(dH, mp.zeros(mup, mup))])
 
+        step = -1 * (H**-1) @ G
         if self.h is not None:
-            step = np.c_[step[:mud].reshape(N, -1), step[mud:].reshape(N, -1)]
-            G = np.c_[G[:mud].reshape(N, -1), G[mud:].reshape(N, -1)]
+            step = mpu.c_(mpu.reshape(step[:mud], N, -1), mpu.reshape(step[mud:], N, -1))
+            G = mpu.c_(mpu.reshape(G[:mud], N, -1), mpu.reshape(G[mud:], N, -1))
             return dict(step=step, G=G)
         else:
-            return dict(step=step.reshape(N, -1), G=HVdX.reshape(N, -1))
+            return dict(step=mpu.reshape(step, N, -1), G=mpu.reshape(G, N, -1))
 
     def one_step(self):
         self._check_XY()
-        self.step = np.zeros((self.mu, self.dim))
-        self.step_size = np.zeros(self.mu)
-        self.G = np.zeros((self.mu, self.dim))
+        self.step = mp.zeros(self.mu, self.dim)
+        self.step_size = mp.zeros(self.mu, self.mu)
+        self.G = mp.zeros(self.mu, self.dim)
 
         # partition the approximation set to by feasibility
         if self.h is None:
             feasible_mask = np.array([True] * self.mu)
         else:
-            eq_cstr = np.array([self.h(_) for _ in self._get_primal_dual(self.X)[0]]).reshape(self.mu, -1)
+            primal_vars = self._get_primal_dual(self.X)[0]
+            eq_cstr = mpu.mp2np(mp.matrix([self.h(primal_vars[i, :]) for i in range(primal_vars.rows)]).T)
+            eq_cstr = eq_cstr.reshape(self.mu, -1)
             feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-3, rtol=1e-3), axis=1)
         # non-dominatd sorting of the feasible points
         if np.any(feasible_mask):
             feasible_idx = np.nonzero(feasible_mask)[0]
-            partitions = non_domin_sort(self.Y[feasible_mask], only_front_indices=True)
+            partitions = non_domin_sort(
+                mpu.mp2np(mpu.get_rows(self.Y, feasible_idx)), only_front_indices=True
+            )
             partitions = {k: feasible_idx[v] for k, v in partitions.items()}
             partitions.update({0: np.sort(np.r_[partitions[0], np.nonzero(~feasible_mask)[0]])})
         else:
@@ -301,48 +279,53 @@ class HVN:
 
         # compute the Newton direction for each partition
         for _, idx in partitions.items():
-            out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
-            self.step[idx, :] = out["step"]
-            self.G[idx, :] = out["G"]
+            out = self._compute_netwon_step(X=mpu.get_rows(self.X, idx), Y=mpu.get_rows(self.Y, idx))
+            mpu.set_rows(self.step, idx, out["step"])
+            mpu.set_rows(self.G, idx, out["G"])
             # backtracking line search with Armijo's condition for each point
-            self.step_size[idx] = self._linear_search(self.X[idx], self.step[idx], G=self.G[idx])
+            alpha = self._linear_search(
+                mpu.get_rows(self.X, idx), mpu.get_rows(self.step, idx), G=mpu.get_rows(self.G, idx)
+            )
+            for i in idx:
+                self.step_size[i, i] = alpha
 
-        self.X += self.step_size.reshape(-1, 1) * self.step
-        # evaluation
-        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
+        self.X = self.X + self.step_size @ self.step
+        primal_vars = self._get_primal_dual(self.X)[0]
+        self.Y = mpu.r_(*[self.func(primal_vars[i, :]) for i in range(primal_vars.rows)])  # (mu, n_objective)
         self.iter_count += 1
 
     def _linear_search(self, X: np.ndarray, step: np.ndarray, G: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
         c = 1e-5
         N = len(X)
-        primal_vars = self._get_primal_dual(X)[0]
+        primal_vars = mpu.mp2np(self._get_primal_dual(X)[0])
         normal_vectors = np.c_[np.eye(self.dim_primal * N), -1 * np.eye(self.dim_primal * N)]
         # calculate the maximal step-size
         dist = np.r_[
             np.abs(primal_vars.ravel() - np.tile(self.lower_bounds, N)),
             np.abs(np.tile(self.upper_bounds, N) - primal_vars.ravel()),
         ]
-        v = step[:, : self.dim_primal].ravel() @ normal_vectors
+        v = mpu.mp2np(step[:, : self.dim_primal]).ravel() @ normal_vectors
         alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
 
-        for _ in range(8):
-            X_ = X + alpha * step
+        for _ in range(5):
+            X_ = X + step * alpha
             if self.h is None:
-                HV = self.hypervolume_derivatives.HV(X)
-                HV_ = self.hypervolume_derivatives.HV(X_)
+                # TODO: support higher numerical precision in `HV`
+                HV = self.hypervolume_derivatives.HV(mpu.mp2np(X))
+                HV_ = self.hypervolume_derivatives.HV(mpu.mp2np(X_))
                 inc = np.inner(G.ravel(), step.ravel())
                 cond = HV_ - HV >= c * alpha * inc
             else:
                 G_ = self._compute_G(X_)
-                cond = np.sum(G_**2) <= (1 - 2 * c) * np.sum(G.ravel() ** 2)
+                cond = mp.norm(G_) ** 2 <= (1 - 2 * c) * mp.norm(G) ** 2
             if cond:
                 break
             else:
                 if 11 < 2:
-                    phi0 = HV if self.h is None else np.sum(G**2) / 2
-                    phi1 = HV_ if self.h is None else np.sum(G_**2) / 2
-                    phi0prime = inc if self.h is None else -np.sum(G**2)
+                    phi0 = HV if self.h is None else mp.norm(G) ** 2 / 2
+                    phi1 = HV_ if self.h is None else mp.norm(G_) ** 2 / 2
+                    phi0prime = inc if self.h is None else -mp.norm(G) ** 2
                     alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
                     # alpha *= tau
                 if 1 < 2:
@@ -353,7 +336,8 @@ class HVN:
 
     def _check_XY(self):
         # get unique points: if some points converge to the same location
-        primal_vars = self.X[:, : self.dim_primal]
+        primal_vars = mpu.mp2np(self._get_primal_dual(self.X)[0])
+        Y = mpu.mp2np(self.Y)
         D = cdist(primal_vars, primal_vars)
         drop_idx_X = set([])
         for i in range(self.mu):
@@ -364,35 +348,36 @@ class HVN:
         drop_idx_Y = set([])
         for i in range(self.mu):
             if i not in drop_idx_Y:
-                drop_idx_Y |= set(np.nonzero(np.isclose(self.Y[i, :], self.Y))[0]) - set([i])
+                drop_idx_Y |= set(np.nonzero(np.isclose(Y[i, :], Y))[0]) - set([i])
 
         idx = list(set(range(self.mu)) - (drop_idx_X | drop_idx_Y))
         self.mu = len(idx)
-        self.X = self.X[idx, :]
-        self.Y = self.Y[idx, :]
+        self.X = mpu.get_rows(self.X, idx)
+        self.Y = mpu.get_rows(self.Y, idx)
 
     def log(self):
-        HV = hypervolume(self.Y, self.ref)
-        self.hist_Y += [self.Y.copy()]
-        self.hist_X += [self.X.copy()]
+        HV = hypervolume(self.Y.tolist(), self.ref)
+        self.hist_Y += [self.Y]
+        self.hist_X += [self.X]
         self.hist_HV += [HV]
 
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"HV: {HV}")
-            self.logger.info(f"step size: {self.step_size}")
+            self.logger.info(f"step size: {np.diag(mpu.mp2np(self.step_size))}")
 
         if self.iter_count >= 1:
             try:
-                self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
-                self._delta_Y = np.mean(np.sqrt(np.sum((self.hist_Y[-1] - self.hist_Y[-2]) ** 2, axis=1)))
+                # self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
+                # self._delta_Y = np.mean(np.sqrt(np.sum((self.hist_Y[-1] - self.hist_Y[-2]) ** 2, axis=1)))
                 self._delta_HV = np.abs(self.hist_HV[-1] - self.hist_HV[-2])
             except:
                 pass
 
         if self.h is not None:
-            self.hist_G_norm += [np.linalg.norm(self.G.ravel())]
-            self.logger.info(f"G norm: {np.linalg.norm(self.G.ravel())}")
+            v = mp.norm(self.G)
+            self.hist_G_norm += [v]
+            self.logger.info(f"G norm: {float(v)}")
 
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:

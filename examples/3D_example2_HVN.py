@@ -1,13 +1,14 @@
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
+import mpmath as mp
 import numpy as np
 import pandas as pd
 from hvd.algorithm import HVN
 from hvd.hypervolume_derivatives import get_non_dominated
 from matplotlib import rcParams
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-from scipy.stats import qmc
 
+mp.mp.dps = 100
 np.random.seed(42)
 
 plt.style.use("ggplot")
