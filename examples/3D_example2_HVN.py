@@ -56,17 +56,18 @@ def MOP1_Hessian(x):
     return np.array([2 * np.eye(3), 2 * np.eye(3), 2 * np.eye(3)])
 
 
-tol = 1e-8
+# tol = 1e-10
 
 
 def h(x):
-    return x[0] if x[0] < tol else 0.0
+    return x[0]
 
 
 def h_Jacobian(x):
     v = np.zeros(len(x))
     v[0] = 1
-    return v if x[0] < tol else np.zeros(len(x))
+    return v
+    # if x[0] < tol else np.zeros(len(x))
 
 
 def h_Hessian(x):
@@ -85,7 +86,7 @@ pareto_front = np.array([MOP1(x) for x in point_set])
 
 dim = 3
 ref = np.array([90, 90, 90])
-max_iters = 40
+max_iters = 30
 
 # x0 = np.array(
 #     [
@@ -97,21 +98,16 @@ max_iters = 40
 #         [1.2, 1.5, 2],
 #     ]
 # )
+mu = 60
+# a = np.mgrid[-2.5:-0.5:6j, 0:3.5:10j]
+# a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
+w = np.abs(np.random.randn(mu, 3))
+w /= np.sum(w, axis=1).reshape(-1, 1)
+x0 = w @ np.vstack([c1, c2, c3])
+x0[:, 0] = 0.5
 
-w = np.abs(np.random.randn(50, 3))
-# w /= np.sum(w, axis=1).reshape(-1, 1)
-# x0 = w @ np.vstack([c1, c2, c3])
-# x0[:, 0] = 0.5
-
-a = np.mgrid[-2.5:-0.5:7j, 0:3.5:7j]
-a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
-
-x0 = np.c_[np.tile(0.5, (len(a), 1)), a]
+# x0 = np.c_[np.tile(0.5, (len(a), 1)), a]
 y0 = np.array([MOP1(_) for _ in x0])
-# idx = get_non_dominated(y0, return_index=True, weakly_dominated=False)
-# x0 = x0[idx]
-# y0 = y0[idx]
-mu = len(x0)
 
 opt = HVN(
     dim=dim,
@@ -132,7 +128,6 @@ opt = HVN(
     verbose=True,
 )
 X, Y, stop = opt.run()
-# idx = opt._nondominated_idx
 
 fig = plt.figure(figsize=plt.figaspect(1 / 3))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
@@ -213,20 +208,18 @@ ax.set_ylabel(r"$f_2$")
 ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
-ax_ = ax.twinx()
+# ax_ = ax.twinx()
 # ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax_.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
+# ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
+ax.semilogy(range(1, len(opt.hist_G_norm) + 1), opt.hist_G_norm, "g--")
 # ax.set_ylabel("HV", color="b")
-ax.set_ylabel("N_Nondominated", color="b")
-ax_.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
+# ax.set_ylabel("N_Nondominated", color="b")
+ax.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
-# ax.set_xticks(range(1, max_iters + 1))
 
 plt.tight_layout()
 plt.subplots_adjust(wspace=0.1)
-plt.show()
 plt.savefig(f"3D-example2-{mu}.pdf", dpi=100)
 
 df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
