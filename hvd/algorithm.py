@@ -285,6 +285,7 @@ class HVN:
         self.G = np.zeros((self.mu, self.dim))
 
         # partition the approximation set to by feasibility
+        self._nondominated_idx = non_domin_sort(self.Y, only_front_indices=True)[0]
         if self.h is None:
             feasible_mask = np.array([True] * self.mu)
         else:
@@ -391,8 +392,8 @@ class HVN:
                 pass
 
         if self.h is not None:
-            self.hist_G_norm += [np.linalg.norm(self.G.ravel())]
-            self.logger.info(f"G norm: {np.linalg.norm(self.G.ravel())}")
+            self.hist_G_norm += [np.median(np.linalg.norm(self.G[self._nondominated_idx], axis=1))]
+            self.logger.info(f"G norm: {self.hist_G_norm[-1]}")
 
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:
