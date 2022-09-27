@@ -72,10 +72,12 @@ pareto_set = point_set / np.linalg.norm(point_set, axis=1).reshape(-1, 1) + cent
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
 max_iters = 30
-mu = 60
+mu = 40
+ref = np.array([20, 20, 20])
 w = np.abs(np.random.rand(mu, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
 x0 = w @ np.vstack([c1, c2, c3])
+# x0[0, 2] = 1
 y0 = np.array([MOP1(_) for _ in x0])
 
 # NOTE: the reference points affects the performance: how to set reference properly
