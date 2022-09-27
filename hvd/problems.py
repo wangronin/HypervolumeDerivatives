@@ -29,11 +29,22 @@ class MOOAnalytical:
         self.constraint_jacobian = jacobian(self.constraint)
         self.constraint_hessian = hessian(self.constraint)
 
+    def get_pareto_set(self, N: int = 1000) -> np.ndarray:
+        M = self.n_objectives
+        theta = np.linspace(0, 2 * np.pi, N)
+        x = np.c_[np.cos(theta), np.sin(theta)] * 0.4
+        return np.c_[x + 0.5, np.tile(0.5, (N, self.n_decision_vars - M + 1))]
+
+    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
+        x = self.get_pareto_set(N)
+        y = np.array([self.objective(xx) for xx in x])
+        return y
+
 
 class Eq1DTLZ1(MOOAnalytical):
     def __init__(self):
         self.n_objectives = 3
-        self.n_decision_vars = self.n_objectives + 4
+        self.n_decision_vars = self.n_objectives + 8
         self.lower_bounds = np.zeros(self.n_decision_vars)
         self.upper_bounds = np.ones(self.n_decision_vars)
         super().__init__()

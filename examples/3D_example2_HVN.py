@@ -9,6 +9,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from scipy.stats import qmc
 
 np.random.seed(42)
+np.set_printoptions(edgeitems=30, linewidth=100000)
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 12
@@ -98,13 +99,14 @@ max_iters = 30
 #         [1.2, 1.5, 2],
 #     ]
 # )
-mu = 60
+mu = 5
 # a = np.mgrid[-2.5:-0.5:6j, 0:3.5:10j]
 # a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
 w = np.abs(np.random.randn(mu, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
 x0 = w @ np.vstack([c1, c2, c3])
 x0[:, 0] = 0.5
+x0[0, 0] = 3.5
 
 # x0 = np.c_[np.tile(0.5, (len(a), 1)), a]
 y0 = np.array([MOP1(_) for _ in x0])

@@ -8,7 +8,7 @@ from scipy.spatial.distance import cdist
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .logger import get_logger
-from .utils import non_domin_sort, set_bounds
+from .utils import get_non_dominated, non_domin_sort, set_bounds
 
 __authors__ = ["Hao Wang"]
 
@@ -122,8 +122,8 @@ class HVN:
         self.max_iters = max_iters
         self.verbose: bool = verbose
         self.eps = 1e-3 * np.max(self.upper_bounds - self.lower_bounds)
-        self._initialize(x0)
         self._init_logging_var()
+        self._initialize(x0)
 
     def _initialize(self, X0: np.ndarray):
         if X0 is not None:
@@ -232,7 +232,8 @@ class HVN:
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_gradient(primal_vars)
-        HVdX = out["HVdX"].ravel()
+        # HVdX = out["HVdX"].ravel()
+        HVdX = out["HVdX"].ravel() / self._max_HV
 
         dH = block_diag(*[self.h_jac(x) for x in primal_vars])
         eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)
@@ -243,14 +244,15 @@ class HVN:
         N = X.shape[0]
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
-        HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
+        # HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
+        HVdX, HVdX2 = out["HVdX"].ravel() / self._max_HV, out["HVdX2"] / self._max_HV
         H, G = HVdX2, HVdX
 
         if self.h is not None:  # with equality constraints
             mud = int(N * self.dim_primal)
             mup = int(N * self.n_eq_cstr)
             eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)  # (mu, p)
-            dH = block_diag(*np.array([self.h_jac(x) for x in primal_vars]))  # (mu * p, dim)
+            dH = block_diag(*np.array([self.h_jac(x) for x in primal_vars]))  # (mu * p, mu * dim)
             ddH = block_diag(
                 *[np.einsum("ijk,i->jk", self._h_hessian(x), dual_vars[i]) for i, x in enumerate(primal_vars)]
             )  # (mu * dim, mu * dim)
@@ -264,6 +266,19 @@ class HVN:
             )
         try:
             step = -1 * np.linalg.solve(H, G)
+            # check for the dominated points, its Netwon step is simply its gradient
+            # H_inv = np.linalg.inv(H)
+            # for i, idx in non_domin_sort(Y, only_front_indices=True).items():
+            #     if i > 0:
+            #         for k in idx:
+            #             grad = self.h_jac(primal_vars[k])
+            #             d = step[k * self.dim_primal : (k + 1) * self.dim_primal]
+            #             v = np.abs(np.inner(d, grad) / np.linalg.norm(grad) / np.linalg.norm(d))
+            #             assert np.isclose(v, 1)
+            #             A_inv = np.linalg.inv(self._h_hessian(primal_vars[k])[0] * dual_vars[k])
+            #             tmp = grad @ (A_inv.T)
+            #             assert np.all(np.isclose(d, -eq_cstr[k] * tmp / (grad @ tmp)))
+            #             tmp2 = dual_vars[k] - eq_cstr[k] / (grad @ tmp)
         except:
             # NOTE: this part should not occur
             w, V = np.linalg.eigh(H)
@@ -281,7 +296,7 @@ class HVN:
     def one_step(self):
         self._check_XY()
         self.step = np.zeros((self.mu, self.dim))
-        self.step_size = np.zeros(self.mu)
+        self.step_size = np.ones(self.mu)
         self.G = np.zeros((self.mu, self.dim))
 
         # partition the approximation set to by feasibility
@@ -290,10 +305,14 @@ class HVN:
             feasible_mask = np.array([True] * self.mu)
         else:
             eq_cstr = np.array([self.h(_) for _ in self._get_primal_dual(self.X)[0]]).reshape(self.mu, -1)
-            feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-3, rtol=1e-3), axis=1)
-        # non-dominatd sorting of the feasible points
+            feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-4, rtol=0), axis=1)
+
+        feasible_idx = np.nonzero(feasible_mask)[0]
+        dominated_idx = list(
+            (set(range(self.mu)) - set(get_non_dominated(self.Y, return_index=True)) - set(feasible_idx))
+        )
         if np.any(feasible_mask):
-            feasible_idx = np.nonzero(feasible_mask)[0]
+            # non-dominatd sorting of the feasible points
             partitions = non_domin_sort(self.Y[feasible_mask], only_front_indices=True)
             partitions = {k: feasible_idx[v] for k, v in partitions.items()}
             partitions.update({0: np.sort(np.r_[partitions[0], np.nonzero(~feasible_mask)[0]])})
@@ -306,6 +325,12 @@ class HVN:
             self.step[idx, :] = out["step"]
             self.G[idx, :] = out["G"]
             # backtracking line search with Armijo's condition for each point
+            # if _ == 0 and len(dominated_idx) > 0:
+            #     idx_ = list(set(idx) - set(dominated_idx))
+            #     for k in dominated_idx:
+            #         self.step_size[k] = self._linear_search2(self.X[[k]], self.step[[k]])
+            #     self.step_size[idx_] = self._linear_search(self.X[idx_], self.step[idx_], G=self.G[idx_])
+            # else:
             self.step_size[idx] = self._linear_search(self.X[idx], self.step[idx], G=self.G[idx])
 
         self.X += self.step_size.reshape(-1, 1) * self.step
@@ -348,6 +373,37 @@ class HVN:
                     # alpha *= tau
                 if 1 < 2:
                     alpha *= 0.5
+        else:
+            self.logger.warn("Armijo's backtracking line search failed")
+        return alpha
+
+    def _linear_search2(self, X: np.ndarray, step: np.ndarray) -> float:
+        """backtracking line search with Armijo's condition"""
+        c = 1e-4
+        N = len(X)
+        step = step[:, : self.dim_primal]
+        primal_vars = self._get_primal_dual(X)[0]
+        normal_vectors = np.c_[np.eye(self.dim_primal * N), -1 * np.eye(self.dim_primal * N)]
+        # calculate the maximal step-size
+        dist = np.r_[
+            np.abs(primal_vars.ravel() - np.tile(self.lower_bounds, N)),
+            np.abs(np.tile(self.upper_bounds, N) - primal_vars.ravel()),
+        ]
+        v = step.ravel() @ normal_vectors
+        alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+
+        h_ = self.h(primal_vars)
+        eq_cstr = h_**2 / 2
+        G = h_ * self.h_jac(primal_vars)
+        for _ in range(8):
+            X_ = primal_vars + alpha * step
+            eq_cstr_ = self.h(X_) ** 2 / 2
+            dec = np.inner(G.ravel(), step.ravel())
+            cond = eq_cstr_ - eq_cstr <= c * alpha * dec
+            if cond:
+                break
+            else:
+                alpha *= 0.5
         else:
             self.logger.warn("Armijo's backtracking line search failed")
         return alpha
