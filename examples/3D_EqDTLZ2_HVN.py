@@ -1,38 +1,45 @@
 import matplotlib.pyplot as plt
-import mpl_toolkits.mplot3d.art3d as art3d
 import numpy as np
-import pandas as pd
 from hvd.algorithm import HVN
-from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3
+from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4
+from matplotlib import rcParams
 
-np.random.seed(66)
 plt.style.use("ggplot")
+rcParams["font.size"] = 12
+rcParams["xtick.direction"] = "out"
+rcParams["ytick.direction"] = "out"
+rcParams["text.usetex"] = True
+rcParams["legend.numpoints"] = 1
+rcParams["xtick.labelsize"] = 12
+rcParams["ytick.labelsize"] = 12
+rcParams["xtick.major.size"] = 7
+rcParams["xtick.major.width"] = 1
+rcParams["ytick.major.size"] = 7
+rcParams["ytick.major.width"] = 1
 
-f = Eq1DTLZ1()
+f = Eq1DTLZ3()
 
-pareto_set = f.get_pareto_set(100)
+if isinstance(f, Eq1DTLZ1):
+    seed = 66
+else:
+    seed = 42
+
+np.random.seed(777)
+pareto_set = f.get_pareto_set(200)
 pareto_front = f.get_pareto_front(200)
 
 dim = 11
 ref = np.array([1, 1, 1])
 max_iters = 16
 
-# a = np.mgrid[0.1:0.9:5j, 0.1:0.9:3j]
-# a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
-# a += 0.1 * np.random.rand(len(a), 2)
-# x0 = np.c_[a, 0.5 + 0.02 * np.random.rand(len(a), 1)]
-# x0 = f.get_pareto_set(mu) + 0.05 * np.random.rand(mu, 3)
-
-# x0 = pd.read_csv("./data/EqDTLZ1.txt", header=None, sep=",").values
-# x0[:, 0:2] += 0.01 * np.random.rand(len(x0), 2)
-# y0 = np.array([f.objective(x) for x in x0])
-# mu = len(x0)
-
+# if isinstance(f, Eq1DTLZ2):
+#     x0 = f.get_pareto_set(30)
+# else:
 x0 = f.get_pareto_set(30, kind="uniform")
+# perturb the initial solution a bit
 x0[:, 0:2] += 0.02 * np.random.rand(len(x0), 2)
 y0 = np.array([f.objective(x) for x in x0])
 mu = len(x0)
-
 
 opt = HVN(
     dim=dim,
@@ -57,14 +64,14 @@ X, Y, stop = opt.run()
 fig = plt.figure(figsize=plt.figaspect(1 / 2.7))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
-ax.view_init(50, -25)
+ax.view_init(50, -20)
 
 # plot the initial and final approximation set
 ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "r.", ms=5, alpha=0.5)
 ax.plot(X[:, 0], X[:, 1], X[:, 2], "g.", ms=7, alpha=0.5)
 
 # plot the constraint boundary
-ax.plot3D(pareto_set[:, 0], pareto_set[:, 1], pareto_set[:, 2], "gray", alpha=0.5)
+ax.plot3D(pareto_set[:, 0], pareto_set[:, 1], pareto_set[:, 2], "gray", alpha=0.4)
 
 # trajectory = np.atleast_3d([x0] + opt.hist_X)
 # for i in range(len(trajectory[0])):
@@ -101,9 +108,9 @@ ax.plot3D(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "gray", al
 ax.set_xlabel("f1")
 ax.set_ylabel("f2")
 ax.set_zlabel("f3")
-ax.set_xlim([0, 0.3])
-ax.set_ylim([0, 0.3])
-ax.set_zlim([0, 0.5])
+ax.set_xlim([0, 1])
+ax.set_ylim([0, 1])
+ax.set_zlim([0, 1])
 ax.set_title("objective space")
 
 ax = fig.add_subplot(1, 3, 3)
