@@ -213,27 +213,33 @@ class HVN:
             np.ndarray: the preconditioned Hessian
         """
         # pre-condition the Hessian
-        beta = 1e-6
-        v = np.min(np.diag(-H))
-        tau = 0 if v > 0 else -v + beta
-        I = np.eye(H.shape[0])
-        for _ in range(35):
-            try:
-                _ = cholesky(-H + tau * I, lower=True)
-                break
-            except:
-                tau = max(1.3 * tau, beta)
-        else:
-            self.logger.warn("Pre-conditioning the HV Hessian failed")
-        return H - tau * I
+        if 11 < 2:
+            w, V = np.linalg.eigh(-H)
+            delta = np.max(w) / 1e3
+            tau = max(0, delta - np.min(w))
+            return H - tau * np.eye(H.shape[0])
+        if 1 < 2:
+            beta = 1e-6
+            v = np.min(np.diag(-H))
+            tau = 0 if v > 0 else -v + beta
+            I = np.eye(H.shape[0])
+            for _ in range(35):
+                try:
+                    cholesky(-H + tau * I, lower=True)
+                    break
+                except:
+                    tau = max(1.5 * tau, beta)
+            else:
+                self.logger.warn("Pre-conditioning the HV Hessian failed")
+            return H - tau * I
 
     def _compute_G(self, X: np.ndarray) -> np.ndarray:
         N = len(X)
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_gradient(primal_vars)
-        # HVdX = out["HVdX"].ravel()
-        HVdX = out["HVdX"].ravel() / self._max_HV
+        HVdX = out["HVdX"].ravel()
+        # HVdX = out["HVdX"].ravel() / self._max_HV
 
         dH = block_diag(*[self.h_jac(x) for x in primal_vars])
         eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)
@@ -244,8 +250,9 @@ class HVN:
         N = X.shape[0]
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
-        # HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
-        HVdX, HVdX2 = out["HVdX"].ravel() / self._max_HV, out["HVdX2"] / self._max_HV
+        HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
+        # HVdX, HVdX2 = out["HVdX"].ravel() / self._max_HV, out["HVdX2"] / self._max_HV
+        HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
 
         if self.h is not None:  # with equality constraints
@@ -325,13 +332,13 @@ class HVN:
             self.step[idx, :] = out["step"]
             self.G[idx, :] = out["G"]
             # backtracking line search with Armijo's condition for each point
-            # if _ == 0 and len(dominated_idx) > 0:
-            #     idx_ = list(set(idx) - set(dominated_idx))
-            #     for k in dominated_idx:
-            #         self.step_size[k] = self._linear_search2(self.X[[k]], self.step[[k]])
-            #     self.step_size[idx_] = self._linear_search(self.X[idx_], self.step[idx_], G=self.G[idx_])
-            # else:
-            self.step_size[idx] = self._linear_search(self.X[idx], self.step[idx], G=self.G[idx])
+            if _ == 0 and len(dominated_idx) > 0:
+                idx_ = list(set(idx) - set(dominated_idx))
+                for k in dominated_idx:
+                    self.step_size[k] = self._linear_search2(self.X[[k]], self.step[[k]])
+                self.step_size[idx_] = self._linear_search(self.X[idx_], self.step[idx_], G=self.G[idx_])
+            else:
+                self.step_size[idx] = self._linear_search(self.X[idx], self.step[idx], G=self.G[idx])
 
         self.X += self.step_size.reshape(-1, 1) * self.step
         # evaluation
@@ -361,7 +368,7 @@ class HVN:
                 cond = HV_ - HV >= c * alpha * inc
             else:
                 G_ = self._compute_G(X_)
-                cond = np.sum(G_**2) <= (1 - 2 * c) * np.sum(G.ravel() ** 2)
+                cond = np.linalg.norm(G_) <= (1 - c * alpha) * np.linalg.norm(G)
             if cond:
                 break
             else:
@@ -374,6 +381,7 @@ class HVN:
                 if 1 < 2:
                     alpha *= 0.5
         else:
+            # breakpoint()
             self.logger.warn("Armijo's backtracking line search failed")
         return alpha
 

@@ -29,9 +29,22 @@ class MOOAnalytical:
         self.constraint_jacobian = jacobian(self.constraint)
         self.constraint_hessian = hessian(self.constraint)
 
-    def get_pareto_set(self, N: int = 1000) -> np.ndarray:
+
+class _Eq1DTLZ(MOOAnalytical):
+    def __init__(self):
+        self.n_objectives = 3
+        self.n_decision_vars = self.n_objectives + 8
+        self.lower_bounds = np.zeros(self.n_decision_vars)
+        self.upper_bounds = np.ones(self.n_decision_vars)
+        super().__init__()
+
+    def get_pareto_set(self, N: int = 1000, kind="uniform") -> np.ndarray:
         M = self.n_objectives
-        theta = np.linspace(0, 2 * np.pi, N)
+        theta = (
+            np.sort(np.random.rand(N) * 2 * np.pi)
+            if kind == "uniform"
+            else np.r_[np.linspace(0, 2 * np.pi, N), 0]
+        )
         x = np.c_[np.cos(theta), np.sin(theta)] * 0.4
         return np.c_[x + 0.5, np.tile(0.5, (N, self.n_decision_vars - M + 1))]
 
@@ -41,19 +54,17 @@ class MOOAnalytical:
         return y
 
 
-class Eq1DTLZ1(MOOAnalytical):
-    def __init__(self):
-        self.n_objectives = 3
-        self.n_decision_vars = self.n_objectives + 8
-        self.lower_bounds = np.zeros(self.n_decision_vars)
-        self.upper_bounds = np.ones(self.n_decision_vars)
-        super().__init__()
-
+class Eq1DTLZ1(_Eq1DTLZ):
     def objective(self, x: np.ndarray) -> np.ndarray:
         D = len(x)
         M = self.n_objectives
         g = 100 * (D - M + 1 + np.sum((x[M - 1 :] - 0.5) ** 2 - np.cos(20.0 * np.pi * (x[M - 1 :] - 0.5))))
-        return 0.5 * (1 + g) * _cumprod(np.r_[1, x[0 : M - 1]])[::-1] * np.r_[1, 1 - x[0 : M - 1][::-1]]
+        return (
+            0.5
+            * (1 + g)
+            * _cumprod(np.concatenate([[1], x[0 : M - 1]]))[::-1]
+            * np.concatenate([[1], 1 - x[0 : M - 1][::-1]])
+        )
 
     def constraint(self, x: np.ndarray) -> float:
         M = self.n_objectives
@@ -62,14 +73,7 @@ class Eq1DTLZ1(MOOAnalytical):
         return np.abs(np.sum(xx**2) - r**2) - 1e-4
 
 
-class Eq1DTLZ2(MOOAnalytical):
-    def __init__(self):
-        self.n_objectives = 3
-        self.n_decision_vars = self.n_objectives + 9
-        self.lower_bounds = np.zeros(self.n_decision_vars)
-        self.upper_bounds = np.ones(self.n_decision_vars)
-        super().__init__()
-
+class Eq1DTLZ2(_Eq1DTLZ):
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
         g = np.sum((x[M - 1 :] - 0.5) ** 2)
@@ -86,14 +90,7 @@ class Eq1DTLZ2(MOOAnalytical):
         return np.abs(np.sum(xx**2) - r**2) - 1e-4
 
 
-class Eq1DTLZ3(MOOAnalytical):
-    def __init__(self):
-        self.n_objectives = 3
-        self.n_decision_vars = self.n_objectives + 9
-        self.lower_bounds = np.zeros(self.n_decision_vars)
-        self.upper_bounds = np.ones(self.n_decision_vars)
-        super().__init__()
-
+class Eq1DTLZ3(_Eq1DTLZ):
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
         D = len(x)
@@ -111,23 +108,15 @@ class Eq1DTLZ3(MOOAnalytical):
         return np.abs(np.sum(xx**2) - r**2) - 1e-4
 
 
-class Eq1DTLZ4(MOOAnalytical):
-    def __init__(self):
-        self.n_objectives = 3
-        self.n_decision_vars = self.n_objectives + 9
-        self.lower_bounds = np.zeros(self.n_decision_vars)
-        self.upper_bounds = np.ones(self.n_decision_vars)
-        super().__init__()
-
+class Eq1DTLZ4(_Eq1DTLZ):
     def objective(self, x: np.ndarray) -> np.ndarray:
-        x_ = x.copy()
         M = self.n_objectives
-        x_[0 : M - 1] = x_[0 : M - 1] ** 100
+        x_ = x[0 : M - 1] ** 100
         g = np.sum((x[M - 1 :] - 0.5) ** 2)
         return (
             (1 + g)
-            * _cumprod(np.concatenate([[1], np.cos(x_[0 : M - 1] * np.pi / 2)]))[::-1]
-            * np.concatenate([[1], np.sin(x_[0 : M - 1][::-1] * np.pi / 2)])
+            * _cumprod(np.concatenate([[1], np.cos(x_ * np.pi / 2)]))[::-1]
+            * np.concatenate([[1], np.sin(x_[::-1] * np.pi / 2)])
         )
 
     def constraint(self, x: np.ndarray) -> float:
