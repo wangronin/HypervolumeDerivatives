@@ -1,10 +1,11 @@
+import time
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.linalg import block_diag
 
 from .hypervolume import hypervolume
-from .utils import get_non_dominated
+from .utils import non_domin_sort
 
 __author__ = ["Hao Wang"]
 
@@ -84,7 +85,12 @@ class HypervolumeDerivatives:
             points = np.asarray(points)
         self._objective_points = points
         assert self.dim_m == self._objective_points.shape[1]
-        self._nondominated_indices = get_non_dominated(self._objective_points, return_index=True)
+
+        if self._objective_points.shape[1] == 1:
+            self._nondominated_indices = np.array([np.argmin(self._objective_points.ravel())])
+        else:
+            self._nondominated_indices = non_domin_sort(self._objective_points, only_front_indices=True)[0]
+        # self._nondominated_indices = get_non_dominated(self._objective_points, return_index=True)
         self._dominated_indices = set(range(len(self._objective_points))) - set(self._nondominated_indices)
 
     def _check_X(self, X: np.ndarray):
@@ -116,7 +122,11 @@ class HypervolumeDerivatives:
         idx = np.nonzero(self.objective_points[:, axis] < y[axis])[0]
         pareto_front_ = np.delete(self.objective_points[idx, :], obj=axis, axis=1)
         if len(pareto_front_) != 0:
-            pareto_indices = get_non_dominated(pareto_front_, return_index=True)
+            if pareto_front_.shape[1] == 1:
+                pareto_indices = np.array([np.argmin(pareto_front_.ravel())])
+            else:
+                pareto_indices = non_domin_sort(pareto_front_, only_front_indices=True)[0]
+            # pareto_indices = get_non_dominated(pareto_front_, return_index=True)
             pareto_front_ = pareto_front_[pareto_indices]
             idx = idx[pareto_indices]
         return y_, pareto_front_, ref_, idx
@@ -166,7 +176,11 @@ class HypervolumeDerivatives:
                 # partial derivatives ∂(∂HV/∂y_k^i)/∂y^i
                 # of shape (1, dim), where the k-th element is zero
                 Y_ = np.vstack([y_, pareto_front_])
-                pareto_indices = get_non_dominated(Y_, return_index=True)
+                if Y_.shape[1] == 1:
+                    pareto_indices = np.array([np.argmin(Y_.ravel())])
+                else:
+                    pareto_indices = non_domin_sort(Y_, only_front_indices=True)[0]
+                # pareto_indices = get_non_dominated(Y_, return_index=True)
                 idx = np.where(pareto_indices == 0)[0]
                 out = self.hypervolume_dY(Y_[pareto_indices], ref_)[idx]
                 HVdY2[i * self.dim_m : (i + 1) * self.dim_m, i * self.dim_m + k] = np.insert(-1.0 * out, k, 0)
@@ -227,6 +241,9 @@ class HypervolumeDerivatives:
         if X.shape[1] != self.dim_d:
             X = X.T
         self.N = X.shape[0]  # number of points
+        # record the CPU time of function evaluations
+        t0 = time.process_time_ns()
+
         if Y is None:  # do not evaluate the function when `Y` is provided
             Y = np.array([self.func(x) for x in X])  # `(N, dim_m)`
         # Jacobians
@@ -238,6 +255,9 @@ class HypervolumeDerivatives:
         for i in range(self.N):
             idx = slice(i * self.dim_d, (i + 1) * self.dim_d)
             YdX2[i * self.dim_m : (i + 1) * self.dim_m, idx, idx] = _YdX2[i, ...]
+
+        t1 = time.process_time_ns()
+        self.FE_CPU_time = t1 - t0
         return Y, YdX, YdX2
 
     def compute_HVdY_FD(self, Y: np.ndarray, epsilon: float = 1e-3) -> np.ndarray:

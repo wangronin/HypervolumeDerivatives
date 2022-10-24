@@ -10,29 +10,17 @@ plt.style.use("ggplot")
 
 f = Eq1DTLZ1()
 
-pareto_set = f.get_pareto_set(100)
+pareto_set = f.get_pareto_set(300)
 pareto_front = f.get_pareto_front(200)
 
 dim = 11
 ref = np.array([1, 1, 1])
-max_iters = 16
+max_iters = 10
 
-# a = np.mgrid[0.1:0.9:5j, 0.1:0.9:3j]
-# a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
-# a += 0.1 * np.random.rand(len(a), 2)
-# x0 = np.c_[a, 0.5 + 0.02 * np.random.rand(len(a), 1)]
-# x0 = f.get_pareto_set(mu) + 0.05 * np.random.rand(mu, 3)
-
-# x0 = pd.read_csv("./data/EqDTLZ1.txt", header=None, sep=",").values
-# x0[:, 0:2] += 0.01 * np.random.rand(len(x0), 2)
-# y0 = np.array([f.objective(x) for x in x0])
-# mu = len(x0)
-
-x0 = f.get_pareto_set(30, kind="uniform")
+x0 = f.get_pareto_set(200, kind="uniform")
 x0[:, 0:2] += 0.02 * np.random.rand(len(x0), 2)
 y0 = np.array([f.objective(x) for x in x0])
 mu = len(x0)
-
 
 opt = HVN(
     dim=dim,
@@ -54,6 +42,7 @@ opt = HVN(
 )
 X, Y, stop = opt.run()
 
+breakpoint()
 fig = plt.figure(figsize=plt.figaspect(1 / 2.7))
 ax = fig.add_subplot(1, 3, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
