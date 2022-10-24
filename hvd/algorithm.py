@@ -1,14 +1,17 @@
 import logging
+import time
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.linalg import block_diag, cholesky
+from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
 
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .logger import get_logger
-from .utils import get_non_dominated, non_domin_sort, set_bounds
+from .utils import non_domin_sort, set_bounds
 
 __authors__ = ["Hao Wang"]
 
@@ -160,6 +163,7 @@ class HVN:
         self.hist_Y: List[np.ndarray] = []
         self.hist_X: List[np.ndarray] = []
         self.hist_HV: List[float] = []
+        self.hist_CPU_time_FE: List[int] = []
         self._delta_X: float = np.inf
         self._delta_Y: float = np.inf
         self._delta_HV: float = np.inf
@@ -213,33 +217,27 @@ class HVN:
             np.ndarray: the preconditioned Hessian
         """
         # pre-condition the Hessian
-        if 11 < 2:
-            w, V = np.linalg.eigh(-H)
-            delta = np.max(w) / 1e3
-            tau = max(0, delta - np.min(w))
-            return H - tau * np.eye(H.shape[0])
-        if 1 < 2:
-            beta = 1e-6
-            v = np.min(np.diag(-H))
-            tau = 0 if v > 0 else -v + beta
-            I = np.eye(H.shape[0])
-            for _ in range(35):
-                try:
-                    cholesky(-H + tau * I, lower=True)
-                    break
-                except:
-                    tau = max(1.5 * tau, beta)
-            else:
-                self.logger.warn("Pre-conditioning the HV Hessian failed")
-            return H - tau * I
+        beta = 1e-6
+        v = np.min(np.diag(-H))
+        tau = 0 if v > 0 else -v + beta
+        I = np.eye(H.shape[0])
+        for _ in range(35):
+            try:
+                cholesky(-H + tau * I, lower=True)
+                break
+            except:
+                tau = max(1.5 * tau, beta)
+        else:
+            self.logger.warn("Pre-conditioning the HV Hessian failed")
+        return H - tau * I
 
     def _compute_G(self, X: np.ndarray) -> np.ndarray:
         N = len(X)
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_gradient(primal_vars)
+        self.FE_CPU_time += self.hypervolume_derivatives.FE_CPU_time
         HVdX = out["HVdX"].ravel()
-        # HVdX = out["HVdX"].ravel() / self._max_HV
 
         dH = block_diag(*[self.h_jac(x) for x in primal_vars])
         eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)
@@ -250,19 +248,29 @@ class HVN:
         N = X.shape[0]
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
+        self.FE_CPU_time += self.hypervolume_derivatives.FE_CPU_time
+
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
-        # HVdX, HVdX2 = out["HVdX"].ravel() / self._max_HV, out["HVdX2"] / self._max_HV
+        # NOTE: preconditioning is needed EqDTLZ problems
         HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
 
         if self.h is not None:  # with equality constraints
             mud = int(N * self.dim_primal)
             mup = int(N * self.n_eq_cstr)
+            # record the CPU time of function evaluations
+            t0 = time.process_time_ns()
+
             eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)  # (mu, p)
             dH = block_diag(*np.array([self.h_jac(x) for x in primal_vars]))  # (mu * p, mu * dim)
             ddH = block_diag(
-                *[np.einsum("ijk,i->jk", self._h_hessian(x), dual_vars[i]) for i, x in enumerate(primal_vars)]
+                # NOTE: `np.einsum` is quite slow comparing the alternatives in np
+                # TODO: ad-hoc solutions for now. Find a generci and faster solution later
+                # *[np.einsum("ijk,i->jk", self._h_hessian(x), dual_vars[i]) for i, x in enumerate(primal_vars)]
+                *[(self._h_hessian(x) * dual_vars[i])[0] for i, x in enumerate(primal_vars)]
             )  # (mu * dim, mu * dim)
+            t1 = time.process_time_ns()
+
             G = np.concatenate([HVdX + dual_vars.ravel() @ dH, eq_cstr.ravel()])
             # NOTE: if the Hessian of the constraint is dropped, then quadratic convergence is gone
             H = np.concatenate(
@@ -271,21 +279,10 @@ class HVN:
                     np.concatenate([dH, np.zeros((mup, mup))], axis=1),
                 ],
             )
+        self.FE_CPU_time += t1 - t0
         try:
-            step = -1 * np.linalg.solve(H, G)
-            # check for the dominated points, its Netwon step is simply its gradient
-            # H_inv = np.linalg.inv(H)
-            # for i, idx in non_domin_sort(Y, only_front_indices=True).items():
-            #     if i > 0:
-            #         for k in idx:
-            #             grad = self.h_jac(primal_vars[k])
-            #             d = step[k * self.dim_primal : (k + 1) * self.dim_primal]
-            #             v = np.abs(np.inner(d, grad) / np.linalg.norm(grad) / np.linalg.norm(d))
-            #             assert np.isclose(v, 1)
-            #             A_inv = np.linalg.inv(self._h_hessian(primal_vars[k])[0] * dual_vars[k])
-            #             tmp = grad @ (A_inv.T)
-            #             assert np.all(np.isclose(d, -eq_cstr[k] * tmp / (grad @ tmp)))
-            #             tmp2 = dual_vars[k] - eq_cstr[k] / (grad @ tmp)
+            # NOTE: use the sparse matrix representation to save some time here
+            step = -1 * spsolve(csc_matrix(H), csc_matrix(G.reshape(-1, 1)))
         except:
             # NOTE: this part should not occur
             w, V = np.linalg.eigh(H)
@@ -301,6 +298,7 @@ class HVN:
             return dict(step=step.reshape(N, -1), G=HVdX.reshape(N, -1))
 
     def one_step(self):
+        self.FE_CPU_time = 0  # clear the CPU time counter
         self._check_XY()
         self.step = np.zeros((self.mu, self.dim))
         self.step_size = np.ones(self.mu)
@@ -315,9 +313,7 @@ class HVN:
             feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-4, rtol=0), axis=1)
 
         feasible_idx = np.nonzero(feasible_mask)[0]
-        dominated_idx = list(
-            (set(range(self.mu)) - set(get_non_dominated(self.Y, return_index=True)) - set(feasible_idx))
-        )
+        dominated_idx = list((set(range(self.mu)) - set(self._nondominated_idx) - set(feasible_idx)))
         if np.any(feasible_mask):
             # non-dominatd sorting of the feasible points
             partitions = non_domin_sort(self.Y[feasible_mask], only_front_indices=True)
@@ -359,7 +355,7 @@ class HVN:
         v = step[:, : self.dim_primal].ravel() @ normal_vectors
         alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
 
-        for _ in range(8):
+        for _ in range(6):
             X_ = X + alpha * step
             if self.h is None:
                 HV = self.hypervolume_derivatives.HV(X)
@@ -381,7 +377,6 @@ class HVN:
                 if 1 < 2:
                     alpha *= 0.5
         else:
-            # breakpoint()
             self.logger.warn("Armijo's backtracking line search failed")
         return alpha
 
@@ -403,7 +398,7 @@ class HVN:
         h_ = self.h(primal_vars)
         eq_cstr = h_**2 / 2
         G = h_ * self.h_jac(primal_vars)
-        for _ in range(8):
+        for _ in range(6):
             X_ = primal_vars + alpha * step
             eq_cstr_ = self.h(X_) ** 2 / 2
             dec = np.inner(G.ravel(), step.ravel())
@@ -441,11 +436,13 @@ class HVN:
         self.hist_Y += [self.Y.copy()]
         self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
         self.hist_HV += [HV]
+        self.hist_CPU_time_FE += [self.FE_CPU_time]
 
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"HV: {HV}")
-            self.logger.info(f"step size: {self.step_size}")
+            # self.logger.info(f"step size: {self.step_size}")
+            self.logger.info(f"CPU time of FEs: {self.FE_CPU_time}")
 
         if self.iter_count >= 1:
             try:

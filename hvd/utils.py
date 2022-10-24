@@ -18,7 +18,11 @@ from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import numpy as np
 
+# from numba import jit
 
+
+# TODO: this is too slow, improve the algorithm
+# @jit(nopython=True, error_model="numpy", cache=True)
 def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False, weakly_dominated: bool = True):
     """Find pareto front (undominated part) of the input performance data.
     Minimization is assumed

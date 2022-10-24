@@ -24,18 +24,15 @@ if isinstance(f, Eq1DTLZ1):
 else:
     seed = 42
 
-np.random.seed(777)
-pareto_set = f.get_pareto_set(200)
+np.random.seed(seed)
+pareto_set = f.get_pareto_set(300)
 pareto_front = f.get_pareto_front(200)
 
 dim = 11
 ref = np.array([1, 1, 1])
 max_iters = 16
 
-# if isinstance(f, Eq1DTLZ2):
-#     x0 = f.get_pareto_set(30)
-# else:
-x0 = f.get_pareto_set(30, kind="uniform")
+x0 = f.get_pareto_set(200, kind="uniform")
 # perturb the initial solution a bit
 x0[:, 0:2] += 0.02 * np.random.rand(len(x0), 2)
 y0 = np.array([f.objective(x) for x in x0])

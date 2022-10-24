@@ -1,4 +1,4 @@
 from .algorithm import HVN
-from .hypervolume_derivatives import HypervolumeDerivatives, get_non_dominated
+from .hypervolume_derivatives import HypervolumeDerivatives
 
-__all__ = ["get_non_dominated", "HypervolumeDerivatives", "HVN"]
+__all__ = ["HypervolumeDerivatives", "HVN"]
