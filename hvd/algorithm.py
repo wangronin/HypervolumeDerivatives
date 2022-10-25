@@ -443,6 +443,7 @@ class HVN:
             self.logger.info(f"HV: {HV}")
             # self.logger.info(f"step size: {self.step_size}")
             self.logger.info(f"CPU time of FEs: {self.FE_CPU_time}")
+            self.logger.info(f"#non-dominated: {len(self._nondominated_idx)}")
 
         if self.iter_count >= 1:
             try:
