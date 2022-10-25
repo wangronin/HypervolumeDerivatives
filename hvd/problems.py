@@ -1,5 +1,20 @@
+import functools
+import time
+
 import autograd.numpy as np
 from autograd import hessian, jacobian
+
+
+def timeit(func):
+    @functools.wraps(func)
+    def __func__(ref, *arg, **kwargv):
+        t0 = time.process_time_ns()
+        out = func(ref, *arg, **kwargv)
+        t1 = time.process_time_ns()
+        ref.CPU_time += t1 - t0
+        return out
+
+    return __func__
 
 
 def _cumprod(x):
@@ -24,10 +39,27 @@ def _cumprod(x):
 
 class MOOAnalytical:
     def __init__(self):
-        self.objective_jacobian = jacobian(self.objective)
-        self.objective_hessian = hessian(self.objective)
-        self.constraint_jacobian = jacobian(self.constraint)
-        self.constraint_hessian = hessian(self.constraint)
+        self._objective_jacobian = jacobian(self.objective)
+        self._objective_hessian = hessian(self.objective)
+        self._constraint_jacobian = jacobian(self.constraint)
+        self._constraint_hessian = hessian(self.constraint)
+        self.CPU_time: int = 0  # in nanoseconds
+
+    @timeit
+    def objective_jacobian(self, x):
+        return self._objective_jacobian(x)
+
+    @timeit
+    def objective_hessian(self, x):
+        return self._objective_hessian(x)
+
+    @timeit
+    def constraint_jacobian(self, x):
+        return self._constraint_jacobian(x)
+
+    @timeit
+    def constraint_hessian(self, x):
+        return self._constraint_hessian(x)
 
 
 class _Eq1DTLZ(MOOAnalytical):
@@ -55,6 +87,7 @@ class _Eq1DTLZ(MOOAnalytical):
 
 
 class Eq1DTLZ1(_Eq1DTLZ):
+    @timeit
     def objective(self, x: np.ndarray) -> np.ndarray:
         D = len(x)
         M = self.n_objectives
@@ -66,6 +99,7 @@ class Eq1DTLZ1(_Eq1DTLZ):
             * np.concatenate([[1], 1 - x[0 : M - 1][::-1]])
         )
 
+    @timeit
     def constraint(self, x: np.ndarray) -> float:
         M = self.n_objectives
         r = 0.4
@@ -74,6 +108,7 @@ class Eq1DTLZ1(_Eq1DTLZ):
 
 
 class Eq1DTLZ2(_Eq1DTLZ):
+    @timeit
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
         g = np.sum((x[M - 1 :] - 0.5) ** 2)
@@ -83,6 +118,7 @@ class Eq1DTLZ2(_Eq1DTLZ):
             * np.concatenate([[1], np.sin(x[0 : M - 1][::-1] * np.pi / 2)])
         )
 
+    @timeit
     def constraint(self, x: np.ndarray) -> float:
         M = self.n_objectives
         r = 0.4
@@ -91,6 +127,7 @@ class Eq1DTLZ2(_Eq1DTLZ):
 
 
 class Eq1DTLZ3(_Eq1DTLZ):
+    @timeit
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
         D = len(x)
@@ -101,6 +138,7 @@ class Eq1DTLZ3(_Eq1DTLZ):
             * np.concatenate([[1], np.sin(x[0 : M - 1][::-1] * np.pi / 2)])
         )
 
+    @timeit
     def constraint(self, x: np.ndarray) -> float:
         M = self.n_objectives
         r = 0.4
@@ -109,6 +147,7 @@ class Eq1DTLZ3(_Eq1DTLZ):
 
 
 class Eq1DTLZ4(_Eq1DTLZ):
+    @timeit
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
         x_ = x[0 : M - 1] ** 100
@@ -119,6 +158,7 @@ class Eq1DTLZ4(_Eq1DTLZ):
             * np.concatenate([[1], np.sin(x_[::-1] * np.pi / 2)])
         )
 
+    @timeit
     def constraint(self, x: np.ndarray) -> float:
         M = self.n_objectives
         r = 0.4
