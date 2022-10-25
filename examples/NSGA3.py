@@ -25,7 +25,7 @@ class ProblemWrapper(ElementwiseProblem):
 def NSGAIII(seed, problem):
     # create the reference directions to be used for the optimization
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=18)
-    termination = get_termination("n_gen", 200)
+    termination = get_termination("n_gen", 2400)
     problem = ProblemWrapper(problem)
     algorithm = AdaptiveEpsilonConstraintHandling(NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5)
     # execute the optimization
