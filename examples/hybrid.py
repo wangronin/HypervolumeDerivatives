@@ -30,7 +30,7 @@ def hybrid(seed: int, problem: MOOAnalytical):
     algorithm = AdaptiveEpsilonConstraintHandling(NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5)
     # execute the optimization
     res = minimize(ProblemWrapper(problem), algorithm, termination, seed=seed, verbose=False)
-    HV0 = hypervolume(res.Y, np.ones(3))
+    HV0 = hypervolume(res.F, np.ones(3))
     X = np.array([p._X for p in res.pop])  # final approximation set of NSGA-III
     problem.CPU_time = 0  # clear the CPU_time counter since we only need to measure the time taken by HVN
     opt = HVN(
