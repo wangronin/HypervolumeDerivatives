@@ -1,6 +1,6 @@
 import numpy as np
 from hvd.hypervolume import hypervolume
-from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3
+from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4
 from joblib import Parallel, delayed
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
@@ -8,6 +8,7 @@ from pymoo.core.problem import ElementwiseProblem
 from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
+from pymoo.visualization.scatter import Scatter
 
 
 class ProblemWrapper(ElementwiseProblem):
@@ -29,9 +30,14 @@ def NSGAIII(seed, problem):
     problem = ProblemWrapper(problem)
     algorithm = AdaptiveEpsilonConstraintHandling(NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5)
     # execute the optimization
-    res = minimize(problem, algorithm, termination, seed=seed, verbose=False)
-    return res.X, hypervolume(res.Y, np.ones(3))
+    res = minimize(problem, algorithm, termination, seed=seed, verbose=True)
+    return res.X, hypervolume(res.F, np.ones(3))
 
+
+# f = Eq1DTLZ4(3, 11)
+# Y = f.get_pareto_front(500)
+# Scatter(angle=(45, 45)).add(Y).show()
+# breakpoint()
 
 N = 15
 problems = [Eq1DTLZ1(3, 11), Eq1DTLZ2(3, 11), Eq1DTLZ3(3, 11)]
