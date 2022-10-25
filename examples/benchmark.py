@@ -18,7 +18,6 @@ def run(i):
     x0[:, 0:2] += 0.02 * np.random.rand(len(x0), 2)
     y0 = np.array([f.objective(x) for x in x0])
     mu = len(x0)
-    mu = len(x0)
     opt = HVN(
         dim=dim,
         n_objective=3,

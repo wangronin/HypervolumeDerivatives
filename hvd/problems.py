@@ -31,9 +31,9 @@ class MOOAnalytical:
 
 
 class _Eq1DTLZ(MOOAnalytical):
-    def __init__(self):
-        self.n_objectives = 3
-        self.n_decision_vars = self.n_objectives + 8
+    def __init__(self, n_objectives: int = 3, n_decision_vars: int = None):
+        self.n_objectives = n_objectives
+        self.n_decision_vars = n_decision_vars if n_decision_vars is not None else self.n_objectives + 8
         self.lower_bounds = np.zeros(self.n_decision_vars)
         self.upper_bounds = np.ones(self.n_decision_vars)
         super().__init__()

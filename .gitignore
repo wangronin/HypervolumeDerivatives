@@ -8,6 +8,7 @@
 *.pdf
 *.ipynb
 *.tex
+*.csv
 data/
 model/
 
