@@ -205,7 +205,7 @@ class HVN:
         while not self.terminate():
             self.one_step()
             self.log()
-        return self.X, self.Y, self.stop_dict
+        return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
 
     def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
         """Precondition the Hessian matrix to make sure it is negative definite
@@ -236,7 +236,7 @@ class HVN:
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_gradient(primal_vars)
-        self.FE_CPU_time += self.hypervolume_derivatives.FE_CPU_time
+        # self.FE_CPU_time += self.hypervolume_derivatives.FE_CPU_time
         HVdX = out["HVdX"].ravel()
 
         dH = block_diag(*[self.h_jac(x) for x in primal_vars])
@@ -248,8 +248,7 @@ class HVN:
         N = X.shape[0]
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
-        self.FE_CPU_time += self.hypervolume_derivatives.FE_CPU_time
-
+        # self.FE_CPU_time += self.hypervolume_derivatives.FE_CPU_time
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
         # NOTE: preconditioning is needed EqDTLZ problems
         HVdX2 = self._precondition_hessian(HVdX2)
@@ -259,8 +258,7 @@ class HVN:
             mud = int(N * self.dim_primal)
             mup = int(N * self.n_eq_cstr)
             # record the CPU time of function evaluations
-            t0 = time.process_time_ns()
-
+            # t0 = time.process_time_ns()
             eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)  # (mu, p)
             dH = block_diag(*np.array([self.h_jac(x) for x in primal_vars]))  # (mu * p, mu * dim)
             ddH = block_diag(
@@ -270,7 +268,6 @@ class HVN:
                 *[(self._h_hessian(x) * dual_vars[i])[0] for i, x in enumerate(primal_vars)]
             )  # (mu * dim, mu * dim)
             t1 = time.process_time_ns()
-
             G = np.concatenate([HVdX + dual_vars.ravel() @ dH, eq_cstr.ravel()])
             # NOTE: if the Hessian of the constraint is dropped, then quadratic convergence is gone
             H = np.concatenate(
@@ -279,7 +276,7 @@ class HVN:
                     np.concatenate([dH, np.zeros((mup, mup))], axis=1),
                 ],
             )
-        self.FE_CPU_time += t1 - t0
+        # self.FE_CPU_time += t1 - t0
         try:
             # NOTE: use the sparse matrix representation to save some time here
             step = -1 * spsolve(csc_matrix(H), csc_matrix(G.reshape(-1, 1)))
