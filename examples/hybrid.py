@@ -25,7 +25,7 @@ class ProblemWrapper(ElementwiseProblem):
 def hybrid(seed):
     # create the reference directions to be used for the optimization
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=18)
-    termination = get_termination("n_gen", 100)
+    termination = get_termination("n_gen", 1000)
 
     f = Eq1DTLZ1(n_objectives=3, n_decision_vars=11)
     problem = ProblemWrapper(f)
@@ -49,7 +49,7 @@ def hybrid(seed):
         upper_bounds=1,
         minimization=True,
         x0=X,
-        max_iters=1,
+        max_iters=10,
         verbose=False,
     )
     X = opt.run()[0]
@@ -57,7 +57,7 @@ def hybrid(seed):
     return X, CPU_time
 
 
-N = 2
+N = 15
 # create the algorithm object
 data = Parallel(n_jobs=N)(delayed(hybrid)(i) for i in range(N))
 np.savez(f"Eq1DTLZ1.npz", data=data)
