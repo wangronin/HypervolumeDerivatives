@@ -30,18 +30,11 @@ def NSGAIII(seed, problem):
     problem = ProblemWrapper(problem)
     algorithm = AdaptiveEpsilonConstraintHandling(NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5)
     # execute the optimization
-    res = minimize(problem, algorithm, termination, seed=seed, verbose=True)
+    res = minimize(problem, algorithm, termination, seed=seed, verbose=False)
     return res.X, hypervolume(res.F, np.ones(3))
 
 
-# f = Eq1DTLZ4(3, 11)
-# Y = f.get_pareto_front(500)
-# Scatter(angle=(45, 45)).add(Y).show()
-# breakpoint()
-
-N = 15
 problems = [Eq1DTLZ1(3, 11), Eq1DTLZ2(3, 11), Eq1DTLZ3(3, 11)]
 for problem in problems:
-    problem = Eq1DTLZ1(n_objectives=3, n_decision_vars=11)
     data = Parallel(n_jobs=N)(delayed(NSGAIII)(i, problem) for i in range(N))
     np.savez(f"{type(problem).__name__}-NSGA3.npz", data=data)

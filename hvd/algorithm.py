@@ -163,7 +163,6 @@ class HVN:
         self.hist_Y: List[np.ndarray] = []
         self.hist_X: List[np.ndarray] = []
         self.hist_HV: List[float] = []
-        self.hist_CPU_time_FE: List[int] = []
         self._delta_X: float = np.inf
         self._delta_Y: float = np.inf
         self._delta_HV: float = np.inf
@@ -236,7 +235,6 @@ class HVN:
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_gradient(primal_vars)
-        # self.FE_CPU_time += self.hypervolume_derivatives.FE_CPU_time
         HVdX = out["HVdX"].ravel()
 
         dH = block_diag(*[self.h_jac(x) for x in primal_vars])
@@ -248,7 +246,6 @@ class HVN:
         N = X.shape[0]
         primal_vars, dual_vars = self._get_primal_dual(X)
         out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
-        # self.FE_CPU_time += self.hypervolume_derivatives.FE_CPU_time
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
         # NOTE: preconditioning is needed EqDTLZ problems
         HVdX2 = self._precondition_hessian(HVdX2)
@@ -258,7 +255,6 @@ class HVN:
             mud = int(N * self.dim_primal)
             mup = int(N * self.n_eq_cstr)
             # record the CPU time of function evaluations
-            # t0 = time.process_time_ns()
             eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)  # (mu, p)
             dH = block_diag(*np.array([self.h_jac(x) for x in primal_vars]))  # (mu * p, mu * dim)
             ddH = block_diag(
@@ -276,7 +272,6 @@ class HVN:
                     np.concatenate([dH, np.zeros((mup, mup))], axis=1),
                 ],
             )
-        # self.FE_CPU_time += t1 - t0
         try:
             # NOTE: use the sparse matrix representation to save some time here
             step = -1 * spsolve(csc_matrix(H), csc_matrix(G.reshape(-1, 1)))
@@ -295,7 +290,6 @@ class HVN:
             return dict(step=step.reshape(N, -1), G=HVdX.reshape(N, -1))
 
     def one_step(self):
-        self.FE_CPU_time = 0  # clear the CPU time counter
         self._check_XY()
         self.step = np.zeros((self.mu, self.dim))
         self.step_size = np.ones(self.mu)
@@ -415,13 +409,15 @@ class HVN:
         drop_idx_X = set([])
         for i in range(self.mu):
             if i not in drop_idx_X:
-                drop_idx_X |= set(np.nonzero(D[i, :] < self.eps)[0]) - set([i])
+                drop_idx_X |= set(np.nonzero(np.isclose(D[i, :], 0, rtol=self.eps))[0]) - set([i])
 
         # get rid of weakly-dominated points
         drop_idx_Y = set([])
         for i in range(self.mu):
             if i not in drop_idx_Y:
-                drop_idx_Y |= set(np.nonzero(np.isclose(self.Y[i, :], self.Y))[0]) - set([i])
+                drop_idx_Y |= set(
+                    np.nonzero(np.any(np.isclose(self.Y[i, :], self.Y, rtol=1e-8, atol=0), axis=1))[0]
+                ) - set([i])
 
         idx = list(set(range(self.mu)) - (drop_idx_X | drop_idx_Y))
         self.mu = len(idx)
@@ -433,13 +429,11 @@ class HVN:
         self.hist_Y += [self.Y.copy()]
         self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
         self.hist_HV += [HV]
-        self.hist_CPU_time_FE += [self.FE_CPU_time]
 
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"HV: {HV}")
             # self.logger.info(f"step size: {self.step_size}")
-            self.logger.info(f"CPU time of FEs: {self.FE_CPU_time}")
             self.logger.info(f"#non-dominated: {len(self._nondominated_idx)}")
 
         if self.iter_count >= 1:

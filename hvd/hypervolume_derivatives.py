@@ -241,9 +241,6 @@ class HypervolumeDerivatives:
         if X.shape[1] != self.dim_d:
             X = X.T
         self.N = X.shape[0]  # number of points
-        # record the CPU time of function evaluations
-        # t0 = time.process_time_ns()
-
         if Y is None:  # do not evaluate the function when `Y` is provided
             Y = np.array([self.func(x) for x in X])  # `(N, dim_m)`
         # Jacobians
@@ -255,9 +252,6 @@ class HypervolumeDerivatives:
         for i in range(self.N):
             idx = slice(i * self.dim_d, (i + 1) * self.dim_d)
             YdX2[i * self.dim_m : (i + 1) * self.dim_m, idx, idx] = _YdX2[i, ...]
-
-        # t1 = time.process_time_ns()
-        # self.FE_CPU_time = t1 - t0
         return Y, YdX, YdX2
 
     def compute_HVdY_FD(self, Y: np.ndarray, epsilon: float = 1e-3) -> np.ndarray:

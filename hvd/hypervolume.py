@@ -38,6 +38,7 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import numpy as np
 
 __author__ = "Simon Wessing"
 
@@ -133,7 +134,7 @@ class HyperVolume:
             hvRecursive = self.hvRecursive
             p = sentinel
             q = p.prev[dimIndex]
-            while q.cargo != None:
+            while q.cargo is not None:
                 if q.ignore < dimIndex:
                     q.ignore = 0
                 q = q.prev[dimIndex]
@@ -193,11 +194,13 @@ class HyperVolume:
     def sortByDimension(self, nodes, i):
         """Sorts the list of nodes by the i-th value of the contained points."""
         # build a list of tuples of (point[i], node)
-        decorated = [(node.cargo[i], node) for node in nodes]
+        idx = np.argsort([node.cargo[i] for node in nodes])
+        # decorated = [(node.cargo[i], node) for node in nodes]
         # sort by this value
-        decorated.sort()
+        # decorated.sort()
         # write back to original list
-        nodes[:] = [node for (_, node) in decorated]
+        nodes[:] = [nodes[i] for i in idx]
+        # nodes[:] = [node for (_, node) in decorated]
 
 
 class MultiList:
