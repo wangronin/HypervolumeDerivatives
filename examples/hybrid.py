@@ -61,6 +61,7 @@ def hybrid(seed: int, problem: MOOAnalytical, ref: np.ndarray):
         x0=X,
         max_iters=10,
         verbose=False,
+        problem_name=type(problem).__name__,
     )
     X = opt.run()[0]
     HV = opt.hist_HV[-1]
@@ -75,7 +76,7 @@ refs = {
     "Eq1DTLZ4": np.array([1.2, 5e-3, 5e-4]),
     "Eq1IDTLZ1": np.array([1, 1, 1]),
     "Eq1IDTLZ2": np.array([1, 1, 1]),
-    "Eq1IDTLZ3": np.array([5, 5, 5]),
+    "Eq1IDTLZ3": np.array([1, 1, 1]),
     "Eq1IDTLZ4": np.array([-0.4, 0.6, 0.6]),
 }
 

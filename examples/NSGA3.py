@@ -1,6 +1,16 @@
 import numpy as np
 from hvd.hypervolume import hypervolume
-from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4
+from hvd.problems import (
+    Eq1DTLZ1,
+    Eq1DTLZ2,
+    Eq1DTLZ3,
+    Eq1DTLZ4,
+    Eq1IDTLZ1,
+    Eq1IDTLZ2,
+    Eq1IDTLZ3,
+    Eq1IDTLZ4,
+    MOOAnalytical,
+)
 from joblib import Parallel, delayed
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
@@ -41,7 +51,7 @@ refs = {
     "Eq1DTLZ4": np.array([1.2, 5e-3, 5e-4]),
     "Eq1IDTLZ1": np.array([1, 1, 1]),
     "Eq1IDTLZ2": np.array([1, 1, 1]),
-    "Eq1IDTLZ3": np.array([5, 5, 5]),
+    "Eq1IDTLZ3": np.array([1, 1, 1]),
     "Eq1IDTLZ4": np.array([-0.4, 0.6, 0.6]),
 }
 
