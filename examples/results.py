@@ -53,29 +53,26 @@ def generate_plot(X, index, problem, algorithm):
 
 
 dfs = []
-columns = pd.MultiIndex.from_product(
-    [
-        ["Eq1DTLZ1", "Eq1DTLZ2", "Eq1DTLZ3"],
-        ["mean HV", "std. err HV", "mean #nondominated", "std. err #nondominated"],
-    ],
-)
+problems = []
 # for the hybrid algorithm
 for file in glob.glob("data-DTLZ/*-hybrid.npz"):
     problem_name = file.split("/")[1].split("-")[0]
+    problems.append(problem_name)
     data = np.load(file, allow_pickle=True)["data"]
     HV0 = []
     HV = []
-    pop_size = []
-    for i, (X, _CPU_time, _HV0, _HV) in enumerate(data):
-        if 1 < 2:
+    pop_size, pop_size_ = [], []
+    for i, (X, X_, _CPU_time, _HV0, _HV) in enumerate(data):
+        if 11 < 2:
             generate_plot(X, i, problem_name, "hybrid")
 
         HV0.append(_HV0)
         HV.append(_HV)
         pop_size.append(len(X))
+        pop_size_.append(len(X_))
 
     results = [
-        [np.mean(HV0), np.std(HV0) / np.sqrt(15), 0, 0],
+        [np.mean(HV0), np.std(HV0) / np.sqrt(15), np.mean(pop_size_), np.std(pop_size_) / np.sqrt(15)],
         [
             np.mean(HV),
             np.std(HV) / np.sqrt(15),
@@ -88,7 +85,7 @@ for file in glob.glob("data-DTLZ/*-hybrid.npz"):
     pop_size = []
     data = np.load(f"data-DTLZ/{problem_name}-NSGA3.npz", allow_pickle=True)["data"]
     for i, (X, _HV) in enumerate(data):
-        if 1 < 2:
+        if 11 < 2:
             generate_plot(X, i, problem_name, "NSGA3")
         HV.append(_HV)
         pop_size.append(len(X))
@@ -104,6 +101,12 @@ for file in glob.glob("data-DTLZ/*-hybrid.npz"):
 
     dfs.append(pd.DataFrame(results))
 
+columns = pd.MultiIndex.from_product(
+    [
+        problems,
+        ["mean HV", "std. err HV", "mean #nondominated", "std. err #nondominated"],
+    ],
+)
 df = pd.concat(dfs, axis=1, ignore_index=True)
 df.columns = columns
 df.insert(

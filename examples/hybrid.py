@@ -1,7 +1,17 @@
 import numpy as np
 from hvd.algorithm import HVN
 from hvd.hypervolume import hypervolume
-from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, MOOAnalytical
+from hvd.problems import (
+    Eq1DTLZ1,
+    Eq1DTLZ2,
+    Eq1DTLZ3,
+    Eq1DTLZ4,
+    Eq1IDTLZ1,
+    Eq1IDTLZ2,
+    Eq1IDTLZ3,
+    Eq1IDTLZ4,
+    MOOAnalytical,
+)
 from joblib import Parallel, delayed
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
@@ -23,7 +33,7 @@ class ProblemWrapper(ElementwiseProblem):
         out["H"] = self._problem.constraint(x)
 
 
-def hybrid(seed: int, problem: MOOAnalytical):
+def hybrid(seed: int, problem: MOOAnalytical, ref: np.ndarray):
     # create the reference directions to be used for the optimization
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=18)
     termination = get_termination("n_gen", 1000)
@@ -31,12 +41,13 @@ def hybrid(seed: int, problem: MOOAnalytical):
     # execute the optimization
     res = minimize(ProblemWrapper(problem), algorithm, termination, seed=seed, verbose=False)
     HV0 = hypervolume(res.F, np.ones(3))
+    X_ = res.X
     X = np.array([p._X for p in res.pop])  # final approximation set of NSGA-III
     problem.CPU_time = 0  # clear the CPU_time counter since we only need to measure the time taken by HVN
     opt = HVN(
         dim=11,
         n_objective=3,
-        ref=np.array([1, 1, 1]),
+        ref=ref,
         func=problem.objective,
         jac=problem.objective_jacobian,
         hessian=problem.objective_hessian,
@@ -54,11 +65,24 @@ def hybrid(seed: int, problem: MOOAnalytical):
     X = opt.run()[0]
     HV = opt.hist_HV[-1]
     CPU_time = problem.CPU_time / 1e9
-    return X, CPU_time, HV0, HV
+    return X, X_, CPU_time, HV0, HV
 
+
+refs = {
+    "Eq1DTLZ1": np.array([1, 1, 1]),
+    "Eq1DTLZ2": np.array([1, 1, 1]),
+    "Eq1DTLZ3": np.array([1, 1, 1]),
+    "Eq1DTLZ4": np.array([1.2, 5e-3, 5e-4]),
+    "Eq1IDTLZ1": np.array([1, 1, 1]),
+    "Eq1IDTLZ2": np.array([1, 1, 1]),
+    "Eq1IDTLZ3": np.array([5, 5, 5]),
+    "Eq1IDTLZ4": np.array([-0.4, 0.6, 0.6]),
+}
 
 N = 15
-problems = [Eq1DTLZ1(3, 11), Eq1DTLZ2(3, 11), Eq1DTLZ3(3, 11)]
+# problems = [Eq1DTLZ1(3, 11), Eq1DTLZ2(3, 11), Eq1DTLZ3(3, 11)]
+problems = [Eq1DTLZ4(3, 11), Eq1IDTLZ1(3, 11), Eq1IDTLZ2(3, 11), Eq1IDTLZ3(3, 11)]
 for problem in problems:
-    data = Parallel(n_jobs=N)(delayed(hybrid)(i, problem) for i in range(N))
+    ref = refs[type(problem).__name__]
+    data = Parallel(n_jobs=N)(delayed(hybrid)(i, problem, ref) for i in range(N))
     np.savez(f"{type(problem).__name__}-hybrid.npz", data=data)

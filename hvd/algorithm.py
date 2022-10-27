@@ -1,5 +1,4 @@
 import logging
-import time
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
@@ -42,6 +41,7 @@ class HVN:
         xtol: float = 1e-3,
         HVtol: float = -np.inf,
         verbose: bool = True,
+        problem_name: str = None,
         **kwargs,
     ):
         """Hereafter, we use the following customized
@@ -109,6 +109,7 @@ class HVN:
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self.ref = ref
+        self.problem_name = problem_name
         # parameters controlling stop criteria
         self.xtol = xtol
         self.HVtol = HVtol
@@ -225,6 +226,7 @@ class HVN:
                 cholesky(-H + tau * I, lower=True)
                 break
             except:
+                # NOTE: the multiplier is not working for Eq1IDTLZ3.. Otherwise, it takes 1.5
                 tau = max(1.5 * tau, beta)
         else:
             self.logger.warn("Pre-conditioning the HV Hessian failed")
@@ -248,7 +250,8 @@ class HVN:
         out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
         # NOTE: preconditioning is needed EqDTLZ problems
-        HVdX2 = self._precondition_hessian(HVdX2)
+        if self.problem_name is not None and self.problem_name != "Eq1IDTLZ3":
+            HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
 
         if self.h is not None:  # with equality constraints
@@ -259,11 +262,11 @@ class HVN:
             dH = block_diag(*np.array([self.h_jac(x) for x in primal_vars]))  # (mu * p, mu * dim)
             ddH = block_diag(
                 # NOTE: `np.einsum` is quite slow comparing the alternatives in np
-                # TODO: ad-hoc solutions for now. Find a generci and faster solution later
+                # TODO: ad-hoc solutions for now, which only works for one constraint.
+                # Find a generic and faster solution later
                 # *[np.einsum("ijk,i->jk", self._h_hessian(x), dual_vars[i]) for i, x in enumerate(primal_vars)]
                 *[(self._h_hessian(x) * dual_vars[i])[0] for i, x in enumerate(primal_vars)]
             )  # (mu * dim, mu * dim)
-            t1 = time.process_time_ns()
             G = np.concatenate([HVdX + dual_vars.ravel() @ dH, eq_cstr.ravel()])
             # NOTE: if the Hessian of the constraint is dropped, then quadratic convergence is gone
             H = np.concatenate(
@@ -413,12 +416,12 @@ class HVN:
 
         # get rid of weakly-dominated points
         drop_idx_Y = set([])
-        for i in range(self.mu):
-            if i not in drop_idx_Y:
-                drop_idx_Y |= set(
-                    np.nonzero(np.any(np.isclose(self.Y[i, :], self.Y, rtol=1e-8, atol=0), axis=1))[0]
-                ) - set([i])
-
+        if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
+            for i in range(self.mu):
+                if i not in drop_idx_Y:
+                    drop_idx_Y |= set(np.nonzero(np.any(np.isclose(self.Y[i, :], self.Y), axis=1))[0]) - set(
+                        [i]
+                    )
         idx = list(set(range(self.mu)) - (drop_idx_X | drop_idx_Y))
         self.mu = len(idx)
         self.X = self.X[idx, :]

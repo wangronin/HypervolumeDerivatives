@@ -11,9 +11,7 @@ Deprecated==1.2.13
 dill==0.3.6
 executing==1.0.0
 fonttools==4.37.1
-future==0.18.2
 gmpy2==2.1.2
-grapheme==0.6.0
 joblib==1.2.0
 kiwisolver==1.4.4
 llvmlite==0.39.1
