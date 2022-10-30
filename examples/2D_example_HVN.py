@@ -64,8 +64,8 @@ def h_Hessian(x):
 #     ]
 # )
 ref = np.array([20, 20])
-max_iters = 5
-mu = 1000
+max_iters = 20
+mu = 100
 
 if 1 < 2:
     # option1: linearly spacing

@@ -18,7 +18,7 @@ __authors__ = ["Hao Wang"]
 class HVN:
     """Hypervolume Newton method
 
-    Newton-Raphson method applied to maximize the hypervolume indicator
+    Newton-Raphson method to maximize the hypervolume indicator, subject to equality constraints
     """
 
     def __init__(
@@ -29,13 +29,13 @@ class HVN:
         jac: callable,
         hessian: callable,
         ref: Union[List[float], np.ndarray],
+        lower_bounds: Union[List[float], np.ndarray],
+        upper_bounds: Union[List[float], np.ndarray],
         mu: int = 5,
         h: Callable = None,
         h_jac: callable = None,
         h_hessian: callable = None,
         x0: np.ndarray = None,
-        lower_bounds: Union[List[float], np.ndarray] = None,
-        upper_bounds: Union[List[float], np.ndarray] = None,
         max_iters: Union[int, str] = np.inf,
         minimization: bool = True,
         xtol: float = 1e-3,
@@ -44,63 +44,34 @@ class HVN:
         problem_name: str = None,
         **kwargs,
     ):
-        """Hereafter, we use the following customized
-        types to describe the usage:
-
-        - Vector = List[float]
-        - Matrix = List[Vector]
-
-        Parameters
-        ----------
-        dim : int
-            Dimensionality of the search space.
-        obj_fun : Callable
-            The objective function to be minimized.
-        args: Tuple
-            The extra parameters passed to function `obj_fun`.
-        h : Callable, optional
-            The equality constraint function, by default None.
-        g : Callable, optional
-            The inequality constraint function, by default None.
-        x0 : Union[str, Vector, np.ndarray], optional
-            The initial guess (by default None) which must fall between lower
-            and upper bounds, if non-infinite values are provided for `lb` and
-            `ub`. Note that, `x0` must be provided when `lb` and `ub` both
-            take infinite values.
-        sigma0 : Union[float], optional
-            The initial step size, by default None
-        C0 : Union[Matrix, np.ndarray], optional
-            The initial covariance matrix which must be positive definite,
-            by default None. Any non-positive definite input will be ignored.
-        lb : Union[float, str, Vector, np.ndarray], optional
-            The lower bound of search variables. When it is not a `float`,
-            it must have the same length as `upper`, by default `-np.inf`.
-        ub : Union[float, str, Vector, np.ndarray], optional
-            The upper bound of search variables. When it is not a `float`,
-            it must have the same length as `lower`, by default `np.inf`.
-        ftarget : Union[int, float], optional
-            The target value to hit, by default None.
-        max_FEs : Union[int, str], optional
-            Maximal number of function evaluations to make, by default `np.inf`.
-        minimize : bool, optional
-            To minimize or maximize, by default True.
-        xtol : float, optional
-            Absolute error in xopt between iterations that is acceptable for
-            convergence, by default 1e-4.
-        ftol : float, optional
-            Absolute error in func(xopt) between iterations that is acceptable
-            for convergence, by default 1e-4.
-        n_restart : int, optional
-            The maximal number of random restarts to perform when stagnation is
-            detected during the run. The random restart can be switched off by
-            setting `n_restart` to zero (the default value).
-        verbose : bool, optional
-            Verbosity of the output, by default False.
-        logger : str, optional
-            Name of the logger file, by default None, which turns off the
-            logging behaviour.
-        random_seed : int, optional
-            The seed for pseudo-random number generators, by default None.
+        """
+        Args:
+            dim (int): dimensionality of the search space.
+            n_objective (int): number of objectives
+            func (callable): the objective function to be minimized.
+            jac (callable): the Jacobian of objectives, should return a matrix of size (n_objective, dim)
+            hessian (callable): the Hessian of objectives,
+                should return a Tensor of size (n_objective, dim, dim)
+            ref (Union[List[float], np.ndarray]): the reference point, of shape (n_objective, )
+            lower_bounds (Union[List[float], np.ndarray], optional): the lower bound of search variables.
+                When it is not a `float`, it must have shape (dim, ).
+            upper_bounds (Union[List[float], np.ndarray], optional): The upper bound of search variables.
+                When it is not a `float`, it must have must have shape (dim, ).
+            mu (int, optional): the approximation set size. Defaults to 5.
+            h (Callable, optional): the equality constraint function, should return a vector of shape
+                (n_constraint, ). Defaults to None.
+            h_jac (callable, optional): the Jacobian of constraint function,
+                should return a matrix of (n_constraint, dim). Defaults to None.
+            h_hessian (callable, optional): the Jacobian of constraint function.
+                should return a matrix of (n_constraint, dim, dim) Defaults to None.
+            x0 (np.ndarray, optional): the initial approximation set, of shape (mu, dim). Defaults to None.
+            max_iters (Union[int, str], optional): maximal iterations of the algorithm. Defaults to np.inf.
+            minimization (bool, optional): to minimize or maximize. Defaults to True.
+            xtol (float, optional): absolute distance in the approximation set between consecutive iterations
+                that is used to determine convergence. Defaults to 1e-3.
+            HVtol (float, optional): absolute change in hypervolume indicator value between consecutive
+                iterations that is used to determine convergence. Defaults to -np.inf.
+            verbose (bool, optional): verbosity of the output. Defaults to True.
         """
         self.minimization = minimization
         self.dim_primal = dim
@@ -250,8 +221,8 @@ class HVN:
         out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
         # NOTE: preconditioning is needed EqDTLZ problems
-        if self.problem_name is not None and self.problem_name != "Eq1IDTLZ3":
-            HVdX2 = self._precondition_hessian(HVdX2)
+        # if self.problem_name is not None and self.problem_name != "Eq1IDTLZ3":
+        #     HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
 
         if self.h is not None:  # with equality constraints
@@ -321,22 +292,27 @@ class HVN:
             out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
             self.step[idx, :] = out["step"]
             self.G[idx, :] = out["G"]
-            # backtracking line search with Armijo's condition for each point
-            if _ == 0 and len(dominated_idx) > 0:
+            # backtracking line search with Armijo's condition for each layer
+            if _ == 0 and len(dominated_idx) > 0:  # for the first layer
                 idx_ = list(set(idx) - set(dominated_idx))
-                for k in dominated_idx:
-                    self.step_size[k] = self._linear_search2(self.X[[k]], self.step[[k]])
-                self.step_size[idx_] = self._linear_search(self.X[idx_], self.step[idx_], G=self.G[idx_])
-            else:
-                self.step_size[idx] = self._linear_search(self.X[idx], self.step[idx], G=self.G[idx])
+                for k in dominated_idx:  # for dominated and infeasible points
+                    self.step_size[k] = self._line_search_dominated(self.X[[k]], self.step[[k]])
+                self.step_size[idx_] = self._line_search(self.X[idx_], self.step[idx_], G=self.G[idx_])
+            else:  # for all other layers
+                self.step_size[idx] = self._line_search(self.X[idx], self.step[idx], G=self.G[idx])
 
         self.X += self.step_size.reshape(-1, 1) * self.step
         # evaluation
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
         self.iter_count += 1
 
-    def _linear_search(self, X: np.ndarray, step: np.ndarray, G: np.ndarray) -> float:
+    def _line_search(self, X: np.ndarray, step: np.ndarray, G: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
+        # TODO: ad-hoc! to solve this in the further using a high precision numerical library
+        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
+        # the step-size control
+        if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
+            return 1
         c = 1e-5
         N = len(X)
         primal_vars = self._get_primal_dual(X)[0]
@@ -374,8 +350,13 @@ class HVN:
             self.logger.warn("Armijo's backtracking line search failed")
         return alpha
 
-    def _linear_search2(self, X: np.ndarray, step: np.ndarray) -> float:
+    def _line_search_dominated(self, X: np.ndarray, step: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
+        # TODO: ad-hoc! to solve this in the further using a high precision numerical library
+        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
+        # the step-size control
+        if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
+            return 1
         c = 1e-4
         N = len(X)
         step = step[:, : self.dim_primal]
@@ -415,6 +396,7 @@ class HVN:
                 drop_idx_X |= set(np.nonzero(np.isclose(D[i, :], 0, rtol=self.eps))[0]) - set([i])
 
         # get rid of weakly-dominated points
+        # TODO: check if this is still needed since the hypervolume indicator module is upgraded
         drop_idx_Y = set([])
         if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
             for i in range(self.mu):
