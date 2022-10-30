@@ -12,6 +12,7 @@ from hvd.problems import (
     Eq1IDTLZ4,
     MOOAnalytical,
 )
+from hvd.utils import non_domin_sort
 from joblib import Parallel, delayed
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
@@ -22,6 +23,8 @@ from pymoo.util.ref_dirs import get_reference_directions
 
 
 class ProblemWrapper(ElementwiseProblem):
+    """Wrapper for Eq-DTLZ problems"""
+
     def __init__(self, problem: MOOAnalytical):
         self._problem = problem
         super().__init__(
@@ -40,7 +43,7 @@ def hybrid(seed: int, problem: MOOAnalytical, ref: np.ndarray):
     algorithm = AdaptiveEpsilonConstraintHandling(NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5)
     # execute the optimization
     res = minimize(ProblemWrapper(problem), algorithm, termination, seed=seed, verbose=False)
-    HV0 = hypervolume(res.F, np.ones(3))
+    HV0 = hypervolume(res.F, ref)
     X_ = res.X
     X = np.array([p._X for p in res.pop])  # final approximation set of NSGA-III
     problem.CPU_time = 0  # clear the CPU_time counter since we only need to measure the time taken by HVN
@@ -63,10 +66,11 @@ def hybrid(seed: int, problem: MOOAnalytical, ref: np.ndarray):
         verbose=False,
         problem_name=type(problem).__name__,
     )
-    X = opt.run()[0]
+    X, Y, _ = opt.run()
+    idx = non_domin_sort(Y, only_front_indices=True)[0]
     HV = opt.hist_HV[-1]
     CPU_time = problem.CPU_time / 1e9
-    return X, X_, CPU_time, HV0, HV
+    return X[idx], X_, CPU_time, HV0, HV
 
 
 refs = {
@@ -81,8 +85,29 @@ refs = {
 }
 
 N = 15
-# problems = [Eq1DTLZ1(3, 11), Eq1DTLZ2(3, 11), Eq1DTLZ3(3, 11)]
-problems = [Eq1DTLZ4(3, 11), Eq1IDTLZ1(3, 11), Eq1IDTLZ2(3, 11), Eq1IDTLZ3(3, 11)]
+# problems = [
+#     Eq1DTLZ1(3, 11),
+#     Eq1DTLZ2(3, 11),
+#     Eq1DTLZ3(3, 11),
+#     Eq1DTLZ4(3, 11),
+#     Eq1IDTLZ1(3, 11),
+#     Eq1IDTLZ2(3, 11),
+#     Eq1IDTLZ4(3, 11),
+# ]
+
+problems = [Eq1IDTLZ3(3, 11)]
+
+if 11 < 2:
+    for problem in problems:
+        CPU_time = []
+        ND = []
+        for i in range(3):
+            ref = refs[type(problem).__name__]
+            res = hybrid(i, problem, ref)
+            CPU_time.append(res[2])
+            ND.append(len(res[0]))
+        print(f"{type(problem).__name__} - CPU time: {CPU_time} - #ND: {ND}")
+
 for problem in problems:
     ref = refs[type(problem).__name__]
     data = Parallel(n_jobs=N)(delayed(hybrid)(i, problem, ref) for i in range(N))

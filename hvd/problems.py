@@ -183,9 +183,11 @@ class Eq1IDTLZ2(Eq1DTLZ2):
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
         g = np.sum((x[M - 1 :] - 0.5) ** 2)
-        return (1 + g) / 2 - (1 + g) * _cumprod(np.concatenate([[1], np.cos(x[0 : M - 1] * np.pi / 2)]))[
-            ::-1
-        ] * np.concatenate([[1], np.sin(x[0 : M - 1][::-1] * np.pi / 2)])
+        return (1 + g) / 2 - (
+            (1 + g)
+            * _cumprod(np.concatenate([[1], np.cos(x[0 : M - 1] * np.pi / 2)]))[::-1]
+            * np.concatenate([[1], np.sin(x[0 : M - 1][::-1] * np.pi / 2)])
+        )
 
 
 class Eq1IDTLZ3(Eq1DTLZ3):
