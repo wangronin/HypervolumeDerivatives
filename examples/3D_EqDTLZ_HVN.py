@@ -29,7 +29,7 @@ seeds = {
     "Eq1DTLZ4": 42,
     "Eq1IDTLZ1": 66,
     "Eq1IDTLZ2": 42,
-    "Eq1IDTLZ3": 66,
+    "Eq1IDTLZ3": 123,
     "Eq1IDTLZ4": 42,
 }
 refs = {
@@ -46,7 +46,7 @@ refs = {
 # NOTE: on Eq1DTLZ4 and Eq1IDTLZ4 problems, we face a numerical issue as the Newton step is
 # very tiny when the decision points are on the Pareto front, which is even below the numerical precision
 # of Python :) -> Maybe utilize numerical libraries that allows for arbitrary precisions
-f = Eq1IDTLZ2()
+f = Eq1IDTLZ3()
 dim = 11
 max_iters = 10
 ref = refs[type(f).__name__]

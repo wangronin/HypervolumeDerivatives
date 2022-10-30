@@ -1,4 +1,5 @@
 import logging
+import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
@@ -222,7 +223,7 @@ class HVN:
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
         # NOTE: preconditioning is needed EqDTLZ problems
         # if self.problem_name is not None and self.problem_name != "Eq1IDTLZ3":
-        #     HVdX2 = self._precondition_hessian(HVdX2)
+        HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
 
         if self.h is not None:  # with equality constraints
@@ -246,15 +247,18 @@ class HVN:
                     np.concatenate([dH, np.zeros((mup, mup))], axis=1),
                 ],
             )
-        try:
-            # NOTE: use the sparse matrix representation to save some time here
-            step = -1 * spsolve(csc_matrix(H), csc_matrix(G.reshape(-1, 1)))
-        except:
-            # NOTE: this part should not occur
-            w, V = np.linalg.eigh(H)
-            w[np.isclose(w, 0)] = 1e-6
-            D = np.diag(1 / w)
-            step = -1 * V @ D @ V.T @ G
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error")
+            try:
+                # NOTE: use the sparse matrix representation to save some time here
+                step = -1 * spsolve(csc_matrix(H), csc_matrix(G.reshape(-1, 1)))
+            except:
+                # NOTE: this part should not occur
+                w, V = np.linalg.eigh(H)
+                w[np.isclose(w, 0)] = 1e-6
+                D = np.diag(1 / w)
+                step = -1 * V @ D @ V.T @ G
 
         if self.h is not None:
             step = np.c_[step[:mud].reshape(N, -1), step[mud:].reshape(N, -1)]
@@ -396,7 +400,8 @@ class HVN:
                 drop_idx_X |= set(np.nonzero(np.isclose(D[i, :], 0, rtol=self.eps))[0]) - set([i])
 
         # get rid of weakly-dominated points
-        # TODO: check if this is still needed since the hypervolume indicator module is upgraded
+        # TODO: Ad-hoc solution! check if this is still needed
+        # since the hypervolume indicator module is upgraded
         drop_idx_Y = set([])
         if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
             for i in range(self.mu):
