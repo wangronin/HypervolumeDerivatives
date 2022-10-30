@@ -46,9 +46,9 @@ refs = {
 # NOTE: on Eq1DTLZ4 and Eq1IDTLZ4 problems, we face a numerical issue as the Newton step is
 # very tiny when the decision points are on the Pareto front, which is even below the numerical precision
 # of Python :) -> Maybe utilize numerical libraries that allows for arbitrary precisions
-f = Eq1DTLZ2()
+f = Eq1IDTLZ2()
 dim = 11
-max_iters = 5
+max_iters = 10
 ref = refs[type(f).__name__]
 seed = seeds[type(f).__name__]
 
