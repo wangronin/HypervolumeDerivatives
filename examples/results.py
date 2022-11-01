@@ -14,7 +14,7 @@ refs = {
     "Eq1DTLZ4": np.array([1.2, 5e-3, 5e-4]),
     "Eq1IDTLZ1": np.array([1, 1, 1]),
     "Eq1IDTLZ2": np.array([1, 1, 1]),
-    "Eq1IDTLZ3": np.array([1, 1, 1]),
+    "Eq1IDTLZ3": np.array([800, 800, 700]),
     "Eq1IDTLZ4": np.array([-0.4, 0.6, 0.6]),
 }
 
@@ -67,12 +67,11 @@ def generate_plot(X, index, problem, algorithm):
 
 dfs = []
 problems = []
-files = sorted(glob.glob("*IDTLZ*-hybrid.npz"))
+files = sorted(glob.glob("data-DTLZ/*IDTLZ1-hybrid.npz"))
 # for the hybrid algorithm
 for file in files:
-    problem_name = file.split("-")[0]
+    problem_name = file.split("/")[1].split("-")[0]
     ref = refs[problem_name]
-    # problem_name = file.split("/")[1].split("-")[0]
 
     problems.append(problem_name)
     f = globals()[problem_name](3, 11)
@@ -82,9 +81,6 @@ for file in files:
     for i, (X, X_, _CPU_time, _HV0, _HV) in enumerate(data):
         if 11 < 2:
             generate_plot(X, i, problem_name, "hybrid")
-
-        if problem_name == "Eq1IDTLZ2":
-            breakpoint()
 
         Y = np.array([f.objective(x) for x in X])
         Y_ = np.array([f.objective(x) for x in X_])
@@ -107,10 +103,10 @@ for file in files:
     # for NSGA-III
     HV = []
     pop_size = []
-    data = np.load(f"{problem_name}-NSGA3.npz", allow_pickle=True)["data"]
+    data = np.load(f"data-DTLZ/{problem_name}-NSGA3.npz", allow_pickle=True)["data"]
     for i, (X, _HV) in enumerate(data):
-        if 11 < 2:
-            generate_plot(X, i, problem_name, "NSGA3")
+        if 1 < 2:
+            generate_plot(X, i, problem_name, "NSGA-III")
 
         Y = np.array([f.objective(x) for x in X])
         idx = non_domin_sort(Y, only_front_indices=True)[0]
