@@ -33,7 +33,7 @@ class ProblemWrapper(ElementwiseProblem):
         out["H"] = self._problem.constraint(x)
 
 
-def NSGAIII(seed, problem, ref):
+def NSGAIII(seed: int, problem: MOOAnalytical, ref: np.ndarray):
     # create the reference directions to be used for the optimization
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=18)
     termination = get_termination("n_gen", 1000)
@@ -56,9 +56,17 @@ refs = {
 }
 
 N = 15
-# problems = [Eq1DTLZ1(3, 11), Eq1DTLZ2(3, 11), Eq1DTLZ3(3, 11)]
-problems = [Eq1DTLZ4(3, 11), Eq1IDTLZ1(3, 11), Eq1IDTLZ2(3, 11), Eq1IDTLZ3(3, 11)]
+problems = [
+    Eq1DTLZ1(3, 11),
+    Eq1DTLZ2(3, 11),
+    Eq1DTLZ3(3, 11),
+    Eq1DTLZ4(3, 11),
+    Eq1IDTLZ1(3, 11),
+    Eq1IDTLZ2(3, 11),
+    Eq1IDTLZ3(3, 11),
+    Eq1IDTLZ4(3, 11),
+]
 for problem in problems:
     ref = refs[type(problem).__name__]
     data = Parallel(n_jobs=N)(delayed(NSGAIII)(i, problem, ref) for i in range(N))
-    np.savez(f"{type(problem).__name__}-NSGA3-2.npz", data=data)
+    np.savez(f"{type(problem).__name__}-NSGA3.npz", data=data)
