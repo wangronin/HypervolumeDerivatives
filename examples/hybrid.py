@@ -1,4 +1,12 @@
 import numpy as np
+from joblib import Parallel, delayed
+from pymoo.algorithms.moo.nsga3 import NSGA3
+from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
+from pymoo.core.problem import ElementwiseProblem
+from pymoo.optimize import minimize
+from pymoo.termination import get_termination
+from pymoo.util.ref_dirs import get_reference_directions
+
 from hvd.algorithm import HVN
 from hvd.hypervolume import hypervolume
 from hvd.problems import (
@@ -13,13 +21,6 @@ from hvd.problems import (
     MOOAnalytical,
 )
 from hvd.utils import non_domin_sort
-from joblib import Parallel, delayed
-from pymoo.algorithms.moo.nsga3 import NSGA3
-from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
-from pymoo.core.problem import ElementwiseProblem
-from pymoo.optimize import minimize
-from pymoo.termination import get_termination
-from pymoo.util.ref_dirs import get_reference_directions
 
 
 class ProblemWrapper(ElementwiseProblem):
@@ -85,28 +86,15 @@ refs = {
 }
 
 N = 15
-# problems = [
-#     Eq1DTLZ1(3, 11),
-#     Eq1DTLZ2(3, 11),
-#     Eq1DTLZ3(3, 11),
-#     Eq1DTLZ4(3, 11),
-#     Eq1IDTLZ1(3, 11),
-#     Eq1IDTLZ2(3, 11),
-#     Eq1IDTLZ4(3, 11),
-# ]
-
-problems = [Eq1IDTLZ3(3, 11)]
-
-if 11 < 2:
-    for problem in problems:
-        CPU_time = []
-        ND = []
-        for i in range(3):
-            ref = refs[type(problem).__name__]
-            res = hybrid(i, problem, ref)
-            CPU_time.append(res[2])
-            ND.append(len(res[0]))
-        print(f"{type(problem).__name__} - CPU time: {CPU_time} - #ND: {ND}")
+problems = [
+    Eq1DTLZ1(3, 11),
+    Eq1DTLZ2(3, 11),
+    Eq1DTLZ3(3, 11),
+    Eq1DTLZ4(3, 11),
+    Eq1IDTLZ1(3, 11),
+    Eq1IDTLZ2(3, 11),
+    Eq1IDTLZ4(3, 11),
+]
 
 for problem in problems:
     ref = refs[type(problem).__name__]
