@@ -1,6 +1,6 @@
 import numpy as np
+
 from hvd import HypervolumeDerivatives, get_non_dominated
-from hvd.utils import non_domin_sort
 
 
 def MOP1(x):
