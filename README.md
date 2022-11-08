@@ -19,15 +19,18 @@ We show an example of 3D hypervolume indicator and the geometrical meaning of it
 
 ![](assets/HV3D.png)
 
+In this chart, we have three objective function to minimize, where we depicts three objective points ($y^{(i1)}, y^{(i2)}, y^{(i3)}$). The hypervolume (HV)indicator value, in this case, is the volume of the 3D ortho-convex polygon (in blue) - the subset dominated by $y^{(i1)}, y^{(i2)}, y^{(i3)}$. The first-order partial derivative of HV, for instance, $\partial HV/\partial y_3^{(i3)}$ is the yellow-colored 2D facet.  The second-order partial derivative of HV, e.g., $\partial^2 HV/\partial y_3^{(i3)} \partial y_2^{(i2)}$ is an edge of the polygon.
+
+
 ### Installation
 
-You could either install the stable version on `pypi`:
-
-```shell
+<!-- You could either install the stable version on `pypi`: -->
+A `pypi` package will be available soon:
+<!-- ```shell
 pip install hvd
-```
+``` -->
 
-Or, take the lastest version from the master branch:
+For now, please take the lastest version from the master branch:
 
 ```shell
 git clone https://github.com/wangronin/HypervolumeDerivatives.git
