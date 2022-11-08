@@ -1,4 +1,4 @@
-# Hypervolume Indicator Hessian Matrix
+# Hypervolume Indicator Derivatives
 
 ### Python package to compute the Hessian matrix of hypervolume indicator analytically
 
@@ -19,7 +19,7 @@ We show an example of 3D hypervolume indicator and the geometrical meaning of it
 
 ![](assets/HV3D.png)
 
-## Installation
+### Installation
 
 You could either install the stable version on `pypi`:
 
@@ -34,13 +34,31 @@ git clone https://github.com/wangronin/HypervolumeDerivatives.git
 cd HypervolumeDerivatives && python setup.py install --user
 ```
 
+### Example
+
+```Python
+from hvd import HypervolumeDerivatives
+
+ref = np.array([9, 10, 12])
+hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
+out = hvh.compute_hessian(X=np.array([[5, 3, 7], [2, 1, 10]]))
+
+# out["HVdY2"] = np.array(
+#     [
+#         [0, 3, 7, 0, 0, -7],
+#         [3, 0, 4, 0, 0, -4],
+#         [7, 4, 0, 0, 0, 0],
+#         [0, -0, 0, 0, 2, 9],
+#         [-0, 0, 0, 2, 0, 7],
+#         [-7, -4, 0, 9, 7, 0],
+#     ]
+# )
+```
 
 ### Background on Multi-objective optimization
 
-Continuous m-dimensional multi-objective optimization problems (MOPs), where multiple
-objective functions, e.g., f = (f1, . . . , fm) : X ⊆ R^d → R^m are subject to minimization. Also, we assume f is at least
-twice continuously differentiable. When solving such problems, it is a common strategy to approximate the Pareto
-front for m-objective functions mapping from a continuous decision space R^d to R
+Continuous m-dimensional multi-objective optimization problems (MOPs), where multiple objective functions, e.g., $\mathbf{f}=(f_1, \ldots, f_m): \mathbb{R}^d \rightarrow \mathbb{R}^m$ are subject to minimization. Also, we assume $\mathbf{f}$ is at least twice continuously differentiable. When solving such problems, it is a common strategy to approximate the Pareto front for $m$-objective functions mapping from a continuous decision space $\mathbb{R}^d$ to the $\mathbb{R}$ (or as a vector-valued function from $\mathbb{R}^d$ to $\mathbb{R}^m$. MOPs can be accomplished by means of a finite set of points that distributes across the at most $m-1$-dimensional manifold of the Pareto front.
+
 
 
 
