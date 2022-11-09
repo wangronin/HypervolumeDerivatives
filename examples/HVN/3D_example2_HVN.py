@@ -5,7 +5,7 @@ import pandas as pd
 from matplotlib import rcParams
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from hvd.algorithm import HVN
+from hvd.newton import HVN
 
 np.random.seed(42)
 np.set_printoptions(edgeitems=30, linewidth=100000)

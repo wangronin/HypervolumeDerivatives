@@ -7,8 +7,8 @@ from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 
-from hvd.algorithm import HVN
 from hvd.hypervolume import hypervolume
+from hvd.newton import HVN
 from hvd.problems import (
     Eq1DTLZ1,
     Eq1DTLZ2,

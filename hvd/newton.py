@@ -10,8 +10,7 @@ from scipy.spatial.distance import cdist
 
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .logger import get_logger
-from .utils import non_domin_sort, set_bounds
+from .utils import get_logger, non_domin_sort, set_bounds
 
 __authors__ = ["Hao Wang"]
 

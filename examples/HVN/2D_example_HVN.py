@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
 
-from hvd.algorithm import HVN
+from hvd.newton import HVN
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 12

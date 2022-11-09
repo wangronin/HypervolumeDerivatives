@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 
-from hvd.algorithm import HVN
+from hvd.newton import HVN
 from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3
 
 f = Eq1DTLZ1()

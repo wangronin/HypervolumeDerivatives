@@ -1,4 +1,4 @@
-from .algorithm import HVN
 from .hypervolume_derivatives import HypervolumeDerivatives
+from .newton import HVN
 
 __all__ = ["HypervolumeDerivatives", "HVN"]
