@@ -1,5 +1,4 @@
-#    This file is part of DEAP.
-#
+#    Slightly modified from the original code of Simon Wessing
 #    Copyright (C) 2010 Simon Wessing
 #    TU Dortmund University
 #

@@ -1,20 +1,7 @@
-import functools
-import time
-
 import autograd.numpy as np
 from autograd import hessian, jacobian
 
-
-def timeit(func):
-    @functools.wraps(func)
-    def __func__(ref, *arg, **kwargv):
-        t0 = time.process_time_ns()
-        out = func(ref, *arg, **kwargv)
-        t1 = time.process_time_ns()
-        ref.CPU_time += t1 - t0
-        return out
-
-    return __func__
+from .utils import timeit
 
 
 def _cumprod(x):

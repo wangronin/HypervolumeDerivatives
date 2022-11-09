@@ -3,7 +3,7 @@ import matplotlib.tri as mtri
 import numpy as np
 import pandas as pd
 
-from hvd.algorithm import HVN
+from hvd.newton import HVN
 
 np.random.seed(42)
 np.set_printoptions(edgeitems=30, linewidth=100000)
