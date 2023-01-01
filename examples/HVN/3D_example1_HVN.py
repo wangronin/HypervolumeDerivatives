@@ -13,13 +13,6 @@ c1 = np.array([1, 1, 0])
 c2 = np.array([1, -1, 0])
 c3 = np.array([-1, 0, 0])
 
-# c1 = np.array([1.5, 0, np.sqrt(3) / 3])
-# c2 = np.array([1.5, 0.5, -1 * np.sqrt(3) / 6])
-# c3 = np.array([1.5, -0.5, -1 * np.sqrt(3) / 6])
-# c1_n = c1 / np.linalg.norm(c1)
-# c2_n = c2 / np.linalg.norm(c2)
-# c3_n = c3 / np.linalg.norm(c3)
-
 
 def MOP1(x):
     x = np.array(x)
@@ -214,5 +207,5 @@ plt.subplots_adjust(wspace=0.1)
 # plt.show()
 plt.savefig(f"3D-example1-{mu}.pdf", dpi=100)
 
-df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
-df.to_latex(buf=f"3D-example1-{mu}.tex", index=False)
+# df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
+# df.to_latex(buf=f"3D-example1-{mu}.tex", index=False)

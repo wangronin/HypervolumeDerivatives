@@ -223,5 +223,5 @@ plt.tight_layout()
 plt.subplots_adjust(wspace=0.1)
 plt.savefig(f"3D-example2-{mu}.pdf", dpi=100)
 
-df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
-df.to_latex(buf=f"3D-example2-{mu}.tex", index=False)
+# df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
+# df.to_latex(buf=f"3D-example2-{mu}.tex", index=False)
