@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib import rcParams
 
 from hvd.newton import HVN
@@ -50,23 +51,11 @@ def h_Hessian(x):
     return 2 * np.eye(2)
 
 
-# example of Adrian
-# x0 = np.array(
-#     [
-#         [0.5, -1.5],
-#         [0.75, -1.25],
-#         [1, -1],
-#         [1.25, -0.75],
-#         [1.5, -0.5],
-#         # [-0.5, -0.75],
-#         # [-0.25, -0.5],
-#         # [0, -0.25],
-#     ]
-# )
 ref = np.array([20, 20])
 max_iters = 20
 mu = 100
 
+# different initializations of the first population
 if 1 < 2:
     # option1: linearly spacing
     p = np.linspace(0, 2, mu)
@@ -180,5 +169,5 @@ ax2.set_xticks(range(1, max_iters + 1))
 
 plt.savefig(f"2D-example-{mu}.pdf", dpi=100)
 
-df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
-df.to_latex(buf=f"2D-example-{mu}.tex", index=False)
+# df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
+# df.to_latex(buf=f"2D-example-{mu}.tex", index=False)

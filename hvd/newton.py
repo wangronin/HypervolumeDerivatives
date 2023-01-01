@@ -207,7 +207,7 @@ class HVN:
         N = len(X)
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
-        out = self.hypervolume_derivatives.compute_gradient(primal_vars)
+        out = self.hypervolume_derivatives._compute_gradient(primal_vars)
         HVdX = out["HVdX"].ravel()
 
         dH = block_diag(*[self.h_jac(x) for x in primal_vars])
@@ -218,11 +218,11 @@ class HVN:
     def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Dict[str, np.ndarray]:
         N = X.shape[0]
         primal_vars, dual_vars = self._get_primal_dual(X)
-        out = self.hypervolume_derivatives.compute_hessian(primal_vars, Y)
+        out = self.hypervolume_derivatives.compute(primal_vars, Y)
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
         # NOTE: preconditioning is needed EqDTLZ problems
         # if self.problem_name is not None and self.problem_name != "Eq1IDTLZ3":
-        HVdX2 = self._precondition_hessian(HVdX2)
+        # HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
 
         if self.h is not None:  # with equality constraints
@@ -316,6 +316,7 @@ class HVN:
         # the step-size control
         if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
             return 1
+
         c = 1e-5
         N = len(X)
         primal_vars = self._get_primal_dual(X)[0]
@@ -360,6 +361,7 @@ class HVN:
         # the step-size control
         if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
             return 1
+
         c = 1e-4
         N = len(X)
         step = step[:, : self.dim_primal]
@@ -402,6 +404,7 @@ class HVN:
         # TODO: Ad-hoc solution! check if this is still needed
         # since the hypervolume indicator module is upgraded
         drop_idx_Y = set([])
+        # TODO: Ad-hoc solution! check if this is still needed
         if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
             for i in range(self.mu):
                 if i not in drop_idx_Y:
