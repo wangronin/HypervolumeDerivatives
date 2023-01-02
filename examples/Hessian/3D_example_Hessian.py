@@ -24,6 +24,8 @@ for _ in range(10):
         hessian=f.objective_hessian,
     )
     out = hvh.compute(X)
+    # automatic differentiation is very slow;
+    # used for verifying the result of the analytical computation
     AD = hvh.compute_automatic_differentiation(X)
 
     assert np.all(np.isclose(AD["HVdY"], out["HVdY"]))
