@@ -61,14 +61,16 @@ out = hvh.compute_hessian(X=np.array([[5, 3, 7], [2, 1, 10]]))
 # )
 ```
 
-Compute the HV Hessian w.r.t. the decision points. First, we define an objective function (the objective space is $\mathbb{R}^3$):
+Compute the HV Hessian w.r.t. the decision points.
+First, we define an objective function (the objective space is $\mathbb{R}^3$):
 
 ```Python
+import numpy as np
+
 c1 = np.array([1.5, 0, np.sqrt(3) / 3])
 c2 = np.array([1.5, 0.5, -1 * np.sqrt(3) / 6])
 c3 = np.array([1.5, -0.5, -1 * np.sqrt(3) / 6])
 ref = np.array([24, 24, 24])
-
 
 def MOP1(x):
     x = np.array(x)
@@ -114,16 +116,17 @@ The Hypervolume Newton Method is straightforward given the analytical computatio
 
 $$X^{t+1} = X^{t} - \sigma\Bigg[\frac{\partial^2 HV(F(X))}{\partial X \partial X^\top}\Bigg]^{-1}X^{t}.$$
 
-Note that, in the code base, we also implemented a HV Newton method for equality-constrained MOPs. 
+Note that, in the code base, we also implemented a HV Newton method for equality-constrained MOPs.
 
 ### Example
 
 We took the `MOP1` problem defined above:
 
 ```Python
+import numpy as np
 from hvd.newton import HVN
 
-max_iters = 30
+max_iters = 10
 mu = 20
 ref = np.array([20, 20, 20])
 w = np.abs(np.random.rand(mu, 3))
@@ -167,13 +170,3 @@ Also, we include, in folder `mathematica/`, several cases of the hypervolume ind
 * [[WED+22]](https://www.preprints.org/manuscript/202211.0103/v1) Wang, H.; Emmerich, Michael T. M.; Deutz, A.; Hernández, V.A.S.; Schütze, O. The Hypervolume Newton Method for Constrained Multi-objective Optimization Problems. _Preprints_ **2022**, 2022110103.
 
 * [[DEW22]](https://arxiv.org/abs/2211.04171) Deutz, A.; Emmerich, Michael T. M.; Wang, H. The Hypervolume Indicator Hessian Matrix: Analytical Expression, Computational Time Complexity, and Sparsity, _arXiv_, 2022.
-
-
-
-
-
-
-
-
-
-
