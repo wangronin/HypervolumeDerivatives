@@ -47,9 +47,9 @@ refs = {
 # NOTE: on Eq1DTLZ4 and Eq1IDTLZ4 problems, we face a numerical issue as the Newton step is
 # very tiny when the decision points are on the Pareto front, which is even below the numerical precision
 # of Python :) -> Maybe utilize numerical libraries that allows for arbitrary precisions
-f = Eq1IDTLZ3()
+f = Eq1DTLZ3()
 dim = 11
-max_iters = 10
+max_iters = 15
 ref = refs[type(f).__name__]
 seed = seeds[type(f).__name__]
 
@@ -57,7 +57,7 @@ np.random.seed(seed)
 pareto_set = f.get_pareto_set(500)
 pareto_front = f.get_pareto_front(500)
 
-x0 = f.get_pareto_set(60, kind="uniform")
+x0 = f.get_pareto_set(200, kind="uniform")
 x0[:, 0:2] += 0.02 * np.random.rand(len(x0), 2)  # perturb the initial solution a bit
 y0 = np.array([f.objective(x) for x in x0])
 mu = len(x0)
@@ -84,6 +84,7 @@ opt = HVN(
 X, Y, stop = opt.run()
 
 fig = plt.figure(figsize=plt.figaspect(2))
+plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
 ax = fig.add_subplot(2, 1, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
 ax.view_init(50, -20)
@@ -119,7 +120,7 @@ ax.set_zlim([0.1, 0.9])
 # ax.set_title("decision space")
 ax.set_title(type(f).__name__)
 ax.text2D(0.95, 0.5, "$x_3$", transform=ax.transAxes, fontsize=15)
-ax.text2D(-0.05, 0.4, "decision space", transform=ax.transAxes, rotation=90, fontsize=15)
+ax.text2D(-0.1, 0.4, "decision space", transform=ax.transAxes, rotation=90, fontsize=15)
 
 ax = fig.add_subplot(2, 1, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
@@ -140,7 +141,7 @@ ax.set_ylabel("$f_2$")
 # ax.set_zlim([0, 1])
 # ax.set_title("objective space")
 ax.text2D(0.1, 0.55, "$f_3$", transform=ax.transAxes, fontsize=15)
-ax.text2D(-0.05, 0.4, "objective space", transform=ax.transAxes, rotation=90, fontsize=15)
+ax.text2D(-0.1, 0.4, "objective space", transform=ax.transAxes, rotation=90, fontsize=15)
 
 # ax = fig.add_subplot(1, 3, 3)
 # x = list(range(1, len(opt.hist_G_norm) + 1))
@@ -150,5 +151,4 @@ ax.text2D(-0.05, 0.4, "objective space", transform=ax.transAxes, rotation=90, fo
 # ax.set_xticks(x)
 
 plt.tight_layout()
-plt.subplots_adjust(wspace=0.1)
-plt.savefig(f"{type(f).__name__}-{mu}.pdf", dpi=100)
+plt.savefig(f"{type(f).__name__}-{mu}.pdf", dpi=700)
