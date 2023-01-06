@@ -6,13 +6,13 @@ from matplotlib import rcParams
 from hvd.newton import HVN
 
 plt.style.use("ggplot")
-rcParams["font.size"] = 12
+rcParams["font.size"] = 17
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
 rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 12
-rcParams["ytick.labelsize"] = 12
+rcParams["xtick.labelsize"] = 17
+rcParams["ytick.labelsize"] = 17
 rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
@@ -52,8 +52,8 @@ def h_Hessian(x):
 
 
 ref = np.array([20, 20])
-max_iters = 20
-mu = 100
+max_iters = 10
+mu = 50
 
 # different initializations of the first population
 if 1 < 2:
@@ -91,7 +91,7 @@ opt = HVN(
 X, Y, stop = opt.run()
 
 fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(18, 6.5))
-plt.subplots_adjust(right=0.95, left=0.05)
+plt.subplots_adjust(right=0.93, left=0.05)
 ciricle = plt.Circle((0, 0), 1, color="r", fill=False, ls="--", lw=1.5)
 
 ax0.plot(X[:, 0], X[:, 1], "g*")
@@ -99,7 +99,7 @@ ax0.plot(x0[:, 0], x0[:, 1], "g.", ms=8, clip_on=False)
 ax0.add_patch(ciricle)
 ax0.set_xlim([-2, 2])
 ax0.set_ylim([-2, 2])
-ax0.set_title("decision space")
+ax0.set_title("Decision space")
 ax0.set_xlabel(r"$x_1$")
 ax0.set_ylabel(r"$x_2$")
 
@@ -154,7 +154,7 @@ for i in range(mu):
 x_vals = np.array([0, 6])
 y_vals = 6 - x_vals
 ax1.plot(x_vals, y_vals, "r--")
-ax1.set_title("objective space")
+ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
@@ -167,7 +167,7 @@ ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
 
-plt.savefig(f"2D-example-{mu}.pdf", dpi=100)
+plt.savefig(f"2D-example-{mu}.pdf", dpi=1000)
 
 # df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
 # df.to_latex(buf=f"2D-example-{mu}.tex", index=False)
