@@ -38,7 +38,6 @@ def minimize(
     while algorithm.has_next():
         algorithm.next()
         pop = copy.deepcopy(algorithm.pop)
-
         if algorithm.n_gen == k + 1:
             df = pd.DataFrame(pop_to_numpy(pop), columns=columns)
             df.insert(0, "iteration", k)
@@ -84,9 +83,9 @@ for problem_name in ["zdt1", "zdt2"]:
     problem = get_problem(problem_name)
     termination = get_termination("n_gen", 500)
 
-    for algorithm_name in ("SMS-EMOA", "MOEAD"):
+    for algorithm_name in ("NSGA-III", "SMS-EMOA"):
         algorithm = get_algorithm(problem.n_obj, algorithm_name)
-
+        # minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i, seed=i, verbose=False)
             for i in range(N)
