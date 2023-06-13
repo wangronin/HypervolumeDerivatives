@@ -6,11 +6,29 @@ from joblib import Parallel, delayed
 from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.sms import SMSEMOA
+from pymoo.core.problem import ElementwiseProblem
 from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 
+from hvd.problems import CONV4, MOOAnalytical
+
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F] for ind in pop])
+
+
+class ProblemWrapper(ElementwiseProblem):
+    def __init__(self, problem: MOOAnalytical):
+        self._problem = problem
+        super().__init__(
+            n_var=problem.n_decision_vars,
+            n_obj=problem.n_objectives,
+            xl=problem.lower_bounds,
+            xu=problem.upper_bounds,
+        )
+
+    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs):
+        out["F"] = self._problem.objective(x)
+        # out["H"] = self._problem.constraint(x)
 
 
 def minimize(
@@ -25,7 +43,6 @@ def minimize(
     # initialize the algorithm object given a problem - if not set already
     if algorithm.problem is None:
         if termination is not None:
-
             if copy_termination:
                 termination = copy.deepcopy(termination)
 
@@ -60,7 +77,9 @@ def get_algorithm(n_objective: int, algorithm_name: str):
             ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
         elif n_objective == 3:
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=12)
-        algorithm = NSGA3(pop_size=100, ref_dirs=ref_dirs)
+        elif n_objective == 4:
+            ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=7)
+        algorithm = NSGA3(pop_size=120, ref_dirs=ref_dirs)
 
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
@@ -79,11 +98,14 @@ def get_algorithm(n_objective: int, algorithm_name: str):
 
 
 N = 15
-for problem_name in ["zdt1", "zdt2"]:
-    problem = get_problem(problem_name)
+# for problem_name in ["zdt1", "zdt2"]:
+for i in range(1):
+    # problem = get_problem(problem_name)
+    problem = CONV4()
+    problem = ProblemWrapper(problem)
     termination = get_termination("n_gen", 500)
 
-    for algorithm_name in ("NSGA-III", "SMS-EMOA"):
+    for algorithm_name in ("NSGA-III",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name)
         # minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
@@ -91,4 +113,5 @@ for problem_name in ["zdt1", "zdt2"]:
             for i in range(N)
         )
         data = pd.concat(data, axis=0)
-        data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+        # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+        data.to_csv(f"./data/{problem.__class__.__name__.upper()}_{algorithm_name}.csv", index=False)

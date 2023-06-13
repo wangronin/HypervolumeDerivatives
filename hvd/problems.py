@@ -28,8 +28,8 @@ class MOOAnalytical:
     def __init__(self):
         self._objective_jacobian = jacobian(self.objective)
         self._objective_hessian = hessian(self.objective)
-        self._constraint_jacobian = jacobian(self.constraint)
-        self._constraint_hessian = hessian(self.constraint)
+        self._constraint_jacobian = jacobian(self.constraint) if hasattr(self, "constraint") else None
+        self._constraint_hessian = hessian(self.constraint) if hasattr(self, "constraint") else None
         self.CPU_time: int = 0  # in nanoseconds
 
     @timeit
@@ -197,3 +197,27 @@ class Eq1IDTLZ4(Eq1DTLZ4):
         return (1 + g) / 2 - (1 + g) * _cumprod(np.concatenate([[1], np.cos(x_ * np.pi / 2)]))[
             ::-1
         ] * np.concatenate([[1], np.sin(x_[::-1] * np.pi / 2)])
+
+
+class CONV4(MOOAnalytical):
+    def __init__(self):
+        self.n_objectives = 4
+        self.n_decision_vars = 4
+        self.lower_bounds = -10 * np.ones(self.n_decision_vars)
+        self.upper_bounds = 10 * np.ones(self.n_decision_vars)
+        super().__init__()
+
+    @timeit
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        a = np.eye(self.n_decision_vars)
+        deltaa = np.ones(self.n_decision_vars)
+        fa4 = np.array([2, 2, 2, 0])
+        fa1 = np.array([0, 2, 2, 2])
+        deltay = fa4 - fa1
+
+        if np.all(x < 0):
+            z = x + deltaa
+            y = np.array([np.sum((z - a[i]) ** 2) - 1.1 * deltay[i] for i in range(4)])
+        else:
+            y = np.array([np.sum((x - a[i]) ** 2) for i in range(4)])
+        return y
