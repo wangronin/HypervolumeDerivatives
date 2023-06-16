@@ -78,8 +78,8 @@ def get_algorithm(n_objective: int, algorithm_name: str):
         elif n_objective == 3:
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=12)
         elif n_objective == 4:
-            ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=7)
-        algorithm = NSGA3(pop_size=120, ref_dirs=ref_dirs)
+            ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
+        algorithm = NSGA3(pop_size=400, ref_dirs=ref_dirs)
 
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
@@ -114,4 +114,4 @@ for i in range(1):
         )
         data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
-        data.to_csv(f"./data/{problem.__class__.__name__.upper()}_{algorithm_name}.csv", index=False)
+        data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)
