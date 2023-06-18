@@ -47,27 +47,31 @@ def h_Jacobian(x):
 
 
 theta = np.linspace(-np.pi * 3 / 4, np.pi / 4, 100)
-ref_x = np.array([[np.cos(a), np.sin(a)] for a in theta])
+ref_x = np.array([[np.cos(a) * 0.99, np.sin(a) * 0.99] for a in theta])
 ref = np.array([MOP1(_) for _ in ref_x])
 
-max_iters = 20
+max_iters = 15
 mu = 50
 
 # different initializations of the first population
 if 1 < 2:
     # option1: linearly spacing
     p = np.linspace(0, 2, mu)
+    x0 = np.c_[p, p - 2]
 elif 11 < 2:
     # option2: logistic spacing/denser on two tails
     p = 2 / (1 + np.exp(-np.linspace(-3, 3, mu)))
+    x0 = np.c_[p, p - 2]
 elif 11 < 2:
     # option3: logit spacing/denser in the middle
     p = np.log(1 / (1 - np.linspace(0.09485175, 1.90514825, mu) / 2) - 1)
     p = 2 * (p - np.min(p)) / (np.max(p) - np.min(p))
+    x0 = np.c_[p, p - 2]
+elif 11 < 2:
+    # option4: spherical initialization
+    theta = np.linspace(-np.pi * 5 / 8, np.pi / 8, 50)
+    x0 = np.array([[2 * np.cos(a), 2 * np.sin(a)] for a in theta])
 
-theta = np.linspace(-np.pi * 5 / 8, np.pi / 8, 50)
-x0 = np.array([[2 * np.cos(a), 2 * np.sin(a)] for a in theta])
-# x0 = np.c_[p, p - 2]
 y0 = np.array([MOP1(_) for _ in x0])
 opt = GDN(
     dim=2,
@@ -78,7 +82,6 @@ opt = GDN(
     hessian=MOP1_Hessian,
     h=h,
     h_jac=h_Jacobian,
-    # h_hessian=h_Hessian,
     mu=len(x0),
     x0=x0,
     lower_bounds=-2,
@@ -132,9 +135,6 @@ if 11 < 2:
             headlength=4.7,
             headwidth=2.7,
         )
-
-    ax1.plot(Y[:, 0], Y[:, 1], "g*")
-    ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=8)
     trajectory = np.array([y0] + opt.hist_Y)
     for i in range(mu):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
@@ -155,16 +155,18 @@ if 11 < 2:
 
 x_vals = np.array([0, 6])
 y_vals = 6 - x_vals
+ax1.plot(Y[:, 0], Y[:, 1], "g*")
+ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=8)
 ax1.plot(x_vals, y_vals, "r--")
 ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
 ax22 = ax2.twinx()
-# ax2.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
+ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-")
 ax22.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
-ax2.set_ylabel("HV", color="b")
-ax22.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
+ax2.set_ylabel("GD", color="b")
+ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))

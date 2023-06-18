@@ -8,6 +8,7 @@ from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
 
+from .delta_p import GenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .utils import get_logger, non_domin_sort, set_bounds
@@ -118,7 +119,7 @@ class HVN:
         # initialize dual variables
         if self.h is not None:
             v = self.h(X0[0, :])
-            self.n_eq_cstr = 1 if isinstance(v, float) else len(v)
+            self.n_eq_cstr = 1 if isinstance(v, (int, float)) else len(v)
             # to make the Hessian of Eq. constraints always a 3D tensor
             self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
             X0 = np.c_[X0, np.ones((self.mu, self.n_eq_cstr)) / self.mu]
@@ -332,6 +333,7 @@ class HVN:
         for _ in range(6):
             X_ = X + alpha * step
             if self.h is None:
+                # TODO: check if this is correct
                 HV = self.hypervolume_derivatives.HV(X)
                 HV_ = self.hypervolume_derivatives.HV(X_)
                 inc = np.inner(G.ravel(), step.ravel())
@@ -455,45 +457,6 @@ class HVN:
         return bool(self.stop_dict)
 
 
-class GenerationalDistance:
-    def __init__(self, ref: np.ndarray, func: Callable, jac: Callable, hess: Callable, p: float = 2):
-        self.ref = ref
-        self.p = p
-        self.func = func
-        self.jac = jac
-        self.hess = hess
-
-    def _compute_indices(self, Y: np.ndarray):
-        # find for each approximation point, the index of its closest point in the reference set
-        self.D = cdist(Y, self.ref, metric="minkowski", p=self.p)
-        self.indices = np.argmin(self.D, axis=1)
-
-    def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
-        if Y is None:
-            Y = np.array([self.func(x) for x in X])
-        self._compute_indices(Y)
-        return np.mean(self.D[np.arange(len(Y)), self.indices] ** self.p) ** (1 / self.p)
-
-    def compute_derivatives(
-        self, X: np.ndarray, Y: np.ndarray = None, compute_hessian: bool = True
-    ) -> Tuple[np.ndarray, np.ndarray]:
-        # TODO: take the p-norm into account
-        N = len(X)
-        if Y is None:
-            Y = np.array([self.func(x) for x in X])
-        self._compute_indices(Y)
-        # TODO: this part can be parallelized
-        J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
-        diff = Y - self.ref[self.indices]  # (N, n_objective)
-        grad = np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
-        if compute_hessian:
-            H = np.array([self.hess(x) for x in X])  # (N, n_objective, dim, dim)
-            hessian = np.einsum("ijk,ijl->ikl", J, J) + np.einsum("ijkl,ij->ikl", H, diff)  # (N, dim, dim)
-            return grad * 2 / N, hessian * 2 / N
-        else:
-            return grad * 2 / N
-
-
 class GDN:
     """Delta-p Newton method
 
@@ -597,7 +560,7 @@ class GDN:
         # initialize dual variables
         if self.h is not None:
             v = self.h(X0[0, :])
-            self.n_eq_cstr = 1 if isinstance(v, float) else len(v)
+            self.n_eq_cstr = 1 if isinstance(v, (int, float)) else len(v)
             # to make the Hessian of Eq. constraints always a 3D tensor
             # self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
             X0 = np.c_[X0, np.ones((self.mu, self.n_eq_cstr)) / self.mu]
@@ -707,15 +670,16 @@ class GDN:
         R, H = self._compute_R(X, Y, GDdX=GDdX)
         # compute the Newton step for each approximation point
         for i in range(N):
+            # TODO: take out inactive constraints
             DR = np.r_[np.c_[GDdX2[i], H[i].T], np.c_[H[i], np.zeros((p, p))]]
             try:
                 step[i, :] = (-1 * solve(DR, R[i].reshape(-1, 1))).ravel()
             except:
                 # NOTE: this part should not occur
                 w, V = np.linalg.eigh(DR)
-                w[np.isclose(w, 0)] = 1e-6
+                w[np.isclose(w, 0)] = 1e-10
                 D = np.diag(1 / w)
-                step[i, :] = -1 * V @ D @ V.T @ R[i].reshape(-1, 1)
+                step[i, :] = (-1 * V @ D @ V.T @ R[i].reshape(-1, 1)).ravel()
         return dict(step=step, R=R)
 
     def one_step(self):
@@ -815,12 +779,12 @@ class GDN:
 
         c = 1e-4
         N = len(X)
-        step = step[:, : self.dim_primal]
-        primal_vars = self._get_primal_dual(X)[0]
+        step = step[:, : self.dim_primal].ravel()
+        primal_vars = self._get_primal_dual(X)[0].ravel()
         normal_vectors = np.c_[np.eye(self.dim_primal * N), -1 * np.eye(self.dim_primal * N)]
         # calculate the maximal step-size
         dist = np.r_[
-            np.abs(primal_vars.ravel() - np.tile(self.lower_bounds, N)),
+            np.abs(primal_vars - np.tile(self.lower_bounds, N)),
             np.abs(np.tile(self.upper_bounds, N) - primal_vars.ravel()),
         ]
         v = step.ravel() @ normal_vectors
@@ -876,7 +840,7 @@ class GDN:
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"GD: {GD}")
-            # self.logger.info(f"step size: {self.step_size}")
+            self.logger.info(f"step size: {self.step_size}")
             self.logger.info(f"#non-dominated: {len(self._nondominated_idx)}")
 
         if self.iter_count >= 1:
