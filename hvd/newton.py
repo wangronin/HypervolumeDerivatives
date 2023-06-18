@@ -3,7 +3,7 @@ import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cholesky
+from scipy.linalg import block_diag, cholesky, solve
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
@@ -447,6 +447,453 @@ class HVN:
         # if self._delta_HV < self.HVtol:
         #     self.stop_dict["HVtol"] = self._delta_HV
         #     self.stop_dict["iter_count"] = self.iter_count
+
+        # if self._delta_X < self.xtol:
+        #     self.stop_dict["xtol"] = self._delta_X
+        #     self.stop_dict["iter_count"] = self.iter_count
+
+        return bool(self.stop_dict)
+
+
+class GenerationalDistance:
+    def __init__(self, ref: np.ndarray, func: Callable, jac: Callable, hess: Callable, p: float = 2):
+        self.ref = ref
+        self.p = p
+        self.func = func
+        self.jac = jac
+        self.hess = hess
+
+    def _compute_indices(self, Y: np.ndarray):
+        # find for each approximation point, the index of its closest point in the reference set
+        self.D = cdist(Y, self.ref, metric="minkowski", p=self.p)
+        self.indices = np.argmin(self.D, axis=1)
+
+    def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
+        if Y is None:
+            Y = np.array([self.func(x) for x in X])
+        self._compute_indices(Y)
+        return np.mean(self.D[np.arange(len(Y)), self.indices] ** self.p) ** (1 / self.p)
+
+    def compute_derivatives(
+        self, X: np.ndarray, Y: np.ndarray = None, compute_hessian: bool = True
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        # TODO: take the p-norm into account
+        N = len(X)
+        if Y is None:
+            Y = np.array([self.func(x) for x in X])
+        self._compute_indices(Y)
+        # TODO: this part can be parallelized
+        J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
+        diff = Y - self.ref[self.indices]  # (N, n_objective)
+        grad = np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
+        if compute_hessian:
+            H = np.array([self.hess(x) for x in X])  # (N, n_objective, dim, dim)
+            hessian = np.einsum("ijk,ijl->ikl", J, J) + np.einsum("ijkl,ij->ikl", H, diff)  # (N, dim, dim)
+            return grad * 2 / N, hessian * 2 / N
+        else:
+            return grad * 2 / N
+
+
+class GDN:
+    """Delta-p Newton method
+
+    Newton-Raphson method to maximize the GD indicator, subject to equality constraints
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        n_objective: int,
+        func: callable,
+        jac: callable,
+        hessian: callable,
+        ref: Union[List[float], np.ndarray],
+        lower_bounds: Union[List[float], np.ndarray],
+        upper_bounds: Union[List[float], np.ndarray],
+        mu: int = 5,
+        h: Callable = None,
+        h_jac: callable = None,
+        x0: np.ndarray = None,
+        max_iters: Union[int, str] = np.inf,
+        minimization: bool = True,
+        xtol: float = 1e-3,
+        HVtol: float = -np.inf,
+        verbose: bool = True,
+        problem_name: str = None,
+        **kwargs,
+    ):
+        """
+        Args:
+            dim (int): dimensionality of the search space.
+            n_objective (int): number of objectives
+            func (callable): the objective function to be minimized.
+            jac (callable): the Jacobian of objectives, should return a matrix of size (n_objective, dim)
+            hessian (callable): the Hessian of objectives,
+                should return a Tensor of size (n_objective, dim, dim)
+            ref (Union[List[float], np.ndarray]): the reference set, of shape (n_point, n_objective)
+            lower_bounds (Union[List[float], np.ndarray], optional): the lower bound of search variables.
+                When it is not a `float`, it must have shape (dim, ).
+            upper_bounds (Union[List[float], np.ndarray], optional): The upper bound of search variables.
+                When it is not a `float`, it must have must have shape (dim, ).
+            mu (int, optional): the approximation set size. Defaults to 5.
+            h (Callable, optional): the equality constraint function, should return a vector of shape
+                (n_constraint, ). Defaults to None.
+            h_jac (callable, optional): the Jacobian of constraint function,
+                should return a matrix of (n_constraint, dim). Defaults to None.
+            h_hessian (callable, optional): the Jacobian of constraint function.
+                should return a matrix of (n_constraint, dim, dim) Defaults to None.
+            x0 (np.ndarray, optional): the initial approximation set, of shape (mu, dim). Defaults to None.
+            max_iters (Union[int, str], optional): maximal iterations of the algorithm. Defaults to np.inf.
+            minimization (bool, optional): to minimize or maximize. Defaults to True.
+            xtol (float, optional): absolute distance in the approximation set between consecutive iterations
+                that is used to determine convergence. Defaults to 1e-3.
+            HVtol (float, optional): absolute change in hypervolume indicator value between consecutive
+                iterations that is used to determine convergence. Defaults to -np.inf.
+            verbose (bool, optional): verbosity of the output. Defaults to True.
+        """
+        self.minimization = minimization
+        self.dim_primal = dim
+        self.n_objective = n_objective
+        self.mu = mu  # the population/archive size
+        self.lower_bounds = lower_bounds
+        self.upper_bounds = upper_bounds
+        self.ref = ref
+        self.problem_name = problem_name
+        # parameters controlling stop criteria
+        self.xtol = xtol
+        self.HVtol = HVtol
+        self.stop_dict: Dict = {}
+        # the objective function, gradient, and the Hessian
+        self.func: Callable = func
+        self.jac: Callable = jac
+        self.hessian: Callable = hessian
+        self.h: Callable = h
+        self.h_jac: Callable = h_jac
+
+        self.iter_count: int = 0
+        self.max_iters = max_iters
+        self.verbose: bool = verbose
+        self.eps = 1e-3 * np.max(self.upper_bounds - self.lower_bounds)
+
+        self._gd = GenerationalDistance(ref=self.ref, func=func, jac=self.jac, hess=self.hessian)
+        self._init_logging_var()
+        self._initialize(x0)
+
+    def _initialize(self, X0: np.ndarray):
+        if X0 is not None:
+            X0 = np.asarray(X0)
+            assert np.all(X0 - self.lower_bounds >= 0)
+            assert np.all(X0 - self.upper_bounds <= 0)
+            assert X0.shape[0] == self.mu
+        else:
+            # sample `x` u.a.r. in `[lb, ub]`
+            assert all(~np.isinf(self.lower_bounds)) & all(~np.isinf(self.upper_bounds))
+            X0 = (
+                np.random.rand(self.mu, self.dim_primal) * (self.upper_bounds - self.lower_bounds)
+                + self.lower_bounds
+            )  # (mu, d)
+
+        # self._max_HV = np.product(self.ref)
+        # initialize dual variables
+        if self.h is not None:
+            v = self.h(X0[0, :])
+            self.n_eq_cstr = 1 if isinstance(v, float) else len(v)
+            # to make the Hessian of Eq. constraints always a 3D tensor
+            # self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
+            X0 = np.c_[X0, np.ones((self.mu, self.n_eq_cstr)) / self.mu]
+        else:
+            self.n_eq_cstr = 0
+
+        self._get_primal_dual = lambda X: (X[:, : self.dim_primal], X[:, self.dim_primal :])
+        self.dim = self.dim_primal + self.n_eq_cstr
+        self.X = X0
+        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])  # (mu, n_objective)
+
+    def _init_logging_var(self):
+        """parameters for logging the history"""
+        self.hist_Y: List[np.ndarray] = []
+        self.hist_X: List[np.ndarray] = []
+        self.hist_GD: List[float] = []
+        self._delta_X: float = np.inf
+        self._delta_Y: float = np.inf
+        self._delta_GD: float = np.inf
+
+        if self.h is not None:
+            self.hist_R_norm: List[float] = []
+
+        self.logger: logging.Logger = get_logger(
+            logger_id=f"{self.__class__.__name__}",
+            console=self.verbose,
+        )
+
+    @property
+    def lower_bounds(self):
+        return self._lower_bounds
+
+    @lower_bounds.setter
+    def lower_bounds(self, lb):
+        self._lower_bounds = set_bounds(lb, self.dim_primal)
+
+    @property
+    def upper_bounds(self):
+        return self._upper_bounds
+
+    @upper_bounds.setter
+    def upper_bounds(self, ub):
+        self._upper_bounds = set_bounds(ub, self.dim_primal)
+
+    @property
+    def maxiter(self):
+        return self._maxiter
+
+    @maxiter.setter
+    def maxiter(self, n: int):
+        if n is None:
+            self._maxiter = len(self.X) * 100
+
+    def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
+        while not self.terminate():
+            self.one_step()
+            self.log()
+        return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
+
+    def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
+        """Precondition the Hessian matrix to make sure it is negative definite
+
+        Args:
+            H (np.ndarray): the Hessian matrix
+
+        Returns:
+            np.ndarray: the preconditioned Hessian
+        """
+        # pre-condition the Hessian
+        beta = 1e-6
+        v = np.min(np.diag(-H))
+        tau = 0 if v > 0 else -v + beta
+        I = np.eye(H.shape[0])
+        for _ in range(35):
+            try:
+                cholesky(-H + tau * I, lower=True)
+                break
+            except:
+                # NOTE: the multiplier is not working for Eq1IDTLZ3.. Otherwise, it takes 1.5
+                tau = max(1.5 * tau, beta)
+        else:
+            self.logger.warn("Pre-conditioning the HV Hessian failed")
+        return H - tau * I
+
+    def _compute_R(
+        self, X: np.ndarray, Y: np.ndarray = None, GDdX: np.ndarray = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        primal_vars, dual_vars = self._get_primal_dual(X)
+        # constraint function value
+        eq_cstr = np.array([self.h(_) for _ in primal_vars])
+        # gradients of the equality constraints
+        H = np.array([self.h_jac(x).reshape(self.n_eq_cstr, -1) for x in primal_vars])  # (N, p, dim)
+        if GDdX is None:
+            GDdX = self._gd.compute_derivatives(primal_vars, Y, compute_hessian=False)  # (N, dim)
+        # the root-finding problem
+        R = np.c_[GDdX + np.einsum("ij,ijk->ik", dual_vars, H), eq_cstr]  # (N, dim + p)
+        return R, H
+
+    def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Dict[str, np.ndarray]:
+        N, p = X.shape[0], self.n_eq_cstr
+        primal_vars = self._get_primal_dual(X)[0]
+        # Netwon steps
+        step = np.zeros((N, self.dim))
+        # gradient and Hessian of the GD indicator
+        GDdX, GDdX2 = self._gd.compute_derivatives(primal_vars, Y)
+        # the root-finding problem and the gradient of the equality constraints
+        R, H = self._compute_R(X, Y, GDdX=GDdX)
+        # compute the Newton step for each approximation point
+        for i in range(N):
+            DR = np.r_[np.c_[GDdX2[i], H[i].T], np.c_[H[i], np.zeros((p, p))]]
+            try:
+                step[i, :] = (-1 * solve(DR, R[i].reshape(-1, 1))).ravel()
+            except:
+                # NOTE: this part should not occur
+                w, V = np.linalg.eigh(DR)
+                w[np.isclose(w, 0)] = 1e-6
+                D = np.diag(1 / w)
+                step[i, :] = -1 * V @ D @ V.T @ R[i].reshape(-1, 1)
+        return dict(step=step, R=R)
+
+    def one_step(self):
+        self._check_XY()
+        self.step = np.zeros((self.mu, self.dim))
+        self.step_size = np.ones(self.mu)
+        self.R = np.zeros((self.mu, self.dim))
+
+        # partition the approximation set to by feasibility
+        self._nondominated_idx = non_domin_sort(self.Y, only_front_indices=True)[0]
+        if self.h is None:
+            feasible_mask = np.array([True] * self.mu)
+        else:
+            eq_cstr = np.array([self.h(_) for _ in self._get_primal_dual(self.X)[0]]).reshape(self.mu, -1)
+            feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-4, rtol=0), axis=1)
+
+        feasible_idx = np.nonzero(feasible_mask)[0]
+        dominated_idx = list((set(range(self.mu)) - set(self._nondominated_idx) - set(feasible_idx)))
+        if np.any(feasible_mask):
+            # non-dominatd sorting of the feasible points
+            partitions = non_domin_sort(self.Y[feasible_mask], only_front_indices=True)
+            partitions = {k: feasible_idx[v] for k, v in partitions.items()}
+            partitions.update({0: np.sort(np.r_[partitions[0], np.nonzero(~feasible_mask)[0]])})
+        else:
+            partitions = {0: np.array(range(self.mu))}
+
+        # compute the Newton direction for each partition
+        for _, idx in partitions.items():
+            out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
+            self.step[idx, :] = out["step"]
+            self.R[idx, :] = out["R"]
+            # backtracking line search with Armijo's condition for each layer
+            if _ == 0 and len(dominated_idx) > 0:  # for the first layer
+                idx_ = list(set(idx) - set(dominated_idx))
+                for k in dominated_idx:  # for dominated and infeasible points
+                    self.step_size[k] = self._line_search_dominated(self.X[[k]], self.step[[k]])
+                self.step_size[idx_] = self._line_search(self.X[idx_], self.step[idx_], R=self.R[idx_])
+            else:  # for all other layers
+                self.step_size[idx] = self._line_search(self.X[idx], self.step[idx], R=self.R[idx])
+
+        self.X += self.step_size.reshape(-1, 1) * self.step
+        # function evaluation
+        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
+        self.iter_count += 1
+
+    def _line_search(self, X: np.ndarray, step: np.ndarray, R: np.ndarray) -> float:
+        """backtracking line search with Armijo's condition"""
+        # TODO: ad-hoc! to solve this in the further using a high precision numerical library
+        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
+        # the step-size control
+        if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
+            return 1
+
+        c = 1e-5
+        N = len(X)
+        primal_vars = self._get_primal_dual(X)[0]
+        normal_vectors = np.c_[np.eye(self.dim_primal * N), -1 * np.eye(self.dim_primal * N)]
+        # calculate the maximal step-size
+        dist = np.r_[
+            np.abs(primal_vars.ravel() - np.tile(self.lower_bounds, N)),
+            np.abs(np.tile(self.upper_bounds, N) - primal_vars.ravel()),
+        ]
+        v = step[:, : self.dim_primal].ravel() @ normal_vectors
+        alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+
+        for _ in range(6):
+            X_ = X + alpha * step
+            if self.h is None:
+                v = self._gd.compute(self._get_primal_dual(X)[0])
+                v_ = self._gd.compute(self._get_primal_dual(X_)[0])
+                inc = np.inner(R.ravel(), step.ravel())
+                cond = v_ - v >= c * alpha * inc
+            else:
+                R_ = self._compute_R(X_)[0]
+                cond = np.linalg.norm(R_) <= (1 - c * alpha) * np.linalg.norm(R)
+            if cond:
+                break
+            else:
+                if 1 < 2:
+                    phi0 = v if self.h is None else np.sum(R**2) / 2
+                    phi1 = v_ if self.h is None else np.sum(R_**2) / 2
+                    phi0prime = inc if self.h is None else -np.sum(R**2)
+                    alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
+                if 11 < 2:
+                    alpha *= 0.5
+        else:
+            self.logger.warn("Armijo's backtracking line search failed")
+        return alpha
+
+    def _line_search_dominated(self, X: np.ndarray, step: np.ndarray) -> float:
+        """backtracking line search with Armijo's condition"""
+        # TODO: ad-hoc! to solve this in the further using a high precision numerical library
+        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
+        # the step-size control
+        if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
+            return 1
+
+        c = 1e-4
+        N = len(X)
+        step = step[:, : self.dim_primal]
+        primal_vars = self._get_primal_dual(X)[0]
+        normal_vectors = np.c_[np.eye(self.dim_primal * N), -1 * np.eye(self.dim_primal * N)]
+        # calculate the maximal step-size
+        dist = np.r_[
+            np.abs(primal_vars.ravel() - np.tile(self.lower_bounds, N)),
+            np.abs(np.tile(self.upper_bounds, N) - primal_vars.ravel()),
+        ]
+        v = step.ravel() @ normal_vectors
+        alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+
+        h_ = self.h(primal_vars)
+        eq_cstr = h_**2 / 2
+        R = h_ * self.h_jac(primal_vars)
+        for _ in range(6):
+            X_ = primal_vars + alpha * step
+            eq_cstr_ = self.h(X_) ** 2 / 2
+            dec = np.inner(R.ravel(), step.ravel())
+            cond = eq_cstr_ - eq_cstr <= c * alpha * dec
+            if cond:
+                break
+            else:
+                alpha *= 0.5
+        else:
+            self.logger.warn("Armijo's backtracking line search failed")
+        return alpha
+
+    def _check_XY(self):
+        # get unique points: if some points converge to the same location
+        primal_vars = self.X[:, : self.dim_primal]
+        D = cdist(primal_vars, primal_vars)
+        drop_idx_X = set([])
+        for i in range(self.mu):
+            if i not in drop_idx_X:
+                drop_idx_X |= set(np.nonzero(np.isclose(D[i, :], 0, rtol=self.eps))[0]) - set([i])
+
+        # get rid of weakly-dominated points
+        # TODO: Ad-hoc solution! check if this is still needed
+        # since the hypervolume indicator module is upgraded
+        drop_idx_Y = set([])
+        # TODO: Ad-hoc solution! check if this is still needed
+        # if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
+        #     for i in range(self.mu):
+        #         if i not in drop_idx_Y:
+        #             drop_idx_Y |= set(np.nonzero(np.any(np.isclose(self.Y[i, :], self.Y), axis=1))[0]) - set(
+        #                 [i]
+        #             )
+        idx = list(set(range(self.mu)) - (drop_idx_X | drop_idx_Y))
+        self.mu = len(idx)
+        self.X = self.X[idx, :]
+        self.Y = self.Y[idx, :]
+
+    def log(self):
+        GD = self._gd.compute(Y=self.Y)
+        self.hist_Y += [self.Y.copy()]
+        self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
+        self.hist_GD += [GD]
+
+        if self.verbose:
+            self.logger.info(f"iteration {self.iter_count} ---")
+            self.logger.info(f"GD: {GD}")
+            # self.logger.info(f"step size: {self.step_size}")
+            self.logger.info(f"#non-dominated: {len(self._nondominated_idx)}")
+
+        if self.iter_count >= 1:
+            try:
+                self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
+                self._delta_Y = np.mean(np.sqrt(np.sum((self.hist_Y[-1] - self.hist_Y[-2]) ** 2, axis=1)))
+                self._delta_GD = np.abs(self.hist_GD[-1] - self.hist_GD[-2])
+            except:
+                pass
+
+        if self.h is not None:
+            self.hist_R_norm += [np.median(np.linalg.norm(self.R[self._nondominated_idx], axis=1))]
+            self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
+
+    def terminate(self) -> bool:
+        if self.iter_count >= self.max_iters:
+            self.stop_dict["iter_count"] = self.iter_count
 
         # if self._delta_X < self.xtol:
         #     self.stop_dict["xtol"] = self._delta_X
