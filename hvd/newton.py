@@ -596,8 +596,8 @@ class GDN:
         self._delta_Y: float = np.inf
         self._delta_GD: float = np.inf
 
-        # if self.h is not None:
-        self.hist_R_norm: List[float] = []
+        if self.h is not None or self.g is not None:
+            self.hist_R_norm: List[float] = []
 
         self.logger: logging.Logger = get_logger(
             logger_id=f"{self.__class__.__name__}",
@@ -690,11 +690,8 @@ class GDN:
                 idx if active_indices is None else [np.r_[active_indices[i], idx[i]] for i in range(N)]
             )
 
-        # the root-finding problem
-        # if active_indices is None:
-        # R = np.c_[GDdX + np.einsum("ij,ijk->ik", dual_vars, H), eq_cstr]  # (N, dim + p)
-        # else:
         H = [H[i][idx, :] for i, idx in enumerate(active_indices)]
+        # the root-finding problem
         R = [
             np.r_[GDdX[i] + np.einsum("j,jk->k", dual_vars[i, idx], H[i]), cstr_value[i, idx]]
             for i, idx in enumerate(active_indices)
