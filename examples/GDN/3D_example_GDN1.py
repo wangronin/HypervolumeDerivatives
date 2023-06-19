@@ -65,7 +65,7 @@ for i, x in enumerate(np.linspace(-1, 1, int(np.sqrt(N)))):
     )
 point_set = np.concatenate(point_set, axis=0)
 point_set -= center
-pareto_set = 0.99 * point_set / np.linalg.norm(point_set, axis=1).reshape(-1, 1) + center
+pareto_set = 0.98 * point_set / np.linalg.norm(point_set, axis=1).reshape(-1, 1) + center
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
 max_iters = 30

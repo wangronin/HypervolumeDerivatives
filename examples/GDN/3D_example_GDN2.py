@@ -56,17 +56,14 @@ def MOP1_Hessian(x):
     return np.array([2 * np.eye(3), 2 * np.eye(3), 2 * np.eye(3)])
 
 
-tol = 1e-10
+def g(x):
+    return -1.0 * x[0]
 
 
-def h(x):
-    return -1.0 * x[0] if x[0] < tol else 0
-
-
-def h_Jacobian(x):
+def g_Jacobian(x):
     v = np.zeros(len(x))
     v[0] = -1
-    return v if x[0] < tol else np.zeros(len(x))
+    return v
 
 
 pareto_set = np.array([[0, -1, -1], [0, 0, 0], [0, -2, 4]])
@@ -76,13 +73,13 @@ for z in np.linspace(-1.01, 3.99, 50):
     y_ = (z + 6) / -5
     N = int(10 * (_y - y_))
     point_set.append(
-        np.stack([np.array([0.01] * N), np.linspace(y_ - 0.01, _y + 0.01, N), np.array([z] * N)]).T
+        np.stack([np.array([0.1] * N), np.linspace(y_ - 0.01, _y + 0.01, N), np.array([z] * N)]).T
     )
 point_set = np.concatenate(point_set, axis=0)
 pareto_front = np.array([MOP1(x) for x in point_set])
 
 dim = 3
-max_iters = 30
+max_iters = 15
 
 # x0 = np.array(
 #     [
@@ -114,8 +111,8 @@ opt = GDN(
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
-    h=h,
-    h_jac=h_Jacobian,
+    g=g,
+    g_jac=g_Jacobian,
     mu=len(x0),
     x0=x0,
     lower_bounds=-4,

@@ -476,6 +476,8 @@ class GDN:
         mu: int = 5,
         h: Callable = None,
         h_jac: callable = None,
+        g: Callable = None,
+        g_jac: Callable = None,
         x0: np.ndarray = None,
         max_iters: Union[int, str] = np.inf,
         minimization: bool = True,
@@ -532,11 +534,14 @@ class GDN:
         self.hessian: Callable = hessian
         self.h: Callable = h
         self.h_jac: Callable = h_jac
+        self.g: Callable = g
+        self.g_jac: Callable = g_jac
 
         self.iter_count: int = 0
-        self.max_iters = max_iters
+        self.max_iters: int = max_iters
         self.verbose: bool = verbose
-        self.eps = 1e-3 * np.max(self.upper_bounds - self.lower_bounds)
+        self.g_tol: float = -1e-8
+        self.eps: float = 1e-3 * np.max(self.upper_bounds - self.lower_bounds)
 
         self._gd = GenerationalDistance(ref=self.ref, func=func, jac=self.jac, hess=self.hessian)
         self._init_logging_var()
@@ -556,19 +561,29 @@ class GDN:
                 + self.lower_bounds
             )  # (mu, d)
 
-        # self._max_HV = np.product(self.ref)
         # initialize dual variables
         if self.h is not None:
             v = self.h(X0[0, :])
             self.n_eq_cstr = 1 if isinstance(v, (int, float)) else len(v)
             # to make the Hessian of Eq. constraints always a 3D tensor
             # self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
-            X0 = np.c_[X0, np.ones((self.mu, self.n_eq_cstr)) / self.mu]
+            # X0 = np.c_[X0, np.ones((self.mu, self.n_eq_cstr)) / self.mu]
         else:
             self.n_eq_cstr = 0
 
+        if self.g is not None:
+            v = self.g(X0[0, :])
+            self.n_ineq_cstr = 1 if isinstance(v, (int, float)) else len(v)
+            # to make the Hessian of Eq. constraints always a 3D tensor
+            # self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
+        else:
+            self.n_ineq_cstr = 0
+
+        self.n_cstr = self.n_ineq_cstr + self.n_eq_cstr
+        X0 = np.c_[X0, np.ones((self.mu, self.n_cstr)) / self.mu]
+
         self._get_primal_dual = lambda X: (X[:, : self.dim_primal], X[:, self.dim_primal :])
-        self.dim = self.dim_primal + self.n_eq_cstr
+        self.dim = self.dim_primal + self.n_cstr
         self.X = X0
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])  # (mu, n_objective)
 
@@ -581,8 +596,8 @@ class GDN:
         self._delta_Y: float = np.inf
         self._delta_GD: float = np.inf
 
-        if self.h is not None:
-            self.hist_R_norm: List[float] = []
+        # if self.h is not None:
+        self.hist_R_norm: List[float] = []
 
         self.logger: logging.Logger = get_logger(
             logger_id=f"{self.__class__.__name__}",
@@ -647,39 +662,69 @@ class GDN:
 
     def _compute_R(
         self, X: np.ndarray, Y: np.ndarray = None, GDdX: np.ndarray = None
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+        N = len(X)
         primal_vars, dual_vars = self._get_primal_dual(X)
-        # constraint function value
-        eq_cstr = np.array([self.h(_) for _ in primal_vars])
-        # gradients of the equality constraints
-        H = np.array([self.h_jac(x).reshape(self.n_eq_cstr, -1) for x in primal_vars])  # (N, p, dim)
         if GDdX is None:
             GDdX = self._gd.compute_derivatives(primal_vars, Y, compute_hessian=False)  # (N, dim)
+
+        cstr_value, active_indices, H = None, None, None
+        # inequality constraint function value, if exists
+        if self.g is not None:
+            cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
+            active_indices = [v > self.g_tol for v in cstr_value]  # (N, q, dim)
+            # gradients of the inequality constraints
+            H = [self.g_jac(x).reshape(self.n_ineq_cstr, -1) for x in primal_vars]  # (N, q, dim)
+
+        # equality constraint function value, if exists
+        if self.h is not None:
+            eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)  # (N, p)
+            cstr_value = (
+                eq_cstr if cstr_value is None else [np.r_[cstr_value[i], eq_cstr[i]] for i in range(N)]
+            )  # (N, q + p)
+            # gradients of the equality constraints
+            G = [self.h_jac(x).reshape(self.n_eq_cstr, -1) for x in primal_vars]  # (N, q, dim)
+            H = G if H is None else [np.r_[H[i], G[i]] for i in range(N)]  # (N, q + p)
+            idx = [np.array([True] * self.n_eq_cstr) for _ in range(N)]
+            active_indices = (
+                idx if active_indices is None else [np.r_[active_indices[i], idx[i]] for i in range(N)]
+            )
+
         # the root-finding problem
-        R = np.c_[GDdX + np.einsum("ij,ijk->ik", dual_vars, H), eq_cstr]  # (N, dim + p)
-        return R, H
+        # if active_indices is None:
+        # R = np.c_[GDdX + np.einsum("ij,ijk->ik", dual_vars, H), eq_cstr]  # (N, dim + p)
+        # else:
+        H = [H[i][idx, :] for i, idx in enumerate(active_indices)]
+        R = [
+            np.r_[GDdX[i] + np.einsum("j,jk->k", dual_vars[i, idx], H[i]), cstr_value[i, idx]]
+            for i, idx in enumerate(active_indices)
+        ]
+        return R, H, active_indices
 
     def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Dict[str, np.ndarray]:
-        N, p = X.shape[0], self.n_eq_cstr
+        N = X.shape[0]
         primal_vars = self._get_primal_dual(X)[0]
         # Netwon steps
         step = np.zeros((N, self.dim))
+        R = np.zeros((N, self.dim))
         # gradient and Hessian of the GD indicator
         GDdX, GDdX2 = self._gd.compute_derivatives(primal_vars, Y)
         # the root-finding problem and the gradient of the equality constraints
-        R, H = self._compute_R(X, Y, GDdX=GDdX)
+        R_ragged, H, active_indices = self._compute_R(X, Y, GDdX=GDdX)
+        idx = [np.r_[[True] * self.dim_primal, x] for x in active_indices]
         # compute the Newton step for each approximation point
         for i in range(N):
-            # TODO: take out inactive constraints
+            p = H[i].shape[0]
             DR = np.r_[np.c_[GDdX2[i], H[i].T], np.c_[H[i], np.zeros((p, p))]]
             try:
-                step[i, :] = (-1 * solve(DR, R[i].reshape(-1, 1))).ravel()
+                step[i, idx[i]] = -1 * solve(DR, R_ragged[i].reshape(-1, 1)).ravel()
+                R[i, idx[i]] = R_ragged[i]
             except:
-                # NOTE: this part should not occur
+                # in case of a singular Hessian
                 w, V = np.linalg.eigh(DR)
                 w[np.isclose(w, 0)] = 1e-10
                 D = np.diag(1 / w)
-                step[i, :] = (-1 * V @ D @ V.T @ R[i].reshape(-1, 1)).ravel()
+                step[i, idx[i]] = -1 * (V @ D @ V.T @ R_ragged[i].reshape(-1, 1)).ravel()
         return dict(step=step, R=R)
 
     def one_step(self):
@@ -712,13 +757,13 @@ class GDN:
             self.step[idx, :] = out["step"]
             self.R[idx, :] = out["R"]
             # backtracking line search with Armijo's condition for each layer
-            if _ == 0 and len(dominated_idx) > 0:  # for the first layer
-                idx_ = list(set(idx) - set(dominated_idx))
-                for k in dominated_idx:  # for dominated and infeasible points
-                    self.step_size[k] = self._line_search_dominated(self.X[[k]], self.step[[k]])
-                self.step_size[idx_] = self._line_search(self.X[idx_], self.step[idx_], R=self.R[idx_])
-            else:  # for all other layers
-                self.step_size[idx] = self._line_search(self.X[idx], self.step[idx], R=self.R[idx])
+            # if _ == 0 and len(dominated_idx) > 0:  # for the first layer
+            #     idx_ = list(set(idx) - set(dominated_idx))
+            #     for k in dominated_idx:  # for dominated and infeasible points
+            #         self.step_size[k] = self._line_search_dominated(self.X[[k]], self.step[[k]])
+            #     self.step_size[idx_] = self._line_search(self.X[idx_], self.step[idx_], R=self.R[idx_])
+            # else:  # for all other layers
+            #     self.step_size[idx] = self._line_search(self.X[idx], self.step[idx], R=self.R[idx])
 
         self.X += self.step_size.reshape(-1, 1) * self.step
         # function evaluation
@@ -851,9 +896,9 @@ class GDN:
             except:
                 pass
 
-        if self.h is not None:
-            self.hist_R_norm += [np.median(np.linalg.norm(self.R[self._nondominated_idx], axis=1))]
-            self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
+        # if self.h is not None:
+        self.hist_R_norm += [np.median(np.linalg.norm(self.R[self._nondominated_idx], axis=1))]
+        self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
 
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:
