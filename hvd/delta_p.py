@@ -1,3 +1,4 @@
+import warnings
 from typing import Callable, Tuple, Union
 
 import numpy as np
@@ -62,6 +63,7 @@ class GenerationalDistance:
         """
         N, dim = X.shape
         c1 = self.p / N
+
         if Y is None:
             Y = np.array([self.func(x) for x in X])
 
@@ -73,10 +75,14 @@ class GenerationalDistance:
         grad = c1 * diff_norm ** (self.p - 2) * grad_  # (N, dim)
 
         if compute_hessian:
-            H = np.array([self.hess(x) for x in X])  # (N, n_objective, dim, dim)
             c2 = self.p * (self.p - 2) / N
-            diff_norm_ = (diff_norm ** (self.p - 4))[..., np.newaxis]
-            # TODO: test this part
+            H = np.array([self.hess(x) for x in X])  # (N, n_objective, dim, dim)
+            idx = diff_norm != 0
+            # some `diff` can be zero
+            diff_norm_ = np.zeros(diff_norm.shape)
+            diff_norm_[idx] = diff_norm[idx] ** (self.p - 4)
+            diff_norm_ = diff_norm_[..., np.newaxis]
+            # TODO: test this part for p != 2
             term = (
                 c2 * np.tile(diff_norm_, (1, dim, dim)) * np.einsum("ij,ik->ijk", grad_, grad_)
                 if self.p != 2
