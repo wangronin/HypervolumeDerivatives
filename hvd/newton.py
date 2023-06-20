@@ -458,9 +458,11 @@ class HVN:
 
 
 class GDN:
-    """Delta-p Newton method
+    """Generational Distance Newton method with constraints
 
-    Newton-Raphson method to maximize the GD indicator, subject to equality constraints
+    Newton-Raphson method to maximize the GD indicator, subject to equality/inequality constraints.
+    The equalities are handled locally with the KKT condition;
+    The inequalities are converted to equalities via the active set method.
     """
 
     def __init__(
@@ -502,11 +504,15 @@ class GDN:
                 When it is not a `float`, it must have must have shape (dim, ).
             mu (int, optional): the approximation set size. Defaults to 5.
             h (Callable, optional): the equality constraint function, should return a vector of shape
-                (n_constraint, ). Defaults to None.
-            h_jac (callable, optional): the Jacobian of constraint function,
-                should return a matrix of (n_constraint, dim). Defaults to None.
+                (n_equality, ). Defaults to None.
+            h_jac (callable, optional): the Jacobian of equality constraint function,
+                should return a matrix of (n_equality, dim). Defaults to None.
+            g (Callable, optional): the inequality constraint function, should return a vector of shape
+                (n_inequality, ). Defaults to None.
+            g_jac (callable, optional): the Jacobian of the inequality constraint function,
+                should return a matrix of (n_inequality, dim). Defaults to None.
             h_hessian (callable, optional): the Jacobian of constraint function.
-                should return a matrix of (n_constraint, dim, dim) Defaults to None.
+                should return a matrix of (n_inequality, dim, dim). Defaults to None.
             x0 (np.ndarray, optional): the initial approximation set, of shape (mu, dim). Defaults to None.
             max_iters (Union[int, str], optional): maximal iterations of the algorithm. Defaults to np.inf.
             minimization (bool, optional): to minimize or maximize. Defaults to True.
@@ -540,8 +546,8 @@ class GDN:
         self.iter_count: int = 0
         self.max_iters: int = max_iters
         self.verbose: bool = verbose
-        self.g_tol: float = -1e-8
-        self.eps: float = 1e-3 * np.max(self.upper_bounds - self.lower_bounds)
+        self.g_tol: float = -1e-8  # threshold for the active method
+        self.eps: float = 1e-10 * np.max(self.upper_bounds - self.lower_bounds)
 
         self._gd = GenerationalDistance(ref=self.ref, func=func, jac=self.jac, hess=self.hessian)
         self._init_logging_var()
@@ -635,31 +641,6 @@ class GDN:
             self.log()
         return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
 
-    def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
-        """Precondition the Hessian matrix to make sure it is negative definite
-
-        Args:
-            H (np.ndarray): the Hessian matrix
-
-        Returns:
-            np.ndarray: the preconditioned Hessian
-        """
-        # pre-condition the Hessian
-        beta = 1e-6
-        v = np.min(np.diag(-H))
-        tau = 0 if v > 0 else -v + beta
-        I = np.eye(H.shape[0])
-        for _ in range(35):
-            try:
-                cholesky(-H + tau * I, lower=True)
-                break
-            except:
-                # NOTE: the multiplier is not working for Eq1IDTLZ3.. Otherwise, it takes 1.5
-                tau = max(1.5 * tau, beta)
-        else:
-            self.logger.warn("Pre-conditioning the HV Hessian failed")
-        return H - tau * I
-
     def _compute_R(
         self, X: np.ndarray, Y: np.ndarray = None, GDdX: np.ndarray = None
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
@@ -683,86 +664,54 @@ class GDN:
                 eq_cstr if cstr_value is None else [np.r_[cstr_value[i], eq_cstr[i]] for i in range(N)]
             )  # (N, q + p)
             # gradients of the equality constraints
-            G = [self.h_jac(x).reshape(self.n_eq_cstr, -1) for x in primal_vars]  # (N, q, dim)
-            H = G if H is None else [np.r_[H[i], G[i]] for i in range(N)]  # (N, q + p)
+            H_ = [self.h_jac(x).reshape(self.n_eq_cstr, -1) for x in primal_vars]  # (N, q, dim)
+            H = H_ if H is None else [np.r_[H[i], H_[i]] for i in range(N)]  # (N, q + p)
             idx = [np.array([True] * self.n_eq_cstr) for _ in range(N)]
             active_indices = (
                 idx if active_indices is None else [np.r_[active_indices[i], idx[i]] for i in range(N)]
             )
 
+        # the Jacobian of the inequalities
         H = [H[i][idx, :] for i, idx in enumerate(active_indices)]
         # the root-finding problem
         R = [
             np.r_[GDdX[i] + np.einsum("j,jk->k", dual_vars[i, idx], H[i]), cstr_value[i, idx]]
             for i, idx in enumerate(active_indices)
         ]
+        # the indices indicating which primal-dual variables are active
+        active_indices = [np.r_[[True] * self.dim_primal, x] for x in active_indices]
         return R, H, active_indices
 
-    def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Dict[str, np.ndarray]:
+    def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         N = X.shape[0]
         primal_vars = self._get_primal_dual(X)[0]
-        # Netwon steps
-        step = np.zeros((N, self.dim))
-        R = np.zeros((N, self.dim))
+        step = np.zeros((N, self.dim))  # Netwon steps
+        R = np.zeros((N, self.dim))  # the root-finding problem
         # gradient and Hessian of the GD indicator
         GDdX, GDdX2 = self._gd.compute_derivatives(primal_vars, Y)
         # the root-finding problem and the gradient of the equality constraints
-        R_ragged, H, active_indices = self._compute_R(X, Y, GDdX=GDdX)
-        idx = [np.r_[[True] * self.dim_primal, x] for x in active_indices]
-        # compute the Newton step for each approximation point
+        R_, H, idx = self._compute_R(X, Y, GDdX=GDdX)
+        # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
             p = H[i].shape[0]
             DR = np.r_[np.c_[GDdX2[i], H[i].T], np.c_[H[i], np.zeros((p, p))]]
             try:
-                step[i, idx[i]] = -1 * solve(DR, R_ragged[i].reshape(-1, 1)).ravel()
-                R[i, idx[i]] = R_ragged[i]
+                step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
+                R[i, idx[i]] = R_[i]
             except:
                 # in case of a singular Hessian
                 w, V = np.linalg.eigh(DR)
                 w[np.isclose(w, 0)] = 1e-10
                 D = np.diag(1 / w)
-                step[i, idx[i]] = -1 * (V @ D @ V.T @ R_ragged[i].reshape(-1, 1)).ravel()
-        return dict(step=step, R=R)
+                step[i, idx[i]] = -1 * (V @ D @ V.T @ R_[i].reshape(-1, 1)).ravel()
+        return step, R
 
     def one_step(self):
-        self._check_XY()
-        self.step = np.zeros((self.mu, self.dim))
-        self.step_size = np.ones(self.mu)
-        self.R = np.zeros((self.mu, self.dim))
-
-        # partition the approximation set to by feasibility
-        self._nondominated_idx = non_domin_sort(self.Y, only_front_indices=True)[0]
-        if self.h is None:
-            feasible_mask = np.array([True] * self.mu)
-        else:
-            eq_cstr = np.array([self.h(_) for _ in self._get_primal_dual(self.X)[0]]).reshape(self.mu, -1)
-            feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-4, rtol=0), axis=1)
-
-        feasible_idx = np.nonzero(feasible_mask)[0]
-        dominated_idx = list((set(range(self.mu)) - set(self._nondominated_idx) - set(feasible_idx)))
-        if np.any(feasible_mask):
-            # non-dominatd sorting of the feasible points
-            partitions = non_domin_sort(self.Y[feasible_mask], only_front_indices=True)
-            partitions = {k: feasible_idx[v] for k, v in partitions.items()}
-            partitions.update({0: np.sort(np.r_[partitions[0], np.nonzero(~feasible_mask)[0]])})
-        else:
-            partitions = {0: np.array(range(self.mu))}
-
-        # compute the Newton direction for each partition
-        for _, idx in partitions.items():
-            out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
-            self.step[idx, :] = out["step"]
-            self.R[idx, :] = out["R"]
-            # backtracking line search with Armijo's condition for each layer
-            # if _ == 0 and len(dominated_idx) > 0:  # for the first layer
-            #     idx_ = list(set(idx) - set(dominated_idx))
-            #     for k in dominated_idx:  # for dominated and infeasible points
-            #         self.step_size[k] = self._line_search_dominated(self.X[[k]], self.step[[k]])
-            #     self.step_size[idx_] = self._line_search(self.X[idx_], self.step[idx_], R=self.R[idx_])
-            # else:  # for all other layers
-            #     self.step_size[idx] = self._line_search(self.X[idx], self.step[idx], R=self.R[idx])
-
-        self.X += self.step_size.reshape(-1, 1) * self.step
+        # self._check_XY()
+        self.step, self.R = self._compute_netwon_step(X=self.X, Y=self.Y)
+        # backtracking line search for the step size
+        self.step_size = self._line_search(self.X, self.step, R=self.R)
+        self.X += self.step_size * self.step
         # function evaluation
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
         self.iter_count += 1
@@ -772,17 +721,17 @@ class GDN:
         # TODO: ad-hoc! to solve this in the further using a high precision numerical library
         # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
         # the step-size control
-        if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
+        if np.any(np.isclose(step, 0)):
             return 1
 
         c = 1e-5
-        N = len(X)
+        N_ = len(X)
         primal_vars = self._get_primal_dual(X)[0]
-        normal_vectors = np.c_[np.eye(self.dim_primal * N), -1 * np.eye(self.dim_primal * N)]
+        normal_vectors = np.c_[np.eye(self.dim_primal * N_), -1 * np.eye(self.dim_primal * N_)]
         # calculate the maximal step-size
         dist = np.r_[
-            np.abs(primal_vars.ravel() - np.tile(self.lower_bounds, N)),
-            np.abs(np.tile(self.upper_bounds, N) - primal_vars.ravel()),
+            np.abs(primal_vars.ravel() - np.tile(self.lower_bounds, N_)),
+            np.abs(np.tile(self.upper_bounds, N_) - primal_vars.ravel()),
         ]
         v = step[:, : self.dim_primal].ravel() @ normal_vectors
         alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
@@ -795,7 +744,7 @@ class GDN:
                 inc = np.inner(R.ravel(), step.ravel())
                 cond = v_ - v >= c * alpha * inc
             else:
-                R_ = self._compute_R(X_)[0]
+                R_ = np.concatenate(self._compute_R(X_)[0])
                 cond = np.linalg.norm(R_) <= (1 - c * alpha) * np.linalg.norm(R)
             if cond:
                 break
@@ -808,44 +757,8 @@ class GDN:
                 if 11 < 2:
                     alpha *= 0.5
         else:
-            self.logger.warn("Armijo's backtracking line search failed")
-        return alpha
-
-    def _line_search_dominated(self, X: np.ndarray, step: np.ndarray) -> float:
-        """backtracking line search with Armijo's condition"""
-        # TODO: ad-hoc! to solve this in the further using a high precision numerical library
-        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
-        # the step-size control
-        if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
-            return 1
-
-        c = 1e-4
-        N = len(X)
-        step = step[:, : self.dim_primal].ravel()
-        primal_vars = self._get_primal_dual(X)[0].ravel()
-        normal_vectors = np.c_[np.eye(self.dim_primal * N), -1 * np.eye(self.dim_primal * N)]
-        # calculate the maximal step-size
-        dist = np.r_[
-            np.abs(primal_vars - np.tile(self.lower_bounds, N)),
-            np.abs(np.tile(self.upper_bounds, N) - primal_vars.ravel()),
-        ]
-        v = step.ravel() @ normal_vectors
-        alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
-
-        h_ = self.h(primal_vars)
-        eq_cstr = h_**2 / 2
-        R = h_ * self.h_jac(primal_vars)
-        for _ in range(6):
-            X_ = primal_vars + alpha * step
-            eq_cstr_ = self.h(X_) ** 2 / 2
-            dec = np.inner(R.ravel(), step.ravel())
-            cond = eq_cstr_ - eq_cstr <= c * alpha * dec
-            if cond:
-                break
-            else:
-                alpha *= 0.5
-        else:
-            self.logger.warn("Armijo's backtracking line search failed")
+            pass
+            # self.logger.warn("Armijo's backtracking line search failed")
         return alpha
 
     def _check_XY(self):
@@ -857,18 +770,7 @@ class GDN:
             if i not in drop_idx_X:
                 drop_idx_X |= set(np.nonzero(np.isclose(D[i, :], 0, rtol=self.eps))[0]) - set([i])
 
-        # get rid of weakly-dominated points
-        # TODO: Ad-hoc solution! check if this is still needed
-        # since the hypervolume indicator module is upgraded
-        drop_idx_Y = set([])
-        # TODO: Ad-hoc solution! check if this is still needed
-        # if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
-        #     for i in range(self.mu):
-        #         if i not in drop_idx_Y:
-        #             drop_idx_Y |= set(np.nonzero(np.any(np.isclose(self.Y[i, :], self.Y), axis=1))[0]) - set(
-        #                 [i]
-        #             )
-        idx = list(set(range(self.mu)) - (drop_idx_X | drop_idx_Y))
+        idx = list(set(range(self.mu)) - drop_idx_X)
         self.mu = len(idx)
         self.X = self.X[idx, :]
         self.Y = self.Y[idx, :]
@@ -882,8 +784,8 @@ class GDN:
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"GD: {GD}")
+            self.logger.info(f"#points: {self.mu}")
             self.logger.info(f"step size: {self.step_size}")
-            self.logger.info(f"#non-dominated: {len(self._nondominated_idx)}")
 
         if self.iter_count >= 1:
             try:
@@ -894,7 +796,7 @@ class GDN:
                 pass
 
         # if self.h is not None:
-        self.hist_R_norm += [np.median(np.linalg.norm(self.R[self._nondominated_idx], axis=1))]
+        self.hist_R_norm += [np.mean(np.linalg.norm(self.R, axis=1))]
         self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
 
     def terminate(self) -> bool:
