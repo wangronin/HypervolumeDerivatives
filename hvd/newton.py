@@ -461,7 +461,7 @@ class GDN:
     """Generational Distance Newton method with constraints
 
     Newton-Raphson method to maximize the GD indicator, subject to equality/inequality constraints.
-    The equalities are handled locally with the KKT condition;
+    The equalities are handled locally with the KKT condition.
     The inequalities are converted to equalities via the active set method.
     """
 
@@ -484,10 +484,7 @@ class GDN:
         max_iters: Union[int, str] = np.inf,
         minimization: bool = True,
         xtol: float = 1e-3,
-        HVtol: float = -np.inf,
         verbose: bool = True,
-        problem_name: str = None,
-        **kwargs,
     ):
         """
         Args:
@@ -529,10 +526,8 @@ class GDN:
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self.ref = ref
-        self.problem_name = problem_name
         # parameters controlling stop criteria
         self.xtol = xtol
-        self.HVtol = HVtol
         self.stop_dict: Dict = {}
         # the objective function, gradient, and the Hessian
         self.func: Callable = func
@@ -550,7 +545,6 @@ class GDN:
         self.eps: float = 1e-10 * np.max(self.upper_bounds - self.lower_bounds)
 
         self._gd = GenerationalDistance(ref=self.ref, func=func, jac=self.jac, hess=self.hessian)
-        self._init_logging_var()
         self._initialize(x0)
 
     def _initialize(self, X0: np.ndarray):
@@ -583,6 +577,8 @@ class GDN:
         self._get_primal_dual = lambda X: (X[:, : self.dim_primal], X[:, self.dim_primal :])
         self.Y = np.array([self.func(x) for x in X0])  # (mu, n_objective)
         self.X = np.c_[X0, np.ones((self.mu, self.dim_dual)) / self.mu]
+
+        self._init_logging_var()
 
     def _init_logging_var(self):
         """parameters for logging the history"""
