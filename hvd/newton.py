@@ -568,30 +568,21 @@ class GDN:
             )  # (mu, d)
 
         # initialize dual variables
+        # `p`: the number of equality constraints
+        # `q`: the number of inequality constraints
+        self.p, self.q = 0, 0
         if self.h is not None:
             v = self.h(X0[0, :])
-            self.n_eq_cstr = 1 if isinstance(v, (int, float)) else len(v)
-            # to make the Hessian of Eq. constraints always a 3D tensor
-            # self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
-            # X0 = np.c_[X0, np.ones((self.mu, self.n_eq_cstr)) / self.mu]
-        else:
-            self.n_eq_cstr = 0
-
+            self.p = 1 if isinstance(v, (int, float)) else len(v)
         if self.g is not None:
             v = self.g(X0[0, :])
-            self.n_ineq_cstr = 1 if isinstance(v, (int, float)) else len(v)
-            # to make the Hessian of Eq. constraints always a 3D tensor
-            # self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
-        else:
-            self.n_ineq_cstr = 0
+            self.q = 1 if isinstance(v, (int, float)) else len(v)
 
-        self.n_cstr = self.n_ineq_cstr + self.n_eq_cstr
-        X0 = np.c_[X0, np.ones((self.mu, self.n_cstr)) / self.mu]
-
+        self.dim_dual = self.q + self.p
+        self.dim = self.dim_primal + self.dim_dual
         self._get_primal_dual = lambda X: (X[:, : self.dim_primal], X[:, self.dim_primal :])
-        self.dim = self.dim_primal + self.n_cstr
-        self.X = X0
-        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])  # (mu, n_objective)
+        self.Y = np.array([self.func(x) for x in X0])  # (mu, n_objective)
+        self.X = np.c_[X0, np.ones((self.mu, self.dim_dual)) / self.mu]
 
     def _init_logging_var(self):
         """parameters for logging the history"""
@@ -644,6 +635,21 @@ class GDN:
     def _compute_R(
         self, X: np.ndarray, Y: np.ndarray = None, GDdX: np.ndarray = None
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+        """compute the root-finding problem R
+
+        Args:
+            X (np.ndarray): the primal-dual points of shape (N, dim).
+            Y (np.ndarray, optional): the corresponding objective points of shape (N, n_objective).
+              Defaults to None.
+            GDdX (np.ndarray, optional): the gradient of generational distance at `X` of shape (N, dim).
+              Defaults to None.
+
+        Returns:
+            Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+                (R, H, active_indices) -> the rooting-finding problem,
+                the Jacobian of the equality constraints, and
+                the indices that are active among primal-dual variables
+        """
         N = len(X)
         primal_vars, dual_vars = self._get_primal_dual(X)
         if GDdX is None:
@@ -655,7 +661,7 @@ class GDN:
             cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
             active_indices = [v > self.g_tol for v in cstr_value]  # (N, q, dim)
             # gradients of the inequality constraints
-            H = [self.g_jac(x).reshape(self.n_ineq_cstr, -1) for x in primal_vars]  # (N, q, dim)
+            H = [self.g_jac(x).reshape(self.q, -1) for x in primal_vars]  # (N, q, dim)
 
         # equality constraint function value, if exists
         if self.h is not None:
@@ -664,9 +670,9 @@ class GDN:
                 eq_cstr if cstr_value is None else [np.r_[cstr_value[i], eq_cstr[i]] for i in range(N)]
             )  # (N, q + p)
             # gradients of the equality constraints
-            H_ = [self.h_jac(x).reshape(self.n_eq_cstr, -1) for x in primal_vars]  # (N, q, dim)
+            H_ = [self.h_jac(x).reshape(self.p, -1) for x in primal_vars]  # (N, q, dim)
             H = H_ if H is None else [np.r_[H[i], H_[i]] for i in range(N)]  # (N, q + p)
-            idx = [np.array([True] * self.n_eq_cstr) for _ in range(N)]
+            idx = [np.array([True] * self.p) for _ in range(N)]
             active_indices = (
                 idx if active_indices is None else [np.r_[active_indices[i], idx[i]] for i in range(N)]
             )
@@ -757,8 +763,7 @@ class GDN:
                 if 11 < 2:
                     alpha *= 0.5
         else:
-            pass
-            # self.logger.warn("Armijo's backtracking line search failed")
+            self.logger.warn("Armijo's backtracking line search failed")
         return alpha
 
     def _check_XY(self):
@@ -795,8 +800,8 @@ class GDN:
             except:
                 pass
 
-        # if self.h is not None:
-        self.hist_R_norm += [np.mean(np.linalg.norm(self.R, axis=1))]
+        if self.h is not None or self.g is not None:
+            self.hist_R_norm += [np.mean(np.linalg.norm(self.R, axis=1))]
         self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
 
     def terminate(self) -> bool:
