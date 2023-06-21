@@ -74,6 +74,7 @@ w = np.abs(np.random.rand(mu, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
 x0 = w @ np.vstack([c1, c2, c3])
 # x0[0, 2] = 1
+x0[:, 2] = 1.5
 y0 = np.array([MOP1(_) for _ in x0])
 
 opt = GDN(
@@ -114,7 +115,7 @@ triang = mtri.Triangulation(x, y)
 ax.plot_trisurf(triang, z, color="k", alpha=0.3)
 
 # plot the initial decision points
-# ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
+ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=8)
 # plot the final decision points
 ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=6)
 ax.set_title("decision space")
@@ -125,20 +126,20 @@ ax.set_xlim([-1.3, 1.3])
 ax.set_ylim([-1.3, 1.3])
 ax.set_zlim([-2.5, 0.3])
 
-# trajectory = np.atleast_3d([x0] + opt.hist_X)
-# for i in range(len(x0)):
-#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-#     ax.quiver(
-#         x[:-1],
-#         y[:-1],
-#         z[:-1],
-#         x[1:] - x[:-1],
-#         y[1:] - y[:-1],
-#         z[1:] - z[:-1],
-#         color="k",
-#         arrow_length_ratio=0.1,
-#         alpha=0.3,
-#     )
+trajectory = np.atleast_3d([x0] + opt.hist_X)
+for i in range(len(x0)):
+    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+    ax.quiver(
+        x[:-1],
+        y[:-1],
+        z[:-1],
+        x[1:] - x[:-1],
+        y[1:] - y[:-1],
+        z[1:] - z[:-1],
+        color="k",
+        arrow_length_ratio=0.1,
+        alpha=0.3,
+    )
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))

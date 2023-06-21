@@ -117,7 +117,7 @@ Z2 = Z[:, 1].reshape(-1, len(x))
 CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
 CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
 
-if 11 < 2:
+if 1 < 2:
     trajectory = np.array([x0] + opt.hist_X)
     for i in range(mu):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]

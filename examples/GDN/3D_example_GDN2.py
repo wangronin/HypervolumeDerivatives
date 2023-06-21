@@ -100,7 +100,7 @@ w /= np.sum(w, axis=1).reshape(-1, 1)
 # x0[:, 0] = 0.5
 # x0[0, 0] = 3.5
 
-x0 = np.c_[np.tile(0.5, (len(a), 1)), a]
+x0 = np.c_[np.tile(1.5, (len(a), 1)), a]
 y0 = np.array([MOP1(_) for _ in x0])
 mu = len(x0)
 
@@ -135,7 +135,7 @@ ax.plot_surface(xx, yy, zz, alpha=0.2)
 # plot the efficient set
 ax.add_collection3d(Poly3DCollection([pareto_set], color="k", alpha=0.3))
 # plot the initial points
-# ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=10)
+ax.plot(x0[:, 0], x0[:, 1], x0[:, 2], "g.", ms=10)
 # plot the final decision points
 ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=6)
 # ax.plot(point_set[:, 0], point_set[:, 1], point_set[:, 2], "r.", ms=8)
@@ -146,20 +146,20 @@ ax.set_zlabel(r"$x_3$")
 ax.set_ylim([-2.5, 2])
 ax.set_xlim([-1.5, 1.5])
 
-# trajectory = np.atleast_3d([x0] + opt.hist_X)
-# for i in range(len(x0)):
-#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-#     ax.quiver(
-#         x[:-1],
-#         y[:-1],
-#         z[:-1],
-#         x[1:] - x[:-1],
-#         y[1:] - y[:-1],
-#         z[1:] - z[:-1],
-#         color="k",
-#         arrow_length_ratio=0.08,
-#         alpha=0.35,
-#     )
+trajectory = np.atleast_3d([x0] + opt.hist_X)
+for i in range(len(x0)):
+    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+    ax.quiver(
+        x[:-1],
+        y[:-1],
+        z[:-1],
+        x[1:] - x[:-1],
+        y[1:] - y[:-1],
+        z[1:] - z[:-1],
+        color="k",
+        arrow_length_ratio=0.08,
+        alpha=0.35,
+    )
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
@@ -181,23 +181,23 @@ triang.set_mask(mask)
 # ax.plot(x, y, z, "r.", ms=8)
 ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
 # plot the initial points
-# ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=10)
+ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=10)
 ax.plot_trisurf(triang, z, color="k", alpha=0.2)
 
-# trajectory = np.atleast_3d([y0] + opt.hist_Y)
-# for i in range(len(x0)):
-#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-#     ax.quiver(
-#         x[:-1],
-#         y[:-1],
-#         z[:-1],
-#         x[1:] - x[:-1],
-#         y[1:] - y[:-1],
-#         z[1:] - z[:-1],
-#         color="k",
-#         arrow_length_ratio=0.05,
-#         alpha=0.35,
-#     )
+trajectory = np.atleast_3d([y0] + opt.hist_Y)
+for i in range(len(x0)):
+    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+    ax.quiver(
+        x[:-1],
+        y[:-1],
+        z[:-1],
+        x[1:] - x[:-1],
+        y[1:] - y[:-1],
+        z[1:] - z[:-1],
+        color="k",
+        arrow_length_ratio=0.05,
+        alpha=0.35,
+    )
 
 ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
