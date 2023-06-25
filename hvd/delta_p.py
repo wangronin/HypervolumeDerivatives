@@ -114,7 +114,7 @@ class InvertedGenerationalDistance:
         self.hess = hess
         self.M = len(self.ref)
 
-    def _compute_indices(self, Y: np.ndarray):
+    def _compute_indices(self, Y: np.ndarray, recursive: bool = True):
         """find for each reference point, the index of its closest point in the approximation set
 
         Args:
@@ -122,13 +122,24 @@ class InvertedGenerationalDistance:
         """
         N = len(Y)
         self.D = cdist(Y, self.ref, metric="minkowski", p=self.p)
+        # for each reference point, the index of its closest point in the approximation set `Y`
+        self._indices = np.argmin(self.D, axis=0)
         # for each point `p`` in `Y`, the indices of points in the reference set
         # which have `p` as the closest point.
-        self._indices = np.argmin(self.D, axis=0)
-        self.indices = [np.nonzero(self._indices == i)[0] for i in range(N)]
+        self.indices = [np.array([])] * N
         # for each point `p` in `Y`, the total number of points in the reference set
         # which have `p` as the closest point
-        self.m = np.array([len(idx) for idx in self.indices]).reshape(-1, 1)
+        self.m = np.zeros((N, 1))
+        D = self.D.copy()
+        while True:
+            _indices = np.argmin(D, axis=0)
+            pos = np.nonzero(self.m == 0)[0]
+            for p in pos:
+                self.indices[p] = np.nonzero(_indices == p)[0]
+                self.m[p] = len(self.indices[p])
+            if len(pos) == 0 or not recursive:
+                break
+            D[_indices, np.arange(self.M)] = np.inf
 
     def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
         """compute the inverted generational distance value
