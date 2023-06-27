@@ -1,4 +1,3 @@
-import warnings
 from typing import Callable, Tuple, Union
 
 import numpy as np
@@ -97,7 +96,15 @@ class GenerationalDistance:
 
 
 class InvertedGenerationalDistance:
-    def __init__(self, ref: np.ndarray, func: Callable, jac: Callable, hess: Callable, p: float = 2):
+    def __init__(
+        self,
+        ref: np.ndarray,
+        func: Callable,
+        jac: Callable,
+        hess: Callable,
+        p: float = 2,
+        recursive: bool = False,
+    ):
         """Generational Distance
 
         Args:
@@ -113,8 +120,9 @@ class InvertedGenerationalDistance:
         self.jac = jac
         self.hess = hess
         self.M = len(self.ref)
+        self.recursive = recursive
 
-    def _compute_indices(self, Y: np.ndarray, recursive: bool = True):
+    def _compute_indices(self, Y: np.ndarray):
         """find for each reference point, the index of its closest point in the approximation set
 
         Args:
@@ -137,7 +145,7 @@ class InvertedGenerationalDistance:
             for p in pos:
                 self.indices[p] = np.nonzero(_indices == p)[0]
                 self.m[p] = len(self.indices[p])
-            if len(pos) == 0 or not recursive:
+            if len(pos) == 0 or not self.recursive:
                 break
             D[_indices, np.arange(self.M)] = np.inf
 

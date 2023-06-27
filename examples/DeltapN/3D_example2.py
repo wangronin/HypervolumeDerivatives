@@ -5,7 +5,7 @@ import pandas as pd
 from matplotlib import rcParams
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from hvd.newton import GDN
+from hvd.newton import DeltapNewton
 
 np.random.seed(42)
 np.set_printoptions(edgeitems=30, linewidth=100000)
@@ -104,7 +104,7 @@ x0 = np.c_[np.tile(1.5, (len(a), 1)), a]
 y0 = np.array([MOP1(_) for _ in x0])
 mu = len(x0)
 
-opt = GDN(
+opt = DeltapNewton(
     dim=dim,
     n_objective=3,
     ref=pareto_front,
@@ -119,6 +119,7 @@ opt = GDN(
     upper_bounds=4,
     minimization=True,
     max_iters=max_iters,
+    type="deltap",
     verbose=True,
 )
 X, Y, stop = opt.run()
@@ -206,13 +207,14 @@ ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-")
-# ax.plot(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-")
+ax.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
+ax.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
 ax_.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
-ax.set_ylabel("GD", color="b")
+ax.set_ylabel("IGD", color="b")
 ax_.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
+ax.legend()
 
 plt.tight_layout()
 plt.subplots_adjust(wspace=0.1)
