@@ -3,7 +3,7 @@ import matplotlib.tri as mtri
 import numpy as np
 import pandas as pd
 
-from hvd.newton import IGDN
+from hvd.newton import DeltapNewton
 
 np.random.seed(42)
 np.set_printoptions(edgeitems=30, linewidth=100000)
@@ -68,7 +68,7 @@ point_set -= center
 pareto_set = 0.98 * point_set / np.linalg.norm(point_set, axis=1).reshape(-1, 1) + center
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
-max_iters = 30
+max_iters = 20
 mu = 50
 w = np.abs(np.random.rand(mu, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
@@ -77,7 +77,7 @@ x0 = w @ np.vstack([c1, c2, c3])
 x0[:, 2] = 1.5
 y0 = np.array([MOP1(_) for _ in x0])
 
-opt = IGDN(
+opt = DeltapNewton(
     dim=3,
     n_objective=3,
     ref=pareto_front,
@@ -92,6 +92,7 @@ opt = IGDN(
     upper_bounds=2,
     minimization=True,
     max_iters=max_iters,
+    type="deltap",
     verbose=True,
 )
 X, Y, stop = opt.run()
@@ -160,23 +161,25 @@ triang.set_mask(mask)
 
 # plot the Pareto front
 ax.plot_trisurf(triang, z, color="k", alpha=0.2)
+# plot the initial Pareton approximation set
+ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=8)
 # plot the final Pareton approximation set
 ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
 
-# trajectory = np.atleast_3d([y0] + opt.hist_Y)
-# for i in range(len(x0)):
-#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-#     ax.quiver(
-#         x[:-1],
-#         y[:-1],
-#         z[:-1],
-#         x[1:] - x[:-1],
-#         y[1:] - y[:-1],
-#         z[1:] - z[:-1],
-#         color="k",
-#         arrow_length_ratio=0.05,
-#         alpha=0.35,
-#     )
+trajectory = np.atleast_3d([y0] + opt.hist_Y)
+for i in range(len(x0)):
+    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+    ax.quiver(
+        x[:-1],
+        y[:-1],
+        z[:-1],
+        x[1:] - x[:-1],
+        y[1:] - y[:-1],
+        z[1:] - z[:-1],
+        color="k",
+        arrow_length_ratio=0.05,
+        alpha=0.35,
+    )
 
 ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
@@ -185,12 +188,14 @@ ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.semilogy(range(1, len(opt.hist_perf) + 1), opt.hist_perf, "b-")
+ax.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
+ax.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
 ax_.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
-ax.set_ylabel("IGD", color="b")
+# ax.set_ylabel("IGD", color="b")
 ax_.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
+ax.legend()
 
 plt.tight_layout()
 plt.subplots_adjust(wspace=0.1)

@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import rcParams
 
-from hvd.newton import GDN
+from hvd.newton import DeltapNewton
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -73,7 +73,7 @@ elif 11 < 2:
     x0 = np.array([[2 * np.cos(a), 2 * np.sin(a)] for a in theta])
 
 y0 = np.array([MOP1(_) for _ in x0])
-opt = GDN(
+opt = DeltapNewton(
     dim=2,
     n_objective=2,
     ref=ref,
@@ -88,6 +88,7 @@ opt = GDN(
     upper_bounds=2,
     minimization=True,
     max_iters=max_iters,
+    type="deltap",
     verbose=True,
 )
 X, Y, stop = opt.run()
@@ -163,13 +164,15 @@ ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
 ax22 = ax2.twinx()
-ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-")
+ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
+ax2.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
 ax22.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
-ax2.set_ylabel("GD", color="b")
+# ax2.set_ylabel("IGD", color="b")
 ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
+ax2.legend()
 
 plt.savefig(f"2D-example-{mu}.pdf", dpi=1000)
 
