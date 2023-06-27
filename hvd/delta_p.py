@@ -113,6 +113,9 @@ class InvertedGenerationalDistance:
             jac (Callable): the Jacobian function, which returns an array of shape (n_objective, dim)
             hess (Callable): the Hessian function, which returns an array of shape (n_objective, dim, dim)
             p (float, optional): parameter in the p-norm. Defaults to 2.
+            recursive (bool, optional): if true, it computes non-zero derivatives/gradiants for all the
+                the points in the approximation set by recursively removing the points which has nonzero
+                gradient (the nearest point to some reference point). Defaults to False.
         """
         self.ref = ref
         self.p = p

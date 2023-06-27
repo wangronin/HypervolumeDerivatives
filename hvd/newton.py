@@ -632,12 +632,6 @@ class DeltapNewton:
         if n is None:
             self._maxiter = len(self.X) * 100
 
-    def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
-        while not self.terminate():
-            self.newton_iteration()
-            self.log()
-        return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
-
     @property
     def active_indicator(self) -> Union[GenerationalDistance, InvertedGenerationalDistance]:
         """return the incumbent performance indicator."""
@@ -646,6 +640,21 @@ class DeltapNewton:
         else:
             indicator = self._gd if self.type == "gd" else self._igd
         return indicator
+
+    def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
+        while not self.terminate():
+            self.newton_iteration()
+            self.log()
+        return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
+
+    def newton_iteration(self):
+        self._compute_indicator_value(self.Y)
+        self.step, self.R = self._compute_netwon_step(X=self.X, Y=self.Y)
+        # backtracking line search for the step size
+        self.step_size = self._line_search(self.X, self.step, R=self.R)
+        self.X += self.step_size * self.step
+        # function evaluation
+        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
 
     def _compute_indicator_value(self, Y: np.ndarray):
         self.GD_value = self._gd.compute(Y=Y)
@@ -733,15 +742,6 @@ class DeltapNewton:
                     D = np.diag(1 / w)
                     step[i, idx[i]] = -1 * (V @ D @ V.T @ R_[i].reshape(-1, 1)).ravel()
         return step, R
-
-    def newton_iteration(self):
-        self._compute_indicator_value(self.Y)
-        self.step, self.R = self._compute_netwon_step(X=self.X, Y=self.Y)
-        # backtracking line search for the step size
-        self.step_size = self._line_search(self.X, self.step, R=self.R)
-        self.X += self.step_size * self.step
-        # function evaluation
-        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
 
     def _line_search(self, X: np.ndarray, step: np.ndarray, R: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
