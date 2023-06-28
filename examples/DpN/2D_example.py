@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import rcParams
 
-from hvd.newton import DeltapNewton
+from hvd.newton import DpN
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -73,7 +73,7 @@ elif 11 < 2:
     x0 = np.array([[2 * np.cos(a), 2 * np.sin(a)] for a in theta])
 
 y0 = np.array([MOP1(_) for _ in x0])
-opt = DeltapNewton(
+opt = DpN(
     dim=2,
     n_objective=2,
     ref=ref,

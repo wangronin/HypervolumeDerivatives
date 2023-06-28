@@ -63,7 +63,7 @@ class _Eq1DTLZ(MOOAnalytical):
         theta = (
             np.sort(np.random.rand(N) * 2 * np.pi)
             if kind == "uniform"
-            else np.r_[np.linspace(0, 2 * np.pi, N), 0]
+            else np.r_[np.linspace(0, 2 * np.pi, N - 1), 0]
         )
         x = np.c_[np.cos(theta), np.sin(theta)] * 0.4
         return np.c_[x + 0.5, np.tile(0.5, (N, self.n_decision_vars - M + 1))]

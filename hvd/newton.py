@@ -457,7 +457,7 @@ class HVN:
         return bool(self.stop_dict)
 
 
-class DeltapNewton:
+class DpN:
     """Delta_p Newton method with constraints
 
     Newton-Raphson method to minimize the Delta_p indicator, subject to equality/inequality constraints.
