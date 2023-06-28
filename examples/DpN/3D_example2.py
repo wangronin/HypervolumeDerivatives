@@ -117,7 +117,6 @@ opt = DpN(
     x0=x0,
     lower_bounds=-4,
     upper_bounds=4,
-    minimization=True,
     max_iters=max_iters,
     type="deltap",
     verbose=True,

@@ -476,6 +476,7 @@ class DpN:
         ref: Union[List[float], np.ndarray],
         lower_bounds: Union[List[float], np.ndarray],
         upper_bounds: Union[List[float], np.ndarray],
+        type: str = "deltap",
         mu: int = 5,
         h: Callable = None,
         h_jac: callable = None,
@@ -483,8 +484,6 @@ class DpN:
         g_jac: Callable = None,
         x0: np.ndarray = None,
         max_iters: Union[int, str] = np.inf,
-        minimization: bool = True,
-        type: str = "deltap",
         xtol: float = 1e-3,
         verbose: bool = True,
     ):
@@ -514,14 +513,12 @@ class DpN:
                 should return a matrix of (n_inequality, dim, dim). Defaults to None.
             x0 (np.ndarray, optional): the initial approximation set, of shape (mu, dim). Defaults to None.
             max_iters (Union[int, str], optional): maximal iterations of the algorithm. Defaults to np.inf.
-            minimization (bool, optional): to minimize or maximize. Defaults to True.
             xtol (float, optional): absolute distance in the approximation set between consecutive iterations
                 that is used to determine convergence. Defaults to 1e-3.
-            HVtol (float, optional): absolute change in hypervolume indicator value between consecutive
-                iterations that is used to determine convergence. Defaults to -np.inf.
             verbose (bool, optional): verbosity of the output. Defaults to True.
         """
-        self.minimization = minimization
+        assert type in ["gd", "igd", "deltap"]
+        self.type = type
         self.dim_primal = dim
         self.n_objective = n_objective
         self.mu = mu  # the population/archive size
@@ -539,54 +536,38 @@ class DpN:
         self.h_jac: Callable = h_jac
         self.g: Callable = g
         self.g_jac: Callable = g_jac
-
-        self.type = type
+        self._check_constraints()
+        self.X0 = x0
+        # delta_p performance indicator
+        self._gd = GenerationalDistance(ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian)
+        self._igd = InvertedGenerationalDistance(
+            ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian, recursive=True
+        )
+        # auxiliary variables
         self.iter_count: int = 0
         self.max_iters: int = max_iters
         self.verbose: bool = verbose
         self.g_tol: float = -1e-8  # threshold for the active method
         self.eps: float = 1e-10 * np.max(self.upper_bounds - self.lower_bounds)
+        self._initialize_logging()
 
-        self._gd = GenerationalDistance(ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian)
-        self._igd = InvertedGenerationalDistance(
-            ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian, recursive=True
-        )
-        self._initialize(x0)
-
-    def _initialize(self, X0: np.ndarray):
-        assert self.type in ["gd", "igd", "deltap"]
-        self._constrained = self.h is not None or self.g is not None
-
-        if X0 is not None:
-            X0 = np.asarray(X0)
-            assert np.all(X0 - self.lower_bounds >= 0)
-            assert np.all(X0 - self.upper_bounds <= 0)
-            assert X0.shape[0] == self.mu
-        else:
-            # sample `x` u.a.r. in `[lb, ub]`
-            assert all(~np.isinf(self.lower_bounds)) & all(~np.isinf(self.upper_bounds))
-            X0 = (
-                np.random.rand(self.mu, self.dim_primal) * (self.upper_bounds - self.lower_bounds)
-                + self.lower_bounds
-            )  # (mu, d)
-
+    def _check_constraints(self):
         # initialize dual variables
         # `p`: the number of equality constraints
         # `q`: the number of inequality constraints
         self.p, self.q = 0, 0
+        self._constrained = self.h is not None or self.g is not None
+        x = np.random.rand(self.dim_primal) * (self.upper_bounds - self.lower_bounds) + self.lower_bounds
         if self.h is not None:
-            v = self.h(X0[0, :])
+            v = self.h(x)
             self.p = 1 if isinstance(v, (int, float)) else len(v)
         if self.g is not None:
-            v = self.g(X0[0, :])
+            v = self.g(x)
             self.q = 1 if isinstance(v, (int, float)) else len(v)
 
         self.dim_dual = self.q + self.p
         self.dim = self.dim_primal + self.dim_dual
         self._get_primal_dual = lambda X: (X[:, : self.dim_primal], X[:, self.dim_primal :])
-        self.Y = np.array([self.func(x) for x in X0])  # (mu, n_objective)
-        self.X = np.c_[X0, np.ones((self.mu, self.dim_dual)) / self.mu]
-        self._initialize_logging()
 
     def _initialize_logging(self):
         """parameters for logging the history"""
@@ -608,11 +589,35 @@ class DpN:
         )
 
     @property
+    def X0(self):
+        return self._X0
+
+    @X0.setter
+    def X0(self, X0: np.ndarray):
+        if X0 is not None:
+            X0 = np.asarray(X0)
+            assert np.all(X0 - self.lower_bounds >= 0)
+            assert np.all(X0 - self.upper_bounds <= 0)
+            self.mu = len(X0)
+        else:
+            # sample `x` u.a.r. in `[lb, ub]`
+            assert self.mu is not None
+            assert all(~np.isinf(self.lower_bounds)) & all(~np.isinf(self.upper_bounds))
+            X0 = (
+                np.random.rand(self.mu, self.dim_primal) * (self.upper_bounds - self.lower_bounds)
+                + self.lower_bounds
+            )  # (mu, dim_primal)
+
+        self._X0 = X0
+        self.Y = np.array([self.func(x) for x in self._X0])  # (mu, n_objective)
+        self.X = np.c_[self._X0, np.ones((self.mu, self.dim_dual)) / self.mu]  # (mu, dim)
+
+    @property
     def lower_bounds(self):
         return self._lower_bounds
 
     @lower_bounds.setter
-    def lower_bounds(self, lb):
+    def lower_bounds(self, lb: np.ndarray):
         self._lower_bounds = set_bounds(lb, self.dim_primal)
 
     @property
@@ -620,7 +625,7 @@ class DpN:
         return self._upper_bounds
 
     @upper_bounds.setter
-    def upper_bounds(self, ub):
+    def upper_bounds(self, ub: np.ndarray):
         self._upper_bounds = set_bounds(ub, self.dim_primal)
 
     @property
