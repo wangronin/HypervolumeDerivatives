@@ -34,10 +34,7 @@ seeds = {
     "Eq1IDTLZ4": 42,
 }
 
-# NOTE: on Eq1DTLZ4 and Eq1IDTLZ4 problems, we face a numerical issue as the Newton step is
-# very tiny when the decision points are on the Pareto front, which is even below the numerical precision
-# of Python :) -> Maybe utilize numerical libraries that allows for arbitrary precisions
-f = Eq1DTLZ3()
+f = Eq1IDTLZ1()
 dim = 11
 max_iters = 20
 seed = seeds[type(f).__name__]
@@ -70,7 +67,6 @@ opt = DpN(
     mu=len(x0),
     lower_bounds=0,
     upper_bounds=1,
-    minimization=True,
     x0=x0,
     max_iters=max_iters,
     verbose=True,
@@ -89,7 +85,7 @@ ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=7, alpha=0.5)
 
 # plot the constraint boundary
 ax.plot3D(pareto_set[:, 0], pareto_set[:, 1], pareto_set[:, 2], "gray", alpha=0.4)
-
+# plot the trajectory of decision points
 trajectory = np.atleast_3d([x0] + opt.hist_X)
 for i in range(len(trajectory[0])):
     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
@@ -145,7 +141,6 @@ ax_.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
 ax.legend()
-# ax.set_xticks(x)
 
 plt.tight_layout()
 plt.savefig(f"{type(f).__name__}-{len(x0)}.pdf", dpi=700)
