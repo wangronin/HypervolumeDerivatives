@@ -87,7 +87,7 @@ opt = DpN(
     lower_bounds=-2,
     upper_bounds=2,
     max_iters=max_iters,
-    type="deltap",
+    type="igd",
     verbose=True,
 )
 X, Y, stop = opt.run()

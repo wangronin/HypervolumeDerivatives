@@ -1,7 +1,9 @@
 from typing import Callable, Tuple, Union
 
 import numpy as np
+from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
+from sklearn_extra.cluster import KMedoids
 
 __authors__ = ["Hao Wang"]
 
@@ -104,6 +106,7 @@ class InvertedGenerationalDistance:
         hess: Callable,
         p: float = 2,
         recursive: bool = False,
+        cluster_matching: bool = False,
     ):
         """Generational Distance
 
@@ -124,6 +127,7 @@ class InvertedGenerationalDistance:
         self.hess = hess
         self.M = len(self.ref)
         self.recursive = recursive
+        self.cluster_matching = cluster_matching
 
     def _compute_indices(self, Y: np.ndarray):
         """find for each reference point, the index of its closest point in the approximation set
@@ -151,6 +155,18 @@ class InvertedGenerationalDistance:
             if len(pos) == 0 or not self.recursive:
                 break
             D[_indices, np.arange(self.M)] = np.inf
+
+    def _cluster_reference_set(self, N: int):
+        km = KMedoids(n_clusters=N, random_state=0, method="pam").fit(self.ref)
+        self._medroids = self.ref[km.medoid_indices_]
+
+    def _matching(self, Y: np.ndarray):
+        N = len(Y)
+        if not hasattr(self, "_medroids") or len(self._medroids) != N:
+            self._cluster_reference_set(N)
+        cost = cdist(Y, self._medroids, metric="minkowski", p=self.p)
+        # min-weight assignment in a bipartite graph
+        self._medoids_idx = linear_sum_assignment(cost)[1]
 
     def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
         """compute the inverted generational distance value
@@ -190,15 +206,20 @@ class InvertedGenerationalDistance:
         if Y is None:
             Y = np.array([self.func(x) for x in X])
 
-        self._compute_indices(Y)
+        # Jacobian of the objective function
         J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
-        centroid = np.array([np.sum(self.ref[idx], axis=0) for idx in self.indices])
-        diff = self.m * Y - centroid  # (N, n_objective)
-        grad = c * np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
+        if self.cluster_matching:
+            self._matching(Y)
+            diff = Y - self._medroids[self._medoids_idx]  # (N, n_objective)
+        else:
+            self._compute_indices(Y)
+            centroid = np.array([np.sum(self.ref[idx], axis=0) for idx in self.indices])
+            diff = self.m * Y - centroid  # (N, n_objective)
 
+        grad = c * np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
         if compute_hessian:
             H = np.array([self.hess(x) for x in X])  # (N, n_objective, dim, dim)
-            m = np.tile(self.m[..., np.newaxis], (1, dim, dim))
+            m = np.tile(self.m[..., np.newaxis], (1, dim, dim)) if not self.cluster_matching else 1
             hessian = c * (
                 m * np.einsum("ijk,ijl->ikl", J, J) + np.einsum("ijkl,ij->ikl", H, diff)
             )  # (N, dim, dim)

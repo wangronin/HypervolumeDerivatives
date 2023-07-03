@@ -538,10 +538,10 @@ class DpN:
         self.g_jac: Callable = g_jac
         self._check_constraints()
         self.X0 = x0
-        # delta_p performance indicator
+        # the delta_p performance indicator
         self._gd = GenerationalDistance(ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian)
         self._igd = InvertedGenerationalDistance(
-            ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian, recursive=True
+            ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian, cluster_matching=True
         )
         # auxiliary variables
         self.iter_count: int = 0
@@ -738,6 +738,7 @@ class DpN:
                 step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
                 R[i, idx[i]] = R_[i]
             except:
+                # TODO: this logic can be removed now with clustering IGD
                 # if the gradient is zero, then compute the pseudo-inverse
                 if np.all(np.isclose(Hess[i], 0)):
                     step[i, idx[i]] = -1 * R_[i] @ np.linalg.pinv(DR)
