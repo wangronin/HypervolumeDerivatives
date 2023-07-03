@@ -91,7 +91,7 @@ opt = DpN(
     lower_bounds=-2,
     upper_bounds=2,
     max_iters=max_iters,
-    type="deltap",
+    type="igd",
     verbose=True,
 )
 X, Y, stop = opt.run()
@@ -160,25 +160,25 @@ triang.set_mask(mask)
 
 # plot the Pareto front
 ax.plot_trisurf(triang, z, color="k", alpha=0.2)
-# plot the initial Pareton approximation set
-ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=8)
+# plot the initial Pareto approximation set
+# ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "g.", ms=8)
 # plot the final Pareton approximation set
 ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
 
-trajectory = np.atleast_3d([y0] + opt.hist_Y)
-for i in range(len(x0)):
-    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-    ax.quiver(
-        x[:-1],
-        y[:-1],
-        z[:-1],
-        x[1:] - x[:-1],
-        y[1:] - y[:-1],
-        z[1:] - z[:-1],
-        color="k",
-        arrow_length_ratio=0.05,
-        alpha=0.35,
-    )
+# trajectory = np.atleast_3d([y0] + opt.hist_Y)
+# for i in range(len(x0)):
+#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+#     ax.quiver(
+#         x[:-1],
+#         y[:-1],
+#         z[:-1],
+#         x[1:] - x[:-1],
+#         y[1:] - y[:-1],
+#         z[1:] - z[:-1],
+#         color="k",
+#         arrow_length_ratio=0.05,
+#         alpha=0.35,
+#     )
 
 ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
