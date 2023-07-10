@@ -3,7 +3,7 @@ import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cholesky, solve
+from scipy.linalg import block_diag, cho_solve, cholesky
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
@@ -657,7 +657,8 @@ class DpN:
         self.step, self.R = self._compute_netwon_step(X=self.X, Y=self.Y)
         # backtracking line search for the step size
         self.step_size = self._line_search(self.X, self.step, R=self.R)
-        self.X += self.step_size * self.step
+        # Newton iteration
+        self.X += self.step_size.reshape(-1, 1) * self.step
         # function evaluation
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
 
@@ -710,15 +711,22 @@ class DpN:
                 idx if active_indices is None else [np.r_[active_indices[i], idx[i]] for i in range(N)]
             )
 
-        # the Jacobian of the inequalities
-        H = [H[i][idx, :] for i, idx in enumerate(active_indices)]
-        # the root-finding problem
-        R = [
-            np.r_[grad[i] + np.einsum("j,jk->k", dual_vars[i, idx], H[i]), cstr_value[i, idx]]
-            for i, idx in enumerate(active_indices)
-        ]
+        R = grad  # unconstrained cases
+        if self._constrained:
+            # the Jacobian of the inequalities
+            H = [H[i][idx, :] for i, idx in enumerate(active_indices)]
+            # the root-finding problem
+            R = [
+                np.r_[grad[i] + np.einsum("j,jk->k", dual_vars[i, idx], H[i]), cstr_value[i, idx]]
+                for i, idx in enumerate(active_indices)
+            ]
+
         # the indices indicating which primal-dual variables are active
-        active_indices = [np.r_[[True] * self.dim_primal, x] for x in active_indices]
+        active_indices = (
+            [[True] * self.dim_primal] * N
+            if active_indices is None
+            else [np.r_[[True] * self.dim_primal, x] for x in active_indices]
+        )
         return R, H, active_indices
 
     def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -732,21 +740,15 @@ class DpN:
         R_, H, idx = self._compute_R(X, Y, grad=grad)
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
-            p = H[i].shape[0]
-            DR = np.r_[np.c_[Hess[i], H[i].T], np.c_[H[i], np.zeros((p, p))]]
-            try:
-                step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
-                R[i, idx[i]] = R_[i]
-            except:
-                # TODO: this logic can be removed now with clustering IGD
-                # if the gradient is zero, then compute the pseudo-inverse
-                if np.all(np.isclose(Hess[i], 0)):
-                    step[i, idx[i]] = -1 * R_[i] @ np.linalg.pinv(DR)
-                else:
-                    w, V = np.linalg.eigh(DR)
-                    w[np.isclose(w, 0)] = 1e-10
-                    D = np.diag(1 / w)
-                    step[i, idx[i]] = -1 * (V @ D @ V.T @ R_[i].reshape(-1, 1)).ravel()
+            DR = (
+                np.r_[np.c_[Hess[i], H[i].T], np.c_[H[i], np.zeros((len(H[i]), len(H[i])))]]
+                if self._constrained
+                else Hess[i]
+            )
+            L = self._precondition_hessian(DR)
+            step[i, idx[i]] = -1 * cho_solve((L, True), R_[i].reshape(-1, 1)).ravel()
+            # step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
+            R[i, idx[i]] = R_[i]
         return step, R
 
     def _line_search(self, X: np.ndarray, step: np.ndarray, R: np.ndarray) -> float:
@@ -754,11 +756,11 @@ class DpN:
         # TODO: ad-hoc! to solve this in the further using a high precision numerical library
         # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
         # the step-size control
-        if np.any(np.isclose(step, 0)):
-            return 1
-
         c = 1e-5
         N_ = len(X)
+        if np.any(np.isclose(step, 0)):
+            return np.ones(N_)
+
         primal_vars = self._get_primal_dual(X)[0]
         normal_vectors = np.c_[np.eye(self.dim_primal * N_), -1 * np.eye(self.dim_primal * N_)]
         # calculate the maximal step-size
@@ -768,30 +770,62 @@ class DpN:
         ]
         v = step[:, : self.dim_primal].ravel() @ normal_vectors
         alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+        step_size = np.array([alpha] * N_, dtype=float)
 
-        for _ in range(6):
-            X_ = X + alpha * step
-            if self.h is None:
-                v = self._igd.compute(self._get_primal_dual(X)[0])
-                v_ = self._igd.compute(self._get_primal_dual(X_)[0])
-                inc = np.inner(R.ravel(), step.ravel())
-                cond = v_ - v >= c * alpha * inc
-            else:
+        for i in range(N_):
+            for _ in range(6):
+                X_ = X.copy()
+                X_[i] += step_size[i] * step[i]
+                # if self._constrained:
                 R_ = np.concatenate(self._compute_R(X_)[0])
-                cond = np.linalg.norm(R_) <= (1 - c * alpha) * np.linalg.norm(R)
-            if cond:
-                break
+                cond = np.linalg.norm(R_) <= (1 - c * alpha) * np.linalg.norm(R.ravel())
+                # else:
+                #     v = self.active_indicator.compute(self._get_primal_dual(X)[0])
+                #     v_ = self.active_indicator.compute(self._get_primal_dual(X_)[0])
+                #     inc = np.inner(R[i].ravel(), step[i].ravel())
+                #     cond = v_ - v <= c * alpha * inc
+                if cond:
+                    break
+                else:
+                    # if 11 < 2:
+                    #     phi0 = v if self.h is None else np.sum(R**2) / 2
+                    #     phi1 = v_ if self.h is None else np.sum(R_**2) / 2
+                    #     phi0prime = inc if self.h is None else -np.sum(R**2)
+                    #     alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
+                    # if 1 < 2:
+                    # alpha *= 0.5
+                    step_size[i] *= 0.5
             else:
-                if 1 < 2:
-                    phi0 = v if self.h is None else np.sum(R**2) / 2
-                    phi1 = v_ if self.h is None else np.sum(R_**2) / 2
-                    phi0prime = inc if self.h is None else -np.sum(R**2)
-                    alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
-                if 11 < 2:
-                    alpha *= 0.5
-        else:
-            self.logger.warn("Armijo's backtracking line search failed")
-        return alpha
+                # breakpoint()
+                self.logger.warn("Armijo's backtracking line search failed")
+        return step_size
+
+    def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
+        """Precondition the Hessian matrix to make sure it is positive definite
+
+        Args:
+            H (np.ndarray): the Hessian matrix
+
+        Returns:
+            np.ndarray: the lower triagular decomposition of the preconditioned Hessian
+        """
+        # pre-condition the Hessian
+        try:
+            L = cholesky(H, lower=True)
+        except:
+            beta = 1e-6
+            v = np.min(np.diag(H))
+            tau = 0 if v > 0 else -v + beta
+            I = np.eye(H.shape[0])
+            for _ in range(35):
+                try:
+                    L = cholesky(H + tau * I, lower=True)
+                    break
+                except:
+                    tau = max(2 * tau, beta)
+            else:
+                self.logger.warn("Pre-conditioning the HV Hessian failed")
+        return L
 
     def log(self):
         self.iter_count += 1
@@ -799,8 +833,7 @@ class DpN:
         self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
         self.hist_GD += [self.GD_value]
         self.hist_IGD += [self.IGD_value]
-        if self._constrained:
-            self.hist_R_norm += [np.mean(np.linalg.norm(self.R, axis=1))]
+        self.hist_R_norm += [np.mean(np.linalg.norm(self.R, axis=1))]
 
         if self.iter_count >= 2:
             self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
