@@ -158,10 +158,12 @@ class InvertedGenerationalDistance:
 
     def _cluster_reference_set(self, N: int):
         km = KMedoids(n_clusters=N, random_state=0, method="pam").fit(self.ref)
+        self._idx = km.medoid_indices_
         self._medroids = self.ref[km.medoid_indices_]
 
-    def _matching(self, Y: np.ndarray):
+    def _match(self, Y: np.ndarray):
         N = len(Y)
+        # if the clustering hasn't been done, or the number of approximation points changes
         if not hasattr(self, "_medroids") or len(self._medroids) != N:
             self._cluster_reference_set(N)
         cost = cdist(Y, self._medroids, metric="minkowski", p=self.p)
@@ -182,8 +184,12 @@ class InvertedGenerationalDistance:
         if Y is None:
             assert X is not None
             Y = np.array([self.func(x) for x in X])
-        self._compute_indices(Y)
-        return np.mean(self.D[self._indices, np.arange(self.M)] ** self.p) ** (1 / self.p)
+        if self.cluster_matching:
+            self._match(Y)
+            return np.mean(np.sum((Y - self._medroids[self._medoids_idx]) ** 2, axis=1))
+        else:
+            self._compute_indices(Y)
+            return np.mean(self.D[self._indices, np.arange(self.M)] ** self.p) ** (1 / self.p)
 
     def compute_derivatives(
         self, X: np.ndarray, Y: np.ndarray = None, compute_hessian: bool = True
@@ -201,7 +207,8 @@ class InvertedGenerationalDistance:
                 otherwise, it returns (gradient, )
         """
         # TODO: implement p != 2
-        c = 2 / self.M
+        # c = 2 / self.M
+        c = 2
         dim = X.shape[1]
         if Y is None:
             Y = np.array([self.func(x) for x in X])
@@ -209,7 +216,7 @@ class InvertedGenerationalDistance:
         # Jacobian of the objective function
         J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
         if self.cluster_matching:
-            self._matching(Y)
+            self._match(Y)
             diff = Y - self._medroids[self._medoids_idx]  # (N, n_objective)
         else:
             self._compute_indices(Y)

@@ -172,7 +172,7 @@ ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
 ax2.legend()
 
-plt.savefig(f"2D-example-{mu}.pdf", dpi=1000)
+plt.savefig(f"2D-example_convex-{mu}.pdf", dpi=1000)
 
 # df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
 # df.to_latex(buf=f"2D-example-{mu}.tex", index=False)
