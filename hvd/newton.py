@@ -484,7 +484,7 @@ class DpN:
         g_jac: Callable = None,
         x0: np.ndarray = None,
         max_iters: Union[int, str] = np.inf,
-        xtol: float = 1e-3,
+        xtol: float = 0,
         verbose: bool = True,
     ):
         """
@@ -546,9 +546,9 @@ class DpN:
         # auxiliary variables
         self.iter_count: int = 0
         self.max_iters: int = max_iters
-        self.verbose: bool = verbose
         self.g_tol: float = -1e-8  # threshold for the active method
-        self.eps: float = 1e-10 * np.max(self.upper_bounds - self.lower_bounds)
+        self.verbose: bool = verbose
+        # self.eps: float = 1e-10 * np.max(self.upper_bounds - self.lower_bounds)
         self._initialize_logging()
 
     def _check_constraints(self):
@@ -662,6 +662,37 @@ class DpN:
         # function evaluation
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
 
+    def log(self):
+        self.iter_count += 1
+        self.hist_Y += [self.Y.copy()]
+        self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
+        self.hist_GD += [self.GD_value]
+        self.hist_IGD += [self.IGD_value]
+        self.hist_R_norm += [np.mean(np.linalg.norm(self.R, axis=1))]
+
+        if self.iter_count >= 2:
+            self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
+            self._delta_Y = np.mean(np.sqrt(np.sum((self.hist_Y[-1] - self.hist_Y[-2]) ** 2, axis=1)))
+            self._delta_GD = np.abs(self.hist_GD[-1] - self.hist_GD[-2])
+            self._delta_IGD = np.abs(self.hist_IGD[-1] - self.hist_IGD[-2])
+
+        if self.verbose:
+            self.logger.info(f"iteration {self.iter_count} ---")
+            self.logger.info(f"GD/IGD: {self.GD_value, self.IGD_value}")
+            self.logger.info(f"step size: {self.step_size}")
+            if self._constrained:
+                self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
+
+    def terminate(self) -> bool:
+        if self.iter_count >= self.max_iters:
+            self.stop_dict["iter_count"] = self.iter_count
+
+        if self._delta_X < self.xtol:
+            self.stop_dict["xtol"] = self._delta_X
+            self.stop_dict["iter_count"] = self.iter_count
+
+        return bool(self.stop_dict)
+
     def _compute_indicator_value(self, Y: np.ndarray):
         self.GD_value = self._gd.compute(Y=Y)
         self.IGD_value = self._igd.compute(Y=Y)
@@ -747,7 +778,6 @@ class DpN:
             )
             L = self._precondition_hessian(DR)
             step[i, idx[i]] = -1 * cho_solve((L, True), R_[i].reshape(-1, 1)).ravel()
-            # step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
             R[i, idx[i]] = R_[i]
         return step, R
 
@@ -810,6 +840,10 @@ class DpN:
             np.ndarray: the lower triagular decomposition of the preconditioned Hessian
         """
         # pre-condition the Hessian
+        # w, v = np.linalg.eigh(H)
+        # w[w <= 0] = 1e-8
+        # H_ = v @ np.diag(w) @ v.T
+        # L = cholesky(H_, lower=True)
         try:
             L = cholesky(H, lower=True)
         except:
@@ -826,34 +860,3 @@ class DpN:
             else:
                 self.logger.warn("Pre-conditioning the HV Hessian failed")
         return L
-
-    def log(self):
-        self.iter_count += 1
-        self.hist_Y += [self.Y.copy()]
-        self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
-        self.hist_GD += [self.GD_value]
-        self.hist_IGD += [self.IGD_value]
-        self.hist_R_norm += [np.mean(np.linalg.norm(self.R, axis=1))]
-
-        if self.iter_count >= 2:
-            self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
-            self._delta_Y = np.mean(np.sqrt(np.sum((self.hist_Y[-1] - self.hist_Y[-2]) ** 2, axis=1)))
-            self._delta_GD = np.abs(self.hist_GD[-1] - self.hist_GD[-2])
-            self._delta_IGD = np.abs(self.hist_IGD[-1] - self.hist_IGD[-2])
-
-        if self.verbose:
-            self.logger.info(f"iteration {self.iter_count} ---")
-            self.logger.info(f"GD/IGD: {self.GD_value, self.IGD_value}")
-            self.logger.info(f"step size: {self.step_size}")
-            if self._constrained:
-                self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
-
-    def terminate(self) -> bool:
-        if self.iter_count >= self.max_iters:
-            self.stop_dict["iter_count"] = self.iter_count
-
-        # if self._delta_X < self.xtol:
-        #     self.stop_dict["xtol"] = self._delta_X
-        #     self.stop_dict["iter_count"] = self.iter_count
-
-        return bool(self.stop_dict)
