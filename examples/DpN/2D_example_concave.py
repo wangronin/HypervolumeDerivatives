@@ -27,9 +27,10 @@ def F(x):
     return np.array([1 - np.exp(-np.sum((x - 1) ** 2)), 1 - np.exp(-np.sum((x + 1) ** 2))])
 
 
+# TODO: the objective Hessian can be indefinite; find a systematic way to handle it
+# Also, on concave Pareto front, the overall IGD Hessian can be indefinite.
 Jacobian = jacobian(F)
 Hessian = hessian(F)
-
 
 p = np.linspace(-1, 1, 100)
 ref_x = np.c_[p, p]
@@ -39,7 +40,7 @@ ref -= np.array([0.01, 0.01])
 max_iters = 20
 mu = 10
 
-x0 = np.linspace(-0.4, 0.4, mu)
+x0 = np.linspace(-0.8, 0.8, mu)
 x0 = np.c_[x0, x0] + np.array([0.5, -0.5])
 y0 = np.array([F(_) for _ in x0])
 opt = DpN(
@@ -64,7 +65,6 @@ plt.subplots_adjust(right=0.93, left=0.05)
 
 ax0.plot(X[:, 0], X[:, 1], "g*")
 ax0.plot(x0[:, 0], x0[:, 1], "g.", ms=8, clip_on=False)
-# ax0.add_patch(ciricle)
 ax0.set_xlim([-2, 2])
 ax0.set_ylim([-2, 2])
 ax0.set_title("Decision space")
