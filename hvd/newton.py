@@ -524,7 +524,6 @@ class DpN:
         self.mu = mu  # the population/archive size
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
-        self.ref = ref
         # parameters controlling stop criteria
         self.xtol = xtol
         self.stop_dict: Dict = {}
@@ -538,11 +537,7 @@ class DpN:
         self.g_jac: Callable = g_jac
         self._check_constraints()
         self.X0 = x0
-        # the delta_p performance indicator
-        self._gd = GenerationalDistance(ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian)
-        self._igd = InvertedGenerationalDistance(
-            ref=self.ref, func=self.func, jac=self.jac, hess=self.hessian, cluster_matching=True
-        )
+        self.reference_set = ref
         # auxiliary variables
         self.iter_count: int = 0
         self.max_iters: int = max_iters
@@ -586,6 +581,18 @@ class DpN:
         self.logger: logging.Logger = get_logger(
             logger_id=f"{self.__class__.__name__}",
             console=self.verbose,
+        )
+
+    @property
+    def reference_set(self):
+        return self._ref
+
+    @reference_set.setter
+    def reference_set(self, ref: np.ndarray):
+        self._ref = ref
+        self._gd = GenerationalDistance(ref=ref, func=self.func, jac=self.jac, hess=self.hessian)
+        self._igd = InvertedGenerationalDistance(
+            ref=ref, func=self.func, jac=self.jac, hess=self.hessian, cluster_matching=True
         )
 
     @property
