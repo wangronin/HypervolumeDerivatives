@@ -1,6 +1,5 @@
 import autograd.numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 from autograd import hessian, jacobian
 from matplotlib import rcParams
 
