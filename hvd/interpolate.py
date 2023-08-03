@@ -44,7 +44,7 @@ class ReferenceSetInterpolation:
     def __init__(self, n_objective: int) -> None:
         self.n_objective = n_objective
 
-    def interpolate(self, data: np.ndarray, N: int = 1600) -> np.ndarray:
+    def interpolate(self, data: np.ndarray, N: int = 1600, return_clusters: bool = True) -> np.ndarray:
         # take the non-dominated subset of the input
         data_ = np.array(non_domin_sort(data, only_front_indices=False)[0])
         # remove the outliers first
@@ -52,17 +52,25 @@ class ReferenceSetInterpolation:
         data_ = data_[score != -1]
         # clustering
         clusters = self._cluster(data_)
+
+        # TODO: improve code structure
         out = list()
+        volume = 0
+        ch = list()
         for cluster in clusters:
             # compute the convex hull of `data` first
-            ch = ConvexHull(cluster, qhull_options="Qs")
-            vertices = cluster[ch.vertices]
+            _ch = ConvexHull(cluster, qhull_options="Qs")
+            ch.append(_ch)
+            volume += _ch.volume
+
+        for i, cluster in enumerate(clusters):
+            vertices = cluster[ch[i].vertices]
             # Delaunay triangulation
             tri = Delaunay(vertices)
             out.append(
-                np.vstack([self._interpolate_simplex(vertices[idx], ch.volume, N) for idx in tri.simplices])
+                np.vstack([self._interpolate_simplex(vertices[idx], volume, N) for idx in tri.simplices])
             )
-        return out
+        return out if return_clusters else np.concatenate(out, axis=0)
 
     def _interpolate_simplex(self, vertices: np.ndarray, total_volume: float, N: int) -> np.ndarray:
         """Sample u.a.r. from an N-dimensional simplex

@@ -52,7 +52,7 @@ class NSGA_DpN:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
         self._ea_termination = get_termination("n_gen", n_iters_ea)
         self._ea = AdaptiveEpsilonConstraintHandling(
-            NSGA2(pop_size=200),
+            NSGA2(pop_size=50),
             perc_eps_until=0.5
             # NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5
         )
@@ -84,9 +84,9 @@ class NSGA_DpN:
         X_ea = np.array([p._X for p in res.pop])  # final approximation set of NSGA-II
         Y_ea = np.array([p._F for p in res.pop])  # final approximation set of NSGA-II
         # generation of reference set for DpN
-        reference_set = self._ref_gen.interpolate(Y_ea, N=500)
+        reference_set0 = self._ref_gen.interpolate(Y_ea, N=100, return_clusters=False)
         delta = 1
-        reference_set -= delta
+        reference_set = reference_set0 - delta
         # clear the CPU_time counter since we only need to measure the time taken by HVN
         self.problem.CPU_time = 0
         self._init_newton(self.problem, X_ea, reference_set, self.n_iters_newton)
@@ -98,10 +98,18 @@ class NSGA_DpN:
             reference_set -= delta
             self._newton.reference_set = reference_set
 
-        # return , self.Y, self.stop_dict
         X = self._newton._get_primal_dual(self._newton.X)[0]
         Y = self._newton.Y
         # X, Y, _ = self._newton.run()
         CPU_time_newton = self.problem.CPU_time / 1e9
-        out = dict(X_ea=X_ea, X=X, Y_ea=Y_ea, Y=Y, CPU_time_ea=CPU_time_ea, CPU_time_newton=CPU_time_newton)
+        out = dict(
+            X_ea=X_ea,
+            X=X,
+            Y_ea=Y_ea,
+            Y=Y,
+            CPU_time_ea=CPU_time_ea,
+            CPU_time_newton=CPU_time_newton,
+            reference_set=reference_set,
+            reference_set0=reference_set0,
+        )
         return out
