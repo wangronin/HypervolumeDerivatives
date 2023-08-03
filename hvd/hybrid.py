@@ -1,4 +1,5 @@
 import numpy as np
+from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
 from pymoo.core.problem import ElementwiseProblem
@@ -6,8 +7,9 @@ from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 
-from hvd.newton import DpN
-from hvd.problems import MOOAnalytical
+from .interpolate import ReferenceSetInterpolation
+from .newton import DpN
+from .problems import MOOAnalytical
 
 
 class ProblemWrapper(ElementwiseProblem):
@@ -36,8 +38,10 @@ class NSGA_DpN:
         self.n_decision_vars = problem.n_decision_vars
         self.problem = problem
         self.random_seed = random_seed
-        self._init_ea(n_iters_ea)
-        self._init_newton(problem, n_iters_newton)
+        self.n_iters_ea = n_iters_ea
+        self.n_iters_newton = n_iters_newton
+        self._ref_gen = ReferenceSetInterpolation(n_objective=self.n_objectives)
+        self._init_ea(self.n_iters_ea)
 
     def _init_ea(self, n_iters_ea: int):
         if self.n_objectives == 2:
@@ -48,14 +52,19 @@ class NSGA_DpN:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
         self._ea_termination = get_termination("n_gen", n_iters_ea)
         self._ea = AdaptiveEpsilonConstraintHandling(
-            NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5
+            NSGA2(pop_size=200),
+            perc_eps_until=0.5
+            # NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5
         )
 
-    def _init_newton(self, problem: MOOAnalytical, n_iters_newton: int):
+    def _init_newton(
+        self, problem: MOOAnalytical, X0: np.ndarray, reference_set: np.ndarray, n_iters_newton: int
+    ):
         self._newton = DpN(
             dim=self.n_decision_vars,
             n_objective=self.n_objectives,
-            ref=ref,
+            ref=reference_set,
+            x0=X0,
             func=problem.objective,
             jac=problem.objective_jacobian,
             hessian=problem.objective_hessian,
@@ -64,7 +73,7 @@ class NSGA_DpN:
             lower_bounds=problem.lower_bounds,
             upper_bounds=problem.upper_bounds,
             max_iters=n_iters_newton,
-            verbose=False,
+            verbose=True,
         )
 
     def run(self) -> dict:
@@ -72,14 +81,27 @@ class NSGA_DpN:
             ProblemWrapper(self.problem), self._ea, self._ea_termination, seed=self.random_seed, verbose=False
         )
         CPU_time_ea = self.problem.CPU_time / 1e9
-        X_ea = np.array([p._X for p in res.pop])  # final approximation set of NSGA-III
-        Y_ea = np.array([p._F for p in res.pop])  # final approximation set of NSGA-III
-        # TODO: generation of reference set for DpN
-        self.problem.CPU_time = (
-            0  # clear the CPU_time counter since we only need to measure the time taken by HVN
-        )
-        self._newton.X0 = X_ea
-        X, Y, _ = self._newton.run()
+        X_ea = np.array([p._X for p in res.pop])  # final approximation set of NSGA-II
+        Y_ea = np.array([p._F for p in res.pop])  # final approximation set of NSGA-II
+        # generation of reference set for DpN
+        reference_set = self._ref_gen.interpolate(Y_ea, N=500)
+        delta = 1
+        reference_set -= delta
+        # clear the CPU_time counter since we only need to measure the time taken by HVN
+        self.problem.CPU_time = 0
+        self._init_newton(self.problem, X_ea, reference_set, self.n_iters_newton)
+
+        while not self._newton.terminate():
+            self._newton.newton_iteration()
+            self._newton.log()
+            delta *= 0.5
+            reference_set -= delta
+            self._newton.reference_set = reference_set
+
+        # return , self.Y, self.stop_dict
+        X = self._newton._get_primal_dual(self._newton.X)[0]
+        Y = self._newton.Y
+        # X, Y, _ = self._newton.run()
         CPU_time_newton = self.problem.CPU_time / 1e9
         out = dict(X_ea=X_ea, X=X, Y_ea=Y_ea, Y=Y, CPU_time_ea=CPU_time_ea, CPU_time_newton=CPU_time_newton)
         return out
