@@ -3,7 +3,7 @@ import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cho_solve, cholesky
+from scipy.linalg import block_diag, cho_solve, cholesky, solve
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
@@ -783,8 +783,16 @@ class DpN:
                 if self._constrained
                 else Hess[i]
             )
-            L = self._precondition_hessian(DR)
-            step[i, idx[i]] = -1 * cho_solve((L, True), R_[i].reshape(-1, 1)).ravel()
+            try:
+                step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
+                R[i, idx[i]] = R_[i]
+            except:
+                w, V = np.linalg.eigh(DR)
+                w[np.isclose(w, 0)] = 1e-10
+                D = np.diag(1 / w)
+                step[i, idx[i]] = -1 * (V @ D @ V.T @ R_[i].reshape(-1, 1)).ravel()
+            # L = self._precondition_hessian(DR)
+            # step[i, idx[i]] = -1 * cho_solve((L, True), R_[i].reshape(-1, 1)).ravel()
             R[i, idx[i]] = R_[i]
         return step, R
 
@@ -833,7 +841,6 @@ class DpN:
                     # alpha *= 0.5
                     step_size[i] *= 0.5
             else:
-                # breakpoint()
                 self.logger.warn("Armijo's backtracking line search failed")
         return step_size
 
