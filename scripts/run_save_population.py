@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from pymoo.algorithms.moo.moead import MOEAD
+from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.sms import SMSEMOA
 from pymoo.core.problem import ElementwiseProblem
@@ -27,8 +28,8 @@ class ProblemWrapper(ElementwiseProblem):
         )
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs):
-        out["F"] = self._problem.objective(x)
-        # out["H"] = self._problem.constraint(x)
+        out["F"] = self._problem.objective(x)  # objective value
+        # out["H"] = self._problem.constraint(x) # equality constraint value
 
 
 def minimize(
@@ -71,7 +72,9 @@ def minimize(
 
 
 def get_algorithm(n_objective: int, algorithm_name: str):
-    if algorithm_name == "NSGA-III":
+    if algorithm_name == "NSGA-II":
+        algorithm = NSGA2(pop_size=100)
+    elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
         if n_objective == 2:
             ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
@@ -98,14 +101,15 @@ def get_algorithm(n_objective: int, algorithm_name: str):
 
 
 N = 15
-# for problem_name in ["zdt1", "zdt2"]:
-for i in range(1):
-    # problem = get_problem(problem_name)
-    problem = CONV4()
-    problem = ProblemWrapper(problem)
+for problem_name in ["dtlz1", "dtlz7", "zdt1", "zdt2", "zdt3"]:
+    print(problem_name)
+    # for i in range(1):
+    problem = get_problem(problem_name)
+    # problem = CONV4()
+    # problem = ProblemWrapper(problem)
     termination = get_termination("n_gen", 500)
 
-    for algorithm_name in ("NSGA-III",):
+    for algorithm_name in ("NSGA-II",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name)
         # minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
@@ -113,5 +117,5 @@ for i in range(1):
             for i in range(N)
         )
         data = pd.concat(data, axis=0)
-        # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
-        data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)
+        data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+        # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)
