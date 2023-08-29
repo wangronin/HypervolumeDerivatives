@@ -14,7 +14,7 @@ from .utils import non_domin_sort
 def get_vol(simplex: np.ndarray) -> float:
     """Compute the volume via the Cayley-Menger determinant
     <http://mathworld.wolfram.com/Cayley-MengerDeterminant.html>. One advantage is
-    that it can compute the volume of the simplex indenpendent of the dimension of the
+    that it can compute the volume of the simplex independent of the dimension of the
     space in which it is embedded.
 
     Args:
@@ -84,10 +84,13 @@ class ReferenceSetInterpolation:
             np.ndarray: the uniform samples
         """
         m = len(vertices)
-        N_ = int(np.ceil(N * get_vol(vertices) / total_volume))
-        w = np.c_[np.zeros((N_, 1)), np.sort(np.random.rand(N_, m - 1), axis=1), np.ones((N_, 1))]
-        w = w[:, 1:] - w[:, 0:-1]
-        return w @ vertices
+        try:
+            N_ = int(np.ceil(N * get_vol(vertices) / total_volume))
+            w = np.c_[np.zeros((N_, 1)), np.sort(np.random.rand(N_, m - 1), axis=1), np.ones((N_, 1))]
+            w = w[:, 1:] - w[:, 0:-1]
+            return w @ vertices
+        except:
+            return vertices
 
     def _cluster(self, data: np.ndarray) -> np.ndarray:
         # perform a grid search for the hyperparameters
