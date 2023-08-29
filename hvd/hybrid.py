@@ -23,7 +23,8 @@ class ProblemWrapper(ElementwiseProblem):
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs):
         out["F"] = self._problem.objective(x)
-        out["H"] = self._problem.constraint(x)
+        if hasattr(self._problem, "constraint"):
+            out["H"] = self._problem.constraint(x)
 
 
 class NSGA_DpN:
@@ -47,15 +48,16 @@ class NSGA_DpN:
         if self.n_objectives == 2:
             ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
         elif self.n_objectives == 3:
-            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=12)
+            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=11)
         elif self.n_objectives == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
         self._ea_termination = get_termination("n_gen", n_iters_ea)
-        self._ea = AdaptiveEpsilonConstraintHandling(
-            NSGA2(pop_size=50),
-            perc_eps_until=0.5
-            # NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5
-        )
+        # ea = NSGA2(pop_size=200)
+        ea = NSGA3(pop_size=200, ref_dirs=ref_dirs)
+        if hasattr(self.problem, "constraint"):
+            self._ea = AdaptiveEpsilonConstraintHandling(ea, perc_eps_until=0.5)
+        else:
+            self._ea = ea
 
     def _init_newton(
         self, problem: MOOAnalytical, X0: np.ndarray, reference_set: np.ndarray, n_iters_newton: int
@@ -68,8 +70,8 @@ class NSGA_DpN:
             func=problem.objective,
             jac=problem.objective_jacobian,
             hessian=problem.objective_hessian,
-            h=problem.constraint,
-            h_jac=problem.constraint_jacobian,
+            h=problem.constraint if hasattr(problem, "constraint") else None,
+            h_jac=problem.constraint_jacobian if hasattr(problem, "constraint_jacobian") else None,
             lower_bounds=problem.lower_bounds,
             upper_bounds=problem.upper_bounds,
             max_iters=n_iters_newton,
@@ -78,14 +80,15 @@ class NSGA_DpN:
 
     def run(self) -> dict:
         res = minimize(
-            ProblemWrapper(self.problem), self._ea, self._ea_termination, seed=self.random_seed, verbose=False
+            ProblemWrapper(self.problem), self._ea, self._ea_termination, seed=self.random_seed, verbose=True
         )
         CPU_time_ea = self.problem.CPU_time / 1e9
         X_ea = np.array([p._X for p in res.pop])  # final approximation set of NSGA-II
         Y_ea = np.array([p._F for p in res.pop])  # final approximation set of NSGA-II
         # generation of reference set for DpN
-        reference_set0 = self._ref_gen.interpolate(Y_ea, N=100, return_clusters=False)
+        reference_set0 = self._ref_gen.interpolate(Y_ea, N=400, return_clusters=False)
         delta = 1
+        # shift the reference set
         reference_set = reference_set0 - delta
         # clear the CPU_time counter since we only need to measure the time taken by HVN
         self.problem.CPU_time = 0
@@ -94,6 +97,7 @@ class NSGA_DpN:
         while not self._newton.terminate():
             self._newton.newton_iteration()
             self._newton.log()
+            # exponential decay of the shift
             delta *= 0.5
             reference_set -= delta
             self._newton.reference_set = reference_set

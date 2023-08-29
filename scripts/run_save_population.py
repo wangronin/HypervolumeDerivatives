@@ -1,4 +1,7 @@
 import copy
+import sys
+
+sys.path.insert(0, "./")
 
 import numpy as np
 import pandas as pd
@@ -7,7 +10,7 @@ from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.sms import SMSEMOA
-from pymoo.core.problem import ElementwiseProblem
+from pymoo.core.problem import ElementwiseProblem, Problem
 from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
@@ -18,7 +21,7 @@ pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F] for ind in pop])
 
 
 class ProblemWrapper(ElementwiseProblem):
-    def __init__(self, problem: MOOAnalytical):
+    def __init__(self, problem: MOOAnalytical) -> None:
         self._problem = problem
         super().__init__(
             n_var=problem.n_decision_vars,
@@ -27,9 +30,40 @@ class ProblemWrapper(ElementwiseProblem):
             xu=problem.upper_bounds,
         )
 
-    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs):
+    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
         out["F"] = self._problem.objective(x)  # objective value
         # out["H"] = self._problem.constraint(x) # equality constraint value
+
+
+class ModifiedObjective(Problem):
+    """Modified objective value according to
+
+    Ishibuchi, H.; Matsumoto, T.; Masuyama, N.; Nojima, Y.
+    Effects of dominance resistant solutions on the performance of evolutionary multi-objective
+    and many-objective algorithms. In Proceedings of the Genetic and Evolutionary Computation
+    Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020
+
+    """
+
+    def __init__(self, problem: Problem) -> None:
+        self._problem = problem
+        self._alpha = 0.02
+        super().__init__(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
+        )
+
+    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
+        self._problem._evaluate(x, out, *args, **kwargs)
+        F = out["F"]
+        out["F"] = (1 - self._alpha) * F + self._alpha * np.tile(
+            F.sum(axis=1).reshape(-1, 1), (1, self.n_obj)
+        ) / self.n_obj
+
+    def pareto_front(self, *args, **kwargs):
+        return self._problem.pareto_front(*args, **kwargs)
 
 
 def minimize(
@@ -101,12 +135,12 @@ def get_algorithm(n_objective: int, algorithm_name: str):
 
 
 N = 15
-for problem_name in ["dtlz1", "dtlz7", "zdt1", "zdt2", "zdt3"]:
+for problem_name in ["dtlz2", "dtlz7", "zdt1", "zdt3"]:
     print(problem_name)
-    # for i in range(1):
-    problem = get_problem(problem_name)
+    problem = ModifiedObjective(get_problem(problem_name))
     # problem = CONV4()
     # problem = ProblemWrapper(problem)
+
     termination = get_termination("n_gen", 500)
 
     for algorithm_name in ("NSGA-II",):

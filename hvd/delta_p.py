@@ -212,7 +212,6 @@ class InvertedGenerationalDistance:
         dim = X.shape[1]
         if Y is None:
             Y = np.array([self.func(x) for x in X])
-
         # Jacobian of the objective function
         J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
         if self.cluster_matching:
