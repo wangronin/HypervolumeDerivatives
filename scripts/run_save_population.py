@@ -10,14 +10,15 @@ from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.sms import SMSEMOA
+from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
 from pymoo.core.problem import ElementwiseProblem, Problem
 from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 
-from hvd.problems import CONV4, MOOAnalytical
+from hvd.problems import CF9, CONV4, UF7, UF8, MOOAnalytical
 
-pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F] for ind in pop])
+pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 
 
 class ProblemWrapper(ElementwiseProblem):
@@ -28,21 +29,23 @@ class ProblemWrapper(ElementwiseProblem):
             n_obj=problem.n_objectives,
             xl=problem.lower_bounds,
             xu=problem.upper_bounds,
+            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
+            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
         )
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
         out["F"] = self._problem.objective(x)  # objective value
-        # out["H"] = self._problem.constraint(x) # equality constraint value
+        if hasattr(self._problem, "constraint"):
+            out["H"] = self._problem.constraint(x)  # equality constraint value
 
 
 class ModifiedObjective(Problem):
-    """Modified objective value according to
+    """Modified objective function based on the following paper:
 
     Ishibuchi, H.; Matsumoto, T.; Masuyama, N.; Nojima, Y.
     Effects of dominance resistant solutions on the performance of evolutionary multi-objective
     and many-objective algorithms. In Proceedings of the Genetic and Evolutionary Computation
-    Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020
-
+    Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020.
     """
 
     def __init__(self, problem: Problem) -> None:
@@ -53,6 +56,8 @@ class ModifiedObjective(Problem):
             n_obj=problem.n_obj,
             xl=problem.xl,
             xu=problem.xu,
+            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
+            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
         )
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
@@ -62,15 +67,21 @@ class ModifiedObjective(Problem):
             F.sum(axis=1).reshape(-1, 1), (1, self.n_obj)
         ) / self.n_obj
 
-    def pareto_front(self, *args, **kwargs):
-        return self._problem.pareto_front(*args, **kwargs)
+    # def pareto_front(self, *args, **kwargs):
+    # return self._problem.pareto_front(*args, **kwargs)
 
 
 def minimize(
     problem, algorithm, termination=None, copy_algorithm=True, copy_termination=True, run_id=None, **kwargs
 ):
     data = []
-    columns = [f"x{i}" for i in range(1, problem.n_var + 1)] + [f"f{i}" for i in range(1, problem.n_obj + 1)]
+    columns = (
+        [f"x{i}" for i in range(1, problem.n_var + 1)]
+        + [f"f{i}" for i in range(1, problem.n_obj + 1)]
+        + [f"h{i}" for i in range(1, problem.n_eq_constr + 1)]
+        + [f"g{i}" for i in range(1, problem.n_ieq_constr + 1)]
+    )
+
     # create a copy of the algorithm object to ensure no side-effects
     if copy_algorithm:
         algorithm = copy.deepcopy(algorithm)
@@ -131,16 +142,18 @@ def get_algorithm(n_objective: int, algorithm_name: str):
         )
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=100)
+    if 1 < 2:
+        algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.5)
     return algorithm
 
 
 N = 15
-for problem_name in ["dtlz2", "dtlz7", "zdt1", "zdt3"]:
+# for problem_name in ["dtlz2", "dtlz7", "zdt1", "zdt3"]:
+for problem in [CF9()]:
+    problem_name = problem.__class__.__name__
     print(problem_name)
-    problem = ModifiedObjective(get_problem(problem_name))
-    # problem = CONV4()
-    # problem = ProblemWrapper(problem)
-
+    # problem = ModifiedObjective(get_problem(problem_name))
+    problem = ModifiedObjective(ProblemWrapper(problem))
     termination = get_termination("n_gen", 500)
 
     for algorithm_name in ("NSGA-II",):
@@ -151,5 +164,6 @@ for problem_name in ["dtlz2", "dtlz7", "zdt1", "zdt3"]:
             for i in range(N)
         )
         data = pd.concat(data, axis=0)
-        data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+        # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)
+        data.to_csv(f"./data/{problem_name}_{algorithm_name}.csv", index=False)
