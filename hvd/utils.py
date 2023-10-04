@@ -559,7 +559,7 @@ def non_domin_sort(
     else:
         objs_gen = map(lambda x: (x, tuple(get_objectives(x))), decisions)
 
-    for (index, (decision, fitness)) in enumerate(objs_gen):
+    for index, (decision, fitness) in enumerate(objs_gen):
         objs_dict[fitness].append((index, decision))
 
     total_unique_objs = 0
@@ -601,7 +601,7 @@ def non_domin_sort(
         total_decisions = sum(map(len, (objs_dict[objs] for objs in objs_dict)))
         fronts = list(range(total_decisions))
         for objs in unique_objs_and_fronts:
-            for (index, dec) in objs_dict[objs["objs"]]:
+            for index, dec in objs_dict[objs["objs"]]:
                 fronts[index] = objs["front"]
         fronts = np.array(tuple(fronts))
         fronts = {i: np.nonzero(fronts == i)[0] for i in np.unique(fronts)}

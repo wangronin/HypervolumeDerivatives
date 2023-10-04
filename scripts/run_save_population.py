@@ -16,7 +16,7 @@ from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 
-from hvd.problems import CF9, CONV4, UF7, UF8, MOOAnalytical
+from hvd.problems import CF9, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3, MOOAnalytical
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 
@@ -124,7 +124,7 @@ def get_algorithm(n_objective: int, algorithm_name: str):
         if n_objective == 2:
             ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
         elif n_objective == 3:
-            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=12)
+            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=20)
         elif n_objective == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
         algorithm = NSGA3(pop_size=400, ref_dirs=ref_dirs)
@@ -143,20 +143,21 @@ def get_algorithm(n_objective: int, algorithm_name: str):
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=100)
     if 1 < 2:
-        algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.5)
+        algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
     return algorithm
 
 
 N = 15
 # for problem_name in ["dtlz2", "dtlz7", "zdt1", "zdt3"]:
-for problem in [CF9()]:
+for problem in [Eq1DTLZ2(), Eq1DTLZ3()]:
     problem_name = problem.__class__.__name__
     print(problem_name)
     # problem = ModifiedObjective(get_problem(problem_name))
-    problem = ModifiedObjective(ProblemWrapper(problem))
-    termination = get_termination("n_gen", 500)
+    # problem = ModifiedObjective(ProblemWrapper(problem))
+    problem = ProblemWrapper(problem)
+    termination = get_termination("n_gen", 1000)
 
-    for algorithm_name in ("NSGA-II",):
+    for algorithm_name in ("NSGA-III",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name)
         # minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
