@@ -13,6 +13,8 @@ from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .utils import get_logger, non_domin_sort, set_bounds
 
+np.seterr(divide="ignore", invalid="ignore")
+
 __authors__ = ["Hao Wang"]
 
 
@@ -205,6 +207,8 @@ class HVN:
         return H - tau * I
 
     def _compute_G(self, X: np.ndarray) -> np.ndarray:
+        # TODO: correct it for active set method
+        # `_compute_G`` -> `_compute_R`
         N = len(X)
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
@@ -592,7 +596,7 @@ class DpN:
         self._ref = ref
         self._gd = GenerationalDistance(ref=ref, func=self.func, jac=self.jac, hess=self.hessian)
         self._igd = InvertedGenerationalDistance(
-            ref=ref, func=self.func, jac=self.jac, hess=self.hessian, cluster_matching=True
+            ref=ref, func=self.func, jac=self.jac, hess=self.hessian, cluster_matching=True, recursive=False
         )
 
     @property
@@ -662,14 +666,17 @@ class DpN:
     def newton_iteration(self):
         self._compute_indicator_value(self.Y)
         self.step, self.R = self._compute_netwon_step(X=self.X, Y=self.Y)
+        self.step, self.max_step_size = self._handle_box_constraint(self.X, self.step)
         # backtracking line search for the step size
-        self.step_size = self._line_search(self.X, self.step, R=self.R)
+        self.step_size = self._line_search(self.X, self.step, self.R, self.max_step_size)
         # Newton iteration
         self.X += self.step_size.reshape(-1, 1) * self.step
         # function evaluation
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
 
     def log(self):
+        # gd_value = self._gd_perf.compute(self.Y)
+        # igd_value = self._igd_perf.compute(self.Y)
         self.iter_count += 1
         self.hist_Y += [self.Y.copy()]
         self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
@@ -731,8 +738,9 @@ class DpN:
         # inequality constraint function value, if exists
         if self.g is not None:
             cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
-            active_indices = [v > self.g_tol for v in cstr_value]  # (N, q, dim)
+            active_indices = [v <= 0 for v in cstr_value]  # (N, q)
             # gradients of the inequality constraints
+            # TODO: only compute the gradient for active ineq. cstr.
             H = [self.g_jac(x).reshape(self.q, -1) for x in primal_vars]  # (N, q, dim)
 
         # equality constraint function value, if exists
@@ -749,7 +757,7 @@ class DpN:
                 idx if active_indices is None else [np.r_[active_indices[i], idx[i]] for i in range(N)]
             )
 
-        R = grad  # unconstrained cases
+        R = grad  # the unconstrained case
         if self._constrained:
             # the Jacobian of the inequalities
             H = [H[i][idx, :] for i, idx in enumerate(active_indices)]
@@ -758,7 +766,6 @@ class DpN:
                 np.r_[grad[i] + np.einsum("j,jk->k", dual_vars[i, idx], H[i]), cstr_value[i, idx]]
                 for i, idx in enumerate(active_indices)
             ]
-
         # the indices indicating which primal-dual variables are active
         active_indices = (
             [[True] * self.dim_primal] * N
@@ -776,6 +783,7 @@ class DpN:
         grad, Hess = self.active_indicator.compute_derivatives(primal_vars, Y)
         # the root-finding problem and the gradient of the equality constraints
         R_, H, idx = self._compute_R(X, Y, grad=grad)
+        self.norm_grad = list()
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
             DR = (
@@ -783,55 +791,78 @@ class DpN:
                 if self._constrained
                 else Hess[i]
             )
-            try:
-                step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
-                R[i, idx[i]] = R_[i]
-            except:
-                w, V = np.linalg.eigh(DR)
-                w[np.isclose(w, 0)] = 1e-10
-                D = np.diag(1 / w)
-                step[i, idx[i]] = -1 * (V @ D @ V.T @ R_[i].reshape(-1, 1)).ravel()
+            with warnings.catch_warnings():
+                warnings.filterwarnings("error")
+                try:
+                    # self.norm_grad.append(DR @ R_[i].reshape(-1, 1) / np.linalg.norm(R_[i]))
+                    step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
+                    R[i, idx[i]] = R_[i]
+                except Exception as err:
+                    # in case of indefinite or singluar Hessian
+                    w, V = np.linalg.eigh(DR)
+                    w[np.isclose(w, 0)] = 1e-10
+                    D = np.diag(1 / w)
+                    step[i, idx[i]] = -1 * (V @ D @ V.T @ R_[i].reshape(-1, 1)).ravel()
+                    R[i, idx[i]] = R_[i]
+
+            # TODO: figure out the following preconditioning is needed
             # L = self._precondition_hessian(DR)
             # step[i, idx[i]] = -1 * cho_solve((L, True), R_[i].reshape(-1, 1)).ravel()
-            R[i, idx[i]] = R_[i]
+            # R[i, idx[i]] = R_[i]
+            # self.norm_grad.append((L @ L.T) @ R_[i].reshape(-1, 1) / np.linalg.norm(R_[i]))
         return step, R
 
-    def _line_search(self, X: np.ndarray, step: np.ndarray, R: np.ndarray) -> float:
+    def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        primal_vars = self._get_primal_dual(X)[0]
+        step_primal = step[:, : self.dim_primal]
+        normal_vectors = np.c_[np.eye(self.dim_primal), -1 * np.eye(self.dim_primal)]
+        # calculate the maximal step-size
+        dist = np.c_[
+            np.abs(primal_vars - self.lower_bounds),
+            np.abs(self.upper_bounds - primal_vars),
+        ]
+        v = step_primal @ normal_vectors
+        s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
+        max_step_size = np.array([min(1, np.min(_)) for _ in s])
+        max_step_size[max_step_size == 0] = 1
+        # project Newton's direction onto the box boundary
+        # idx = max_step_size == 0
+        # if np.any(idx) > 0:
+        #     proj_dim = [np.argmin(_) for _ in s[idx]]
+        #     proj_axis = normal_vectors[:, proj_dim]
+        #     step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
+        #     step[:, : self.dim_primal] = step_primal
+        #     # re-calculate the `max_step_size` for projected directions
+        #     v = step_primal[idx] @ normal_vectors
+        #     s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
+        #     max_step_size[idx] = np.array([min(1, np.min(_)) for _ in s])
+        return step, max_step_size
+
+    def _line_search(
+        self, X: np.ndarray, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray
+    ) -> float:
         """backtracking line search with Armijo's condition"""
-        # TODO: ad-hoc! to solve this in the further using a high precision numerical library
-        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
-        # the step-size control
         c = 1e-5
         N_ = len(X)
-        if np.any(np.isclose(step, 0)):
+        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
+        # the step-size control
+        if np.all(np.isclose(step, 0)):
             return np.ones(N_)
 
-        primal_vars = self._get_primal_dual(X)[0]
-        normal_vectors = np.c_[np.eye(self.dim_primal * N_), -1 * np.eye(self.dim_primal * N_)]
-        # calculate the maximal step-size
-        dist = np.r_[
-            np.abs(primal_vars.ravel() - np.tile(self.lower_bounds, N_)),
-            np.abs(np.tile(self.upper_bounds, N_) - primal_vars.ravel()),
-        ]
-        v = step[:, : self.dim_primal].ravel() @ normal_vectors
-        alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
-        step_size = np.array([alpha] * N_, dtype=float)
-
+        step_size = max_step_size
         for i in range(N_):
             for _ in range(6):
                 X_ = X.copy()
                 X_[i] += step_size[i] * step[i]
-                # if self._constrained:
-                R_ = np.concatenate(self._compute_R(X_)[0])
-                cond = np.linalg.norm(R_) <= (1 - c * alpha) * np.linalg.norm(R.ravel())
-                # else:
-                #     v = self.active_indicator.compute(self._get_primal_dual(X)[0])
-                #     v_ = self.active_indicator.compute(self._get_primal_dual(X_)[0])
-                #     inc = np.inner(R[i].ravel(), step[i].ravel())
-                #     cond = v_ - v <= c * alpha * inc
+                # TODO: maybe pass in the `grad` to avoid computing the re-matching?
+                R_ = self._compute_R(X_)[0][i]
+                # Armijo–Goldstein condition
+                # assert np.isclose(np.linalg.norm(R[i]), -np.inner(step[i], self.norm_grad[i].ravel()))
+                cond = np.linalg.norm(R_) <= (1 - c * step_size[i]) * np.linalg.norm(R[i])
                 if cond:
                     break
                 else:
+                    # TODO: correct this part
                     # if 11 < 2:
                     #     phi0 = v if self.h is None else np.sum(R**2) / 2
                     #     phi1 = v_ if self.h is None else np.sum(R_**2) / 2

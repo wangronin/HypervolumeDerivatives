@@ -1,4 +1,8 @@
+import sys
+
 import matplotlib.pyplot as plt
+
+sys.path.insert(0, "./")
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
@@ -89,6 +93,7 @@ opt = DpN(
     max_iters=max_iters,
     type="igd",
     verbose=True,
+    pareto_front=ref,
 )
 X, Y, stop = opt.run()
 
@@ -157,6 +162,7 @@ x_vals = np.array([0, 6])
 y_vals = 6 - x_vals
 ax1.plot(Y[:, 0], Y[:, 1], "g*")
 ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=8)
+ax1.plot(ref[:, 0], ref[:, 1], "k.", ms=1)
 ax1.plot(x_vals, y_vals, "r--")
 ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")

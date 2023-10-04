@@ -1,7 +1,15 @@
+# import autograd as ad
 import autograd.numpy as np
+
+# import numpy as np
 from autograd import hessian, jacobian
 
 from .utils import timeit
+
+# from pymoo.problems.multi import ZDT1
+
+
+__author__ = ["Hao Wang"]
 
 
 def _cumprod(x):
@@ -40,13 +48,15 @@ class MOOAnalytical:
 
 
 class ConstrainedMOOAnalytical(MOOAnalytical):
+    n_eq_constr = 0
+    n_ieq_constr = 0
+
     def __init__(self):
         super().__init__()
-        self.n_eq_constr = 0
-        self.n_ieq_constr = 0
         self._constraint_jacobian = jacobian(self.constraint) if hasattr(self, "constraint") else None
         self._constraint_hessian = hessian(self.constraint) if hasattr(self, "constraint") else None
 
+    # TODO: `constraint` -> `eq_constraint`; add one more `ieq_constraint`
     @timeit
     def constraint_jacobian(self, x: np.ndarray) -> np.ndarray:
         return self._constraint_jacobian(x)
@@ -55,92 +65,8 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
     def constraint_hessian(self, x: np.ndarray) -> np.ndarray:
         return self._constraint_hessian(x)
 
-
-class UF7(MOOAnalytical):
-    def __init__(self, n_decision_vars: int = 30) -> None:
-        self.n_objectives = 2
-        self.n_decision_vars = n_decision_vars
-        self.lower_bounds = np.r_[0, np.zeros(self.n_decision_vars - 1) - 1]
-        self.upper_bounds = np.ones(self.n_decision_vars)
-        self.encoding = np.ones(self.n_decision_vars)
-        super().__init__()
-
-    @timeit
-    def objective(self, x: np.ndarray) -> np.ndarray:
-        x = np.atleast_2d(x)
-        N = x.shape[0]
-        D = self.n_decision_vars
-        J1 = np.arange(3, self.n_decision_vars, 2) - 1
-        J2 = np.arange(2, self.n_decision_vars + 2, 2) - 1
-        y = x - np.sin(6 * np.pi * np.tile(x[:, [0]], (1, D)) + np.tile(np.arange(D) + 1, (N, 1)) * np.pi / D)
-        return np.vstack(
-            [
-                x[:, 0] ** 0.2 + 2 * np.mean(y[:, J1] ** 2, 1),
-                1 - x[:, 0] ** 0.2 + 2 * np.mean(y[:, J2] ** 2, 1),
-            ]
-        ).T
-
-    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
-        f = np.linspace(0, 1, N)
-        return np.c_[f, 1 - f]
-
-
-class UF8(MOOAnalytical):
-    def __init__(self, n_decision_vars: int = 30) -> None:
-        self.n_objectives = 3
-        self.n_decision_vars = n_decision_vars
-        self.lower_bounds = np.r_[0, 0, np.zeros(self.n_decision_vars - 2) - 2]
-        self.upper_bounds = np.r_[1, 1, np.zeros(self.n_decision_vars - 2) + 2]
-        self.encoding = np.ones(self.n_decision_vars)
-        super().__init__()
-
-    @timeit
-    def objective(self, x: np.ndarray) -> np.ndarray:
-        x = np.atleast_2d(x)
-        N = x.shape[0]
-        D = self.n_decision_vars
-        J1 = np.arange(4, D + 1, 3) - 1
-        J2 = np.arange(5, D + 1, 3) - 1
-        J3 = np.arange(3, D + 1, 3) - 1
-        y = x - 2 * np.tile(x[:, [1]], (1, D)) * np.sin(
-            2 * np.pi * np.tile(x[:, [0]], (1, D)) + np.tile(np.arange(D) + 1, (N, 1)) * np.pi / D
-        )
-        return np.vstack(
-            [
-                np.cos(0.5 * x[:, 0] * np.pi) * np.cos(0.5 * x[:, 1] * np.pi) + 2 * np.mean(y[:, J1] ** 2, 1),
-                np.cos(0.5 * x[:, 0] * np.pi) * np.sin(0.5 * x[:, 1] * np.pi) + 2 * np.mean(y[:, J2] ** 2, 1),
-                np.sin(0.5 * x[:, 0] * np.pi) + 2 * np.mean(y[:, J3] ** 2, 1),
-            ]
-        ).T
-
-    # def get_pareto_front(self, N: int = 1000) -> np.ndarray:
-    #     R = UniformPoint(N, 3)
-    #     return R / np.tile(np.sqrt(np.sum(R**2, 1)), (1, 3))
-
-
-class CF9(UF8, ConstrainedMOOAnalytical):
-    def __init__(self, n_decision_vars: int = 10) -> None:
-        super().__init__(n_decision_vars)
-        self.n_eq_constr = 1
-
-    @timeit
-    def objective(self, x: np.ndarray) -> np.ndarray:
-        x = np.atleast_2d(x)
-        np.clip(x, self.lower_bounds, self.upper_bounds)
-        return super().objective(x)
-
-    @timeit
-    def constraint(self, x: np.ndarray) -> float:
-        F = self.objective(x)
-        return (
-            1
-            - (F[:, 0] ** 2 + F[:, 1] ** 2) / (1 - F[:, 2] ** 2)
-            + 3 * np.sin(2 * np.pi * ((F[:, 0] ** 2 - F[:, 1] ** 2) / (1 - F[:, 2] ** 2) + 1))
-        )
-
-    # def get_pareto_front(self, N: int = 1000) -> np.ndarray:
-    #     R = UniformPoint(N, 3)
-    #     return R / np.tile(np.sqrt(np.sum(R**2, 1)), (1, 3))
+    def constraint(self, x: np.ndarray) -> np.ndarray:
+        pass
 
 
 class _DTLZ(MOOAnalytical):
@@ -168,7 +94,9 @@ class _DTLZ(MOOAnalytical):
         return y
 
 
-class DTLZ1(_DTLZ):
+class DTLZ1(_DTLZ, ConstrainedMOOAnalytical):
+    n_eq_constr = 22
+
     @timeit
     def objective(self, x: np.ndarray) -> np.ndarray:
         D = len(x)
@@ -181,19 +109,13 @@ class DTLZ1(_DTLZ):
             * np.concatenate([[1], 1 - x[0 : M - 1][::-1]])
         )
 
+    @timeit
+    def constraint(self, x: np.ndarray) -> float:
+        return np.vstack([self.lower_bounds - x, x - self.upper_bounds])
+
 
 class Eq1DTLZ1(DTLZ1, ConstrainedMOOAnalytical):
-    # @timeit
-    # def objective(self, x: np.ndarray) -> np.ndarray:
-    #     D = len(x)
-    #     M = self.n_objectives
-    #     g = 100 * (D - M + 1 + np.sum((x[M - 1 :] - 0.5) ** 2 - np.cos(20.0 * np.pi * (x[M - 1 :] - 0.5))))
-    #     return (
-    #         0.5
-    #         * (1 + g)
-    #         * _cumprod(np.concatenate([[1], x[0 : M - 1]]))[::-1]
-    #         * np.concatenate([[1], 1 - x[0 : M - 1][::-1]])
-    #     )
+    n_eq_constr = 1
 
     @timeit
     def constraint(self, x: np.ndarray) -> float:
@@ -203,7 +125,9 @@ class Eq1DTLZ1(DTLZ1, ConstrainedMOOAnalytical):
         return np.abs(np.sum(xx**2) - r**2) - 1e-4
 
 
-class Eq1DTLZ2(ConstrainedMOOAnalytical):
+class DTLZ2(_DTLZ, ConstrainedMOOAnalytical):
+    n_eq_constr = 22
+
     @timeit
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
@@ -216,13 +140,23 @@ class Eq1DTLZ2(ConstrainedMOOAnalytical):
 
     @timeit
     def constraint(self, x: np.ndarray) -> float:
+        return np.vstack([self.lower_bounds - x, x - self.upper_bounds])
+
+
+class Eq1DTLZ2(DTLZ2, ConstrainedMOOAnalytical):
+    n_eq_constr = 1
+
+    @timeit
+    def constraint(self, x: np.ndarray) -> float:
         M = self.n_objectives
         r = 0.4
         xx = x[0 : M - 1] - 0.5
         return np.abs(np.sum(xx**2) - r**2) - 1e-4
 
 
-class Eq1DTLZ3(ConstrainedMOOAnalytical):
+class DTLZ3(_DTLZ, ConstrainedMOOAnalytical):
+    n_eq_constr = 22
+
     @timeit
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
@@ -236,13 +170,23 @@ class Eq1DTLZ3(ConstrainedMOOAnalytical):
 
     @timeit
     def constraint(self, x: np.ndarray) -> float:
+        return np.vstack([self.lower_bounds - x, x - self.upper_bounds])
+
+
+class Eq1DTLZ3(DTLZ3, ConstrainedMOOAnalytical):
+    n_eq_constr = 1
+
+    @timeit
+    def constraint(self, x: np.ndarray) -> float:
         M = self.n_objectives
         r = 0.4
         xx = x[0 : M - 1] - 0.5
         return np.abs(np.sum(xx**2) - r**2) - 1e-4
 
 
-class Eq1DTLZ4(ConstrainedMOOAnalytical):
+class DTLZ4(_DTLZ, ConstrainedMOOAnalytical):
+    n_eq_constr = 22
+
     @timeit
     def objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_objectives
@@ -254,6 +198,12 @@ class Eq1DTLZ4(ConstrainedMOOAnalytical):
             * np.concatenate([[1], np.sin(x_[::-1] * np.pi / 2)])
         )
 
+    @timeit
+    def constraint(self, x: np.ndarray) -> float:
+        return np.vstack([self.lower_bounds - x, x - self.upper_bounds])
+
+
+class Eq1DTLZ4(DTLZ4, ConstrainedMOOAnalytical):
     @timeit
     def constraint(self, x: np.ndarray) -> float:
         M = self.n_objectives
@@ -329,3 +279,151 @@ class CONV4(MOOAnalytical):
         else:
             y = np.array([np.sum((x - a[i]) ** 2) for i in range(4)])
         return y
+
+
+class UF7(MOOAnalytical):
+    def __init__(self, n_decision_vars: int = 30) -> None:
+        self.n_objectives = 2
+        self.n_decision_vars = n_decision_vars
+        self.lower_bounds = np.r_[0, np.zeros(self.n_decision_vars - 1) - 1]
+        self.upper_bounds = np.ones(self.n_decision_vars)
+        self.encoding = np.ones(self.n_decision_vars)
+        super().__init__()
+
+    @timeit
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        x = np.atleast_2d(x)
+        N = x.shape[0]
+        D = self.n_decision_vars
+        J1 = np.arange(3, self.n_decision_vars, 2) - 1
+        J2 = np.arange(2, self.n_decision_vars + 2, 2) - 1
+        y = x - np.sin(6 * np.pi * np.tile(x[:, [0]], (1, D)) + np.tile(np.arange(D) + 1, (N, 1)) * np.pi / D)
+        return np.hstack(
+            [
+                x[:, 0] ** 0.2 + 2 * np.mean(y[:, J1] ** 2, 1),
+                1 - x[:, 0] ** 0.2 + 2 * np.mean(y[:, J2] ** 2, 1),
+            ]
+        ).T
+
+    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
+        f = np.linspace(0, 1, N)
+        return np.c_[f, 1 - f]
+
+
+class UF8(MOOAnalytical):
+    def __init__(self, n_decision_vars: int = 30) -> None:
+        self.n_objectives = 3
+        self.n_decision_vars = n_decision_vars
+        self.lower_bounds = np.r_[0, 0, np.zeros(self.n_decision_vars - 2) - 2]
+        self.upper_bounds = np.r_[1, 1, np.zeros(self.n_decision_vars - 2) + 2]
+        self.encoding = np.ones(self.n_decision_vars)
+        super().__init__()
+
+    @timeit
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        x = np.atleast_2d(x)
+        N = x.shape[0]
+        D = self.n_decision_vars
+        J1 = np.arange(4, D + 1, 3) - 1
+        J2 = np.arange(5, D + 1, 3) - 1
+        J3 = np.arange(3, D + 1, 3) - 1
+        y = x - 2 * np.tile(x[:, [1]], (1, D)) * np.sin(
+            2 * np.pi * np.tile(x[:, [0]], (1, D)) + np.tile(np.arange(D) + 1, (N, 1)) * np.pi / D
+        )
+        return np.hstack(
+            [
+                np.cos(0.5 * x[:, 0] * np.pi) * np.cos(0.5 * x[:, 1] * np.pi) + 2 * np.mean(y[:, J1] ** 2, 1),
+                np.cos(0.5 * x[:, 0] * np.pi) * np.sin(0.5 * x[:, 1] * np.pi) + 2 * np.mean(y[:, J2] ** 2, 1),
+                np.sin(0.5 * x[:, 0] * np.pi) + 2 * np.mean(y[:, J3] ** 2, 1),
+            ]
+        ).T
+
+
+class CF2(ConstrainedMOOAnalytical):
+    """Constrained Problem 2 in CEC 09 benchmark
+
+    Reference:
+        Zhang, Qingfu, Aimin Zhou, Shizheng Zhao, Ponnuthurai Nagaratnam Suganthan, Wudong Liu,
+        and Santosh Tiwari. "Multiobjective optimization test instances for the CEC 2009 special
+        session and competition." (2008): 1-30.
+    """
+
+    def __init__(self, n_decision_vars: int = 10) -> None:
+        self.n_objectives = 2
+        self.n_decision_vars = n_decision_vars
+        self.lower_bounds = np.r_[0, np.zeros(self.n_decision_vars - 1) - 1]
+        self.upper_bounds = np.ones(self.n_decision_vars)
+        self.encoding = np.ones(self.n_decision_vars)
+        super().__init__()
+
+    @timeit
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        x = np.atleast_2d(x)
+        x = np.clip(x, self.lower_bounds, self.upper_bounds)
+        N = x.shape[0]
+        D = self.n_decision_vars
+        J1 = np.arange(3, self.n_decision_vars, 2) - 1
+        J2 = np.arange(2, self.n_decision_vars + 2, 2) - 1
+        return np.hstack(
+            [
+                x[:, 0]
+                + 2
+                * np.mean(
+                    (
+                        x[:, J1]
+                        - np.sin(
+                            6 * np.pi * np.tile(x[:, [0]], (1, len(J1))) + np.tile(J1 + 1, (N, 1)) * np.pi / D
+                        )
+                    )
+                    ** 2,
+                    1,
+                ),
+                1
+                - np.sqrt(x[:, 0])
+                + 2
+                * np.mean(
+                    (
+                        x[:, J2]
+                        - np.cos(
+                            6 * np.pi * np.tile(x[:, [0]], (1, len(J2))) + np.tile(J2 + 1, (N, 1)) * np.pi / D
+                        )
+                    )
+                    ** 2,
+                    1,
+                ),
+            ]
+        )
+
+    @timeit
+    def constraint(self, x: np.ndarray) -> np.ndarray:
+        # TODO: this function is calling the objective. Figure out a more efficient impplementation
+        y = np.atleast_2d(self.objective(x))
+        t = y[:, 1] + np.sqrt(y[:, 0]) - np.sin(2 * np.pi * (np.sqrt(y[:, 0]) - y[:, 1] + 1)) - 1
+        return -t / (1 + np.exp(4 * abs(t)))
+
+    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
+        f = np.linspace(0, 1, N)
+        idx = (1 / 16 <= f) & (f <= 4 / 16) | (9 / 16 <= f) & (f <= 1)
+        f = f[idx]
+        return np.c_[f, 1 - np.sqrt(f)]
+
+
+class CF9(UF8, ConstrainedMOOAnalytical):
+    def __init__(self, n_decision_vars: int = 10) -> None:
+        super().__init__(n_decision_vars)
+        self.n_eq_constr = 1
+
+    @timeit
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        x = np.atleast_2d(x)
+        np.clip(x, self.lower_bounds, self.upper_bounds)
+        return super().objective(x)
+
+    @timeit
+    def constraint(self, x: np.ndarray) -> float:
+        F = self.objective(x)
+        return (
+            1
+            - (F[:, 0] ** 2 + F[:, 1] ** 2) / (1 - F[:, 2] ** 2)
+            + 3 * np.sin(2 * np.pi * ((F[:, 0] ** 2 - F[:, 1] ** 2) / (1 - F[:, 2] ** 2) + 1))
+        )
