@@ -15,6 +15,7 @@ from pymoo.core.problem import ElementwiseProblem, Problem
 from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
+from scipy.io import savemat
 
 from hvd.problems import CF9, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3, MOOAnalytical
 
@@ -142,29 +143,33 @@ def get_algorithm(n_objective: int, algorithm_name: str):
         )
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=100)
-    if 1 < 2:
+    if 11 < 2:
         algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
     return algorithm
 
 
-N = 15
-# for problem_name in ["dtlz2", "dtlz7", "zdt1", "zdt3"]:
-for problem in [Eq1DTLZ2(), Eq1DTLZ3()]:
-    problem_name = problem.__class__.__name__
+N = 30
+for problem_name in ["zdt1", "zdt2", "zdt3", "zdt4", "zdt6"]:
+    # for problem_name in [f"dtlz{i}" for i in range(1, 8)]:
+    # problem_name = problem.__class__.__name__
     print(problem_name)
     # problem = ModifiedObjective(get_problem(problem_name))
     # problem = ModifiedObjective(ProblemWrapper(problem))
-    problem = ProblemWrapper(problem)
-    termination = get_termination("n_gen", 1000)
+    # problem = ProblemWrapper(problem)
+    problem = get_problem(problem_name)
+    termination = get_termination("n_gen", 500)
 
     for algorithm_name in ("NSGA-III",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name)
-        # minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
-            delayed(minimize)(problem, algorithm, termination, run_id=i, seed=i, verbose=False)
+            delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
         )
         data = pd.concat(data, axis=0)
+        data = data[data.iteration >= 800]
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)
-        data.to_csv(f"./data/{problem_name}_{algorithm_name}.csv", index=False)
+        # data.to_csv(f"./data/{problem_name}_{algorithm_name}.csv", index=False)
+        mdic = {"data": data.values, "columns": data.columns.values}
+        savemat(f"./data/{problem_name.upper()}_{algorithm_name}.mat", mdic)
