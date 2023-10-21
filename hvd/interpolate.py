@@ -98,20 +98,23 @@ class ReferenceSetInterpolation:
         # minimal samples from 5 to 15 for a core point
         eps = np.arange(0.1, 0.3, 0.025) * np.mean(pdist(data))
         min_samples = list(range(5, 15))
+
+        labels = DBSCAN(eps=eps[0], min_samples=10).fit(data).labels_
+        clusters = [data[labels == i] for i in np.unique(labels)]  # if i != -1]  # filter out outliers
         # TODO: this part can be parallelized
-        wlc, clusters = np.inf, None
-        for e in eps:
-            for m in min_samples:
-                labels = DBSCAN(eps=e, min_samples=m).fit(data).labels_
-                clusters_ = [
-                    data[labels == i] for i in np.unique(labels)
-                ]  # if i != -1]  # filter out outliers
-                if len(clusters_) == 0:
-                    continue
-                wlc_ = self._compute_weakest_link_cluster(clusters_) if len(clusters_) > 1 else np.inf
-                if wlc_ < wlc:
-                    wlc = wlc_
-                    clusters = clusters_
+        # wlc, clusters = np.inf, None
+        # for e in eps:
+        #     for m in min_samples:
+        #         labels = DBSCAN(eps=e, min_samples=m).fit(data).labels_
+        #         clusters_ = [
+        #             data[labels == i] for i in np.unique(labels)
+        #         ]  # if i != -1]  # filter out outliers
+        #         if len(clusters_) == 0:
+        #             continue
+        #         wlc_ = self._compute_weakest_link_cluster(clusters_) if len(clusters_) > 1 else np.inf
+        #         if wlc_ < wlc:
+        #             wlc = wlc_
+        #             clusters = clusters_
         return clusters
 
     def _compute_weakest_link_cluster(self, clusters: List[np.ndarray]) -> float:
