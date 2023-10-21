@@ -607,8 +607,12 @@ class DpN:
     def X0(self, X0: np.ndarray):
         if X0 is not None:
             X0 = np.asarray(X0)
-            assert np.all(X0 - self.lower_bounds >= 0)
-            assert np.all(X0 - self.upper_bounds <= 0)
+            # assert np.all(X0 - self.lower_bounds >= 0)
+            # assert np.all(X0 - self.upper_bounds <= 0)
+            X0 = np.clip(X0, self.lower_bounds, self.upper_bounds)
+            # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
+            X0 += 1e-5 * (X0 - self.lower_bounds == 0).astype(int)
+            X0 -= 1e-5 * (X0 - self.upper_bounds == 0).astype(int)
             self.mu = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -738,7 +742,7 @@ class DpN:
         # inequality constraint function value, if exists
         if self.g is not None:
             cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
-            active_indices = [v <= 1e-10 for v in cstr_value]  # (N, q)
+            active_indices = [v >= -1e-10 for v in cstr_value]  # (N, q)
             # gradients of the inequality constraints
             # TODO: only compute the gradient for active ineq. cstr.
             H = [self.g_jac(x).reshape(self.q, -1) for x in primal_vars]  # (N, q, dim)
@@ -786,6 +790,8 @@ class DpN:
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
             Hessian = Hess[i]
+            L = self._precondition_hessian(Hessian)
+            Hessian = L.dot(L.T)
             DR = (
                 np.r_[
                     np.c_[Hessian, H[i].T],

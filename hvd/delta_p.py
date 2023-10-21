@@ -1,11 +1,63 @@
 from typing import Callable, Tuple, Union
 
 import numpy as np
+from scipy.linalg import block_diag, cho_solve, cholesky, solve
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
+from sklearn.neighbors import LocalOutlierFactor
 from sklearn_extra.cluster import KMedoids
 
 __authors__ = ["Hao Wang"]
+
+
+def precondition_hessian(H: np.ndarray) -> np.ndarray:
+    """Precondition the Hessian matrix to make sure it is positive definite
+
+    Args:
+        H (np.ndarray): the Hessian matrix
+
+    Returns:
+        np.ndarray: the lower triagular decomposition of the preconditioned Hessian
+    """
+    # pre-condition the Hessian
+    try:
+        L = cholesky(H, lower=True)
+    except:
+        beta = 1e-6
+        v = np.min(np.diag(H))
+        tau = 0 if v > 0 else -v + beta
+        I = np.eye(H.shape[0])
+        for _ in range(35):
+            try:
+                L = cholesky(H + tau * I, lower=True)
+                break
+            except:
+                tau = max(2 * tau, beta)
+        else:
+            print("Pre-conditioning the HV Hessian failed")
+    return L
+
+
+def preprocess(X: np.ndarray) -> np.ndarray:
+    """remove duplicated points and outliers"""
+    N = len(X)
+    idx = []
+    # remove duplicated points
+    for i in range(N):
+        x = X[i]
+        CON = np.all(
+            np.isclose(
+                np.asarray(X[np.arange(N) != i], dtype="float"),
+                np.asarray(x, dtype="float"),
+            ),
+            axis=1,
+        )
+        if all(~CON):
+            idx.append(i)
+
+    X = X[idx]
+    score = LocalOutlierFactor(n_neighbors=int(N / 10)).fit_predict(X)
+    return X[score != -1]
 
 
 class GenerationalDistance:
@@ -101,9 +153,9 @@ class InvertedGenerationalDistance:
     def __init__(
         self,
         ref: np.ndarray,
-        func: Callable,
-        jac: Callable,
-        hess: Callable,
+        func: Callable = None,
+        jac: Callable = None,
+        hess: Callable = None,
         p: float = 2,
         recursive: bool = False,
         cluster_matching: bool = False,
@@ -120,6 +172,7 @@ class InvertedGenerationalDistance:
                 the points in the approximation set by recursively removing the points which has nonzero
                 gradient (the nearest point to some reference point). Defaults to False.
         """
+        self.ref = preprocess(ref)
         self.ref = ref
         self.p = p
         self.func = func
@@ -183,6 +236,7 @@ class InvertedGenerationalDistance:
         """
         if Y is None:
             assert X is not None
+            assert self.func is not None
             Y = np.array([self.func(x) for x in X])
         if self.cluster_matching:
             self._match(Y)
@@ -208,6 +262,8 @@ class InvertedGenerationalDistance:
         """
         # TODO: implement p != 2
         # c = 2 / self.M
+        assert self.jac is not None
+        assert self.hess is not None
         c = 2
         dim = X.shape[1]
         if Y is None:
