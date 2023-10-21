@@ -738,7 +738,7 @@ class DpN:
         # inequality constraint function value, if exists
         if self.g is not None:
             cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
-            active_indices = [v <= 0 for v in cstr_value]  # (N, q)
+            active_indices = [v <= 1e-10 for v in cstr_value]  # (N, q)
             # gradients of the inequality constraints
             # TODO: only compute the gradient for active ineq. cstr.
             H = [self.g_jac(x).reshape(self.q, -1) for x in primal_vars]  # (N, q, dim)
@@ -783,18 +783,20 @@ class DpN:
         grad, Hess = self.active_indicator.compute_derivatives(primal_vars, Y)
         # the root-finding problem and the gradient of the equality constraints
         R_, H, idx = self._compute_R(X, Y, grad=grad)
-        self.norm_grad = list()
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
+            Hessian = Hess[i]
             DR = (
-                np.r_[np.c_[Hess[i], H[i].T], np.c_[H[i], np.zeros((len(H[i]), len(H[i])))]]
+                np.r_[
+                    np.c_[Hessian, H[i].T],
+                    np.c_[H[i], np.zeros((len(H[i]), len(H[i])))],
+                ]
                 if self._constrained
-                else Hess[i]
+                else Hessian
             )
             with warnings.catch_warnings():
                 warnings.filterwarnings("error")
                 try:
-                    # self.norm_grad.append(DR @ R_[i].reshape(-1, 1) / np.linalg.norm(R_[i]))
                     step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
                     R[i, idx[i]] = R_[i]
                 except Exception as err:
@@ -809,10 +811,12 @@ class DpN:
             # L = self._precondition_hessian(DR)
             # step[i, idx[i]] = -1 * cho_solve((L, True), R_[i].reshape(-1, 1)).ravel()
             # R[i, idx[i]] = R_[i]
-            # self.norm_grad.append((L @ L.T) @ R_[i].reshape(-1, 1) / np.linalg.norm(R_[i]))
         return step, R
 
     def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        if 1 < 2:
+            return step, np.ones(len(X))
+
         primal_vars = self._get_primal_dual(X)[0]
         step_primal = step[:, : self.dim_primal]
         normal_vectors = np.c_[np.eye(self.dim_primal), -1 * np.eye(self.dim_primal)]
@@ -823,19 +827,22 @@ class DpN:
         ]
         v = step_primal @ normal_vectors
         s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-        max_step_size = np.array([min(1, np.min(_)) for _ in s])
-        max_step_size[max_step_size == 0] = 1
+        max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
+        # max_step_size[max_step_size == 0] = 1
         # project Newton's direction onto the box boundary
-        # idx = max_step_size == 0
-        # if np.any(idx) > 0:
-        #     proj_dim = [np.argmin(_) for _ in s[idx]]
-        #     proj_axis = normal_vectors[:, proj_dim]
-        #     step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
-        #     step[:, : self.dim_primal] = step_primal
-        #     # re-calculate the `max_step_size` for projected directions
-        #     v = step_primal[idx] @ normal_vectors
-        #     s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-        #     max_step_size[idx] = np.array([min(1, np.min(_)) for _ in s])
+        idx = max_step_size == 0
+        if np.any(idx) > 0:
+            proj_dim = [np.argmin(_) for _ in s[idx]]
+            proj_axis = normal_vectors[:, proj_dim]
+            step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
+            step[:, : self.dim_primal] = step_primal
+            # re-calculate the `max_step_size` for projected directions
+            # v = step_primal[idx] @ normal_vectors
+            # s = np.array([dist[idx][i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
+            # max_step_size[idx] = np.array([min(1, np.nanmin(_)) for _ in s])
+            v = step[:, : self.dim_primal] @ normal_vectors
+            s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
+            max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
         return step, max_step_size
 
     def _line_search(
@@ -857,7 +864,6 @@ class DpN:
                 # TODO: maybe pass in the `grad` to avoid computing the re-matching?
                 R_ = self._compute_R(X_)[0][i]
                 # Armijo–Goldstein condition
-                # assert np.isclose(np.linalg.norm(R[i]), -np.inner(step[i], self.norm_grad[i].ravel()))
                 cond = np.linalg.norm(R_) <= (1 - c * step_size[i]) * np.linalg.norm(R[i])
                 if cond:
                     break
@@ -885,10 +891,6 @@ class DpN:
             np.ndarray: the lower triagular decomposition of the preconditioned Hessian
         """
         # pre-condition the Hessian
-        # w, v = np.linalg.eigh(H)
-        # w[w <= 0] = 1e-8
-        # H_ = v @ np.diag(w) @ v.T
-        # L = cholesky(H_, lower=True)
         try:
             L = cholesky(H, lower=True)
         except:
