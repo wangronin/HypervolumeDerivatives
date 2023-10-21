@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib import rcParams
 
 from hvd.newton import DpN
-from hvd.zdt import ZDT1, PymooProblemWithAD
+from hvd.zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -21,40 +21,45 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-np.random.seed(66)
+np.random.seed(42)
+
+# NOTE: issues found so far on ZDTs
+# ZDT2: some points converges to the wrong decision boundary; the convergence rate is quadratic still.
+# ZDT3: stagnation in local efficient points, which is natural on this problem
+# ZDT6: indefinite DpN Hessians; Hessian modification method is needed
 
 N = 10
-max_iters = 7
-problem = PymooProblemWithAD(ZDT1(n_var=2))
+max_iters = 5
+problem = PymooProblemWithAD(ZDT6(n_var=2))
 pareto_front = problem.get_pareto_front(500)
 pareto_set = problem.get_pareto_set(500)
 
 ref = problem.get_pareto_front(100)
 ref -= 0.02
 # get the re-image of the reference set
-f_x2 = (
-    lambda x1, c: 0.111111111111111 * c
-    + 0.0555555555555556 * x1
-    + 0.111111111111111 * np.sqrt(c * x1 + 0.25 * x1**2)
-    - 0.111111111111111
-)
-x1 = ref[:, 0]
-x2 = [f_x2(*_) for _ in zip(x1, ref[:, 1])]
-ref_x = np.c_[x1, x2]
+# f_x2 = (
+#     lambda x1, c: 0.111111111111111 * c
+#     + 0.0555555555555556 * x1
+#     + 0.111111111111111 * np.sqrt(c * x1 + 0.25 * x1**2)
+#     - 0.111111111111111
+# )
+# x1 = ref[:, 0]
+# x2 = [f_x2(*_) for _ in zip(x1, ref[:, 1])]
+# ref_x = np.c_[x1, x2]
 # the initial approximation set
 x0 = problem.get_pareto_set(N, kind="uniform")
-x0[:, 1:] += 0.1 * np.random.rand(N, problem.n_var - 1)
+x0[:, 1:] += 0.01 * np.random.rand(N, problem.n_var - 1)
 y0 = np.array([problem.objective(x) for x in x0])
 
 fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 6.5))
 plt.subplots_adjust(right=0.93, left=0.05)
 ax1.plot(y0[:, 0], y0[:, 1], "r.", ms=7, alpha=0.5)
-ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=4, alpha=0.2)
-ax1.plot(ref[:, 0], ref[:, 1], "b.", ms=4, mec="none", alpha=0.3)
+ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.35)
+ax1.plot(ref[:, 0], ref[:, 1], "b.", ms=4, mec="none", alpha=0.35)
 
 ax2.plot(x0[:, 0], x0[:, 1], "r.", ms=7, alpha=0.5)
-ax2.plot(pareto_set[:, 0], pareto_set[:, 1], "g.", mec="none", ms=4, alpha=0.2)
-ax2.plot(ref_x[:, 0], ref_x[:, 1], "b.", ms=4, mec="none", alpha=0.3)
+ax2.plot(pareto_set[:, 0], pareto_set[:, 1], "g.", mec="none", ms=5, alpha=0.4)
+# ax2.plot(ref_x[:, 0], ref_x[:, 1], "b.", ms=4, mec="none", alpha=0.3)
 
 x1 = np.linspace(0, 1, 100)
 x2 = np.linspace(0, 0.1, 30)
@@ -98,14 +103,14 @@ while not opt.terminate():
 X = opt._get_primal_dual(opt.X)[0]
 Y = opt.Y
 M = opt.active_indicator._medroids
-x1 = M[:, 0]
-x2 = [f_x2(*_) for _ in zip(x1, M[:, 1])]
-M_x = np.c_[x1, x2]
+# x1 = M[:, 0]
+# x2 = [f_x2(*_) for _ in zip(x1, M[:, 1])]
+# M_x = np.c_[x1, x2]
 
-ax1.plot(M[:, 0], M[:, 1], "r^", ms=7, alpha=0.5)
-ax2.plot(M_x[:, 0], M_x[:, 1], "r^", ms=7, alpha=0.5)
-ax1.plot(Y[:, 0], Y[:, 1], "r*", ms=7, alpha=0.5)
-ax2.plot(X[:, 0], X[:, 1], "r*", ms=7, alpha=0.5)
+ax1.plot(M[:, 0], M[:, 1], "r^", ms=7, alpha=0.5, clip_on=False)
+# ax2.plot(M_x[:, 0], M_x[:, 1], "r^", ms=7, alpha=0.5)
+ax1.plot(Y[:, 0], Y[:, 1], "r*", ms=7, alpha=0.5, clip_on=False)
+ax2.plot(X[:, 0], X[:, 1], "r*", ms=7, alpha=0.5, clip_on=False)
 # plot the trajectory
 trajectory = np.array([x0] + opt.hist_X)
 for i in range(N):
@@ -123,6 +128,7 @@ for i in range(N):
         alpha=0.8,
         headlength=4.7,
         headwidth=2.7,
+        clip_on=False,
     )
 trajectory = np.array([y0] + opt.hist_Y)
 for i in range(N):
@@ -150,4 +156,4 @@ ax3.set_title("Performance")
 ax3.set_xlabel("iteration")
 ax3.set_xticks(range(1, max_iters + 1))
 ax3.legend()
-plt.savefig("ZDT-2D.pdf", dpi=1000)
+plt.savefig(f"{problem._problem.__class__.__name__}-2D-decision_space.pdf", dpi=1000)
