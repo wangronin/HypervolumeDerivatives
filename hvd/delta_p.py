@@ -210,7 +210,7 @@ class InvertedGenerationalDistance:
             D[_indices, np.arange(self.M)] = np.inf
 
     def _cluster_reference_set(self, N: int):
-        km = KMedoids(n_clusters=N, random_state=0, method="pam").fit(self.ref)
+        km = KMedoids(n_clusters=N, random_state=0, method="pam", max_iter=600).fit(self.ref)
         self._idx = km.medoid_indices_
         self._medroids = self.ref[km.medoid_indices_]
 
