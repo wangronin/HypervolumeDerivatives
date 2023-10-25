@@ -3,7 +3,7 @@ import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cho_solve, cholesky, solve
+from scipy.linalg import block_diag, cholesky, solve
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
@@ -790,8 +790,7 @@ class DpN:
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
             Hessian = Hess[i]
-            L = self._precondition_hessian(Hessian)
-            Hessian = L.dot(L.T)
+            Hessian = self._precondition_hessian(Hessian)
             DR = (
                 np.r_[
                     np.c_[Hessian, H[i].T],
@@ -820,7 +819,7 @@ class DpN:
         return step, R
 
     def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        if 1 < 2:
+        if 11 < 2:
             return step, np.ones(len(X))
 
         primal_vars = self._get_primal_dual(X)[0]
@@ -884,7 +883,8 @@ class DpN:
                     # alpha *= 0.5
                     step_size[i] *= 0.5
             else:
-                self.logger.warn("Armijo's backtracking line search failed")
+                pass
+                # self.logger.warn("Armijo's backtracking line search failed")
         return step_size
 
     def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
@@ -904,7 +904,7 @@ class DpN:
             v = np.min(np.diag(H))
             tau = 0 if v > 0 else -v + beta
             I = np.eye(H.shape[0])
-            for _ in range(35):
+            for _ in range(40):
                 try:
                     L = cholesky(H + tau * I, lower=True)
                     break
@@ -912,4 +912,5 @@ class DpN:
                     tau = max(2 * tau, beta)
             else:
                 self.logger.warn("Pre-conditioning the HV Hessian failed")
-        return L
+                return H
+        return L.dot(L.T)
