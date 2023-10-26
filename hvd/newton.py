@@ -790,7 +790,7 @@ class DpN:
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
             Hessian = Hess[i]
-            Hessian = self._precondition_hessian(Hessian)
+            # Hessian = self._precondition_hessian(Hessian)
             DR = (
                 np.r_[
                     np.c_[Hessian, H[i].T],
