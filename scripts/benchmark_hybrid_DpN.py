@@ -1,3 +1,4 @@
+import os
 import sys
 
 sys.path.insert(0, "./")
@@ -17,6 +18,8 @@ np.random.seed(66)
 n_reps = 15
 n_jobs = n_reps
 max_iters = 5
+reference_set_prefix = "/home/wangh5/data1/reference_set/CF/"
+data_prefix = "/home/wangh5/data1/pop_data/CF/"
 
 
 def plot_trajectory(y0, y, ref, pareto_front, medriods, opt, run_id):
@@ -89,11 +92,11 @@ def run(problem, id: int, verbose: bool = True):
     igd_func = InvertedGenerationalDistance(pareto_front)
     # load the reference set
     ref = pd.read_csv(
-        f"./data-reference-set/CF/{problem.__class__.__name__}_GDE3_run_{id}_ref.csv", header=0
+        os.path.join(reference_set_prefix, f"{problem.__class__.__name__}_GDE3_run_{id}_ref.csv"), header=0
     ).values
     delta = 0.05
     # the load the final population from an EMOA
-    data = loadmat(f"./data/CF/{problem.__class__.__name__}_GDE3.mat")
+    data = loadmat(os.path.join(data_prefix, f"{problem.__class__.__name__}_GDE3.mat"))
     columns = (
         ["run", "iteration"]
         + [f"x{i}" for i in range(1, problem.n_decision_vars + 1)]
