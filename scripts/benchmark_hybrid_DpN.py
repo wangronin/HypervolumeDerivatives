@@ -14,16 +14,14 @@ from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9
 
 np.random.seed(66)
 
-n_reps = 30
+n_reps = 15
 n_jobs = n_reps
 max_iters = 5
-problem = CF1()
-pareto_front = problem.get_pareto_front(1000)
-igd_func = InvertedGenerationalDistance(pareto_front)
 
 
-def plot_trajectory(y0, y, ref, medriods, opt, run_id):
+def plot_trajectory(y0, y, ref, pareto_front, medriods, opt, run_id):
     plt.style.use("ggplot")
+    plt.ioff()
     rcParams["font.size"] = 17
     rcParams["xtick.direction"] = "out"
     rcParams["ytick.direction"] = "out"
@@ -48,24 +46,25 @@ def plot_trajectory(y0, y, ref, medriods, opt, run_id):
     ax1.plot(medriods[:, 0], medriods[:, 1], "r^", ms=7, alpha=0.5)
     ax1.plot(y[:, 0], y[:, 1], "r.", ms=7, alpha=0.5)
 
-    # if 1 < 2:
-    #     trajectory = np.array([y0] + opt.hist_Y)
-    #     for i in range():
-    #         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
-    #         ax1.quiver(
-    #             x[:-1],
-    #             y[:-1],
-    #             x[1:] - x[:-1],
-    #             y[1:] - y[:-1],
-    #             scale_units="xy",
-    #             angles="xy",
-    #             scale=1,
-    #             color="k",
-    #             width=0.003,
-    #             alpha=0.5,
-    #             headlength=4.5,
-    #             headwidth=2.5,
-    #         )
+    if 1 < 2:
+        N = len(y)
+        trajectory = np.array([y0] + opt.hist_Y)
+        for i in range(N):
+            x, y = trajectory[:, i, 0], trajectory[:, i, 1]
+            ax1.quiver(
+                x[:-1],
+                y[:-1],
+                x[1:] - x[:-1],
+                y[1:] - y[:-1],
+                scale_units="xy",
+                angles="xy",
+                scale=1,
+                color="k",
+                width=0.003,
+                alpha=0.5,
+                headlength=4.5,
+                headwidth=2.5,
+            )
 
     ax1.set_title("Objective space")
     ax1.set_xlabel(r"$f_1$")
@@ -85,12 +84,16 @@ def plot_trajectory(y0, y, ref, medriods, opt, run_id):
     plt.close(fig)
 
 
-def run(id: int, verbose: bool = True):
+def run(problem, id: int, verbose: bool = True):
+    pareto_front = problem.get_pareto_front(1000)
+    igd_func = InvertedGenerationalDistance(pareto_front)
     # load the reference set
-    ref = pd.read_csv(f"./data-reference-set/CF/CF4_GDE3_run_{id}_ref.csv", header=0).values
-    delta = 0.1
+    ref = pd.read_csv(
+        f"./data-reference-set/CF/{problem.__class__.__name__}_GDE3_run_{id}_ref.csv", header=0
+    ).values
+    delta = 0.05
     # the load the final population from an EMOA
-    data = loadmat("./data/CF4_GDE3.mat")
+    data = loadmat(f"./data/CF/{problem.__class__.__name__}_GDE3.mat")
     columns = (
         ["run", "iteration"]
         + [f"x{i}" for i in range(1, problem.n_decision_vars + 1)]
@@ -134,7 +137,7 @@ def run(id: int, verbose: bool = True):
         opt.log()
 
     # plot the result
-    plot_trajectory(y0, opt.Y, ref, opt.active_indicator._medroids, opt, id)
+    plot_trajectory(y0, opt.Y, ref, pareto_front, opt.active_indicator._medroids, opt, id)
     # measure the performance after optimization
     X = opt._get_primal_dual(opt.X)[0]
     Y = opt.Y
@@ -143,6 +146,12 @@ def run(id: int, verbose: bool = True):
     return np.array([igd_init, igd_final, cstr_init, cstr_final])
 
 
-data = Parallel(n_jobs=n_jobs)(delayed(run)(id=i, verbose=False) for i in range(1, n_reps + 1))
-df = pd.DataFrame(np.array(data), columns=["initial IGD", "final IGD", "initial cstr", "final cstr"])
-df.to_csv(f"{problem.__class__.__name__}.csv", index=False)
+for problem in [CF4(), CF5(), CF6(), CF7(), CF8(), CF9()]:
+    # for problem in [CF1()]:
+    print(problem)
+    data = Parallel(n_jobs=n_jobs)(
+        delayed(run)(problem=problem, id=i, verbose=False) for i in range(1, n_reps + 1)
+    )
+    df = pd.DataFrame(np.array(data), columns=["initial IGD", "final IGD", "initial cstr", "final cstr"])
+    df.to_csv(f"{problem.__class__.__name__}.csv", index=False)
+    plt.close("all")

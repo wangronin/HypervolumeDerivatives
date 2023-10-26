@@ -46,17 +46,15 @@ def preprocess(X: np.ndarray) -> np.ndarray:
     for i in range(N):
         x = X[i]
         CON = np.all(
-            np.isclose(
-                np.asarray(X[np.arange(N) != i], dtype="float"),
-                np.asarray(x, dtype="float"),
-            ),
+            np.isclose(X[np.arange(N) != i], x, rtol=1e-3, atol=1e-4),
             axis=1,
         )
         if all(~CON):
             idx.append(i)
 
-    X = X[idx]
-    score = LocalOutlierFactor(n_neighbors=int(N / 10)).fit_predict(X)
+    if len(idx) > 50:
+        X = X[idx]
+    score = LocalOutlierFactor(n_neighbors=max(5, int(len(X) / 10))).fit_predict(X)
     return X[score != -1]
 
 
@@ -210,7 +208,7 @@ class InvertedGenerationalDistance:
             D[_indices, np.arange(self.M)] = np.inf
 
     def _cluster_reference_set(self, N: int):
-        km = KMedoids(n_clusters=N, random_state=0, method="pam", max_iter=600).fit(self.ref)
+        km = KMedoids(n_clusters=N, random_state=0, method="pam", max_iter=800).fit(self.ref)
         self._idx = km.medoid_indices_
         self._medroids = self.ref[km.medoid_indices_]
 
