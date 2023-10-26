@@ -146,9 +146,9 @@ def run(problem, id: int, verbose: bool = True):
     return np.array([igd_init, igd_final, cstr_init, cstr_final])
 
 
-for problem in [CF4(), CF5(), CF6(), CF7(), CF8(), CF9()]:
-    # for problem in [CF1()]:
-    print(problem)
+# for problem in [CF4(), CF5(), CF6(), CF7(), CF8(), CF9()]:
+for problem in [CF2()]:
+    # print(problem)
     data = Parallel(n_jobs=n_jobs)(
         delayed(run)(problem=problem, id=i, verbose=False) for i in range(1, n_reps + 1)
     )
