@@ -5,10 +5,9 @@ import numpy as np
 sys.path.insert(0, "./")
 from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 
-np.random.seed(42)
-
 
 def test_CFs():
+    np.random.seed(42)
     p = CF1()
     interval = p.upper_bounds - p.lower_bounds
     x = np.random.rand(p.n_decision_vars) * interval + p.lower_bounds
@@ -108,6 +107,3 @@ def test_CFs():
     p.constraint_jacobian(x)
     assert np.all(np.isclose(F, [6.73744149, 3.40704349, 8.33025044]))
     assert np.all(np.isclose(C, [1.79565082]))
-
-
-test_CFs()
