@@ -1,3 +1,6 @@
+import sys
+
+sys.path.insert(0, "./")
 import autograd.numpy as np
 import matplotlib.pyplot as plt
 from autograd import hessian, jacobian
@@ -23,7 +26,9 @@ np.random.seed(66)
 
 def F(x):
     x = np.array(x)
-    return np.array([1 - np.exp(-np.sum((x - 1) ** 2)), 1 - np.exp(-np.sum((x + 1) ** 2))])
+    return np.array(
+        [1 - np.exp(-np.sum((x - 1) ** 2)), 1 - np.exp(-np.sum((x + 1) ** 2))]
+    )
 
 
 # TODO: the objective Hessian can be indefinite; find a systematic way to handle it
@@ -80,7 +85,9 @@ Z = np.array([F(p) for p in np.array([X1.flatten(), X2.flatten()]).T])
 Z1 = Z[:, 0].reshape(-1, len(x))
 Z2 = Z[:, 1].reshape(-1, len(x))
 CS1 = ax0.contour(X1, X2, Z1, 15, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
-CS2 = ax0.contour(X1, X2, Z2, 15, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
+CS2 = ax0.contour(
+    X1, X2, Z2, 15, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6
+)
 
 if 1 < 2:
     trajectory = np.array([x0] + opt.hist_X)
