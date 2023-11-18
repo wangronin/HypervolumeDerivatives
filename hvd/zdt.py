@@ -5,6 +5,9 @@ from pymoo.util.normalization import normalize
 
 from .utils import timeit
 
+# NOTE: `np.abs` is taken on `f1 / g` for ZDT1, 3, and 4 to avoid numerical issues
+# when the decision var. are out of bound
+
 
 class PymooProblemWithAD:
     def __init__(self, problem: Problem) -> None:
@@ -131,9 +134,7 @@ class ZDT3(ZDT):
         f1 = x[:, 0]
         c = np.sum(x[:, 1:], axis=1)
         g = 1.0 + 9.0 * c / (self.n_var - 1)
-        f2 = g * (
-            1 - np.power(f1 * 1.0 / g, 0.5) - (f1 * 1.0 / g) * np.sin(10 * np.pi * f1)
-        )
+        f2 = g * (1 - np.power(np.abs(f1 * 1.0 / g), 0.5) - (f1 * 1.0 / g) * np.sin(10 * np.pi * f1))
         return np.column_stack([f1, f2])[0]
 
 
@@ -157,7 +158,7 @@ class ZDT4(ZDT):
         g += 10 * (self.n_var - 1)
         for i in range(1, self.n_var):
             g += x[:, i] * x[:, i] - 10.0 * np.cos(4.0 * np.pi * x[:, i])
-        h = 1.0 - np.sqrt(f1 / g)
+        h = 1.0 - np.sqrt(np.abs(f1 / g))
         f2 = g * h
         return np.column_stack([f1, f2])[0]
 
@@ -209,8 +210,6 @@ class ZDT6(ZDT):
     def _evaluate(self, x):
         x = np.array([x])
         f1 = 1 - np.exp(-4 * x[:, 0]) * np.power(np.sin(6 * np.pi * x[:, 0]), 6)
-        g = 1 + 9.0 * np.power(
-            max(0, np.sum(x[:, 1:], axis=1) / (self.n_var - 1.0)), 0.25
-        )
+        g = 1 + 9.0 * np.power(max(0, np.sum(x[:, 1:], axis=1) / (self.n_var - 1.0)), 0.25)
         f2 = g * (1 - np.power(f1 / g, 2))
         return np.column_stack([f1, f2])[0]

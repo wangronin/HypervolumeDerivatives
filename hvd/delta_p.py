@@ -1,7 +1,7 @@
 from typing import Callable, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cho_solve, cholesky, solve
+from scipy.linalg import cholesky
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 from sklearn.neighbors import LocalOutlierFactor
@@ -38,7 +38,7 @@ def precondition_hessian(H: np.ndarray) -> np.ndarray:
     return L
 
 
-def preprocess(X: np.ndarray) -> np.ndarray:
+def preprocess_reference_set(X: np.ndarray) -> np.ndarray:
     """remove duplicated points and outliers"""
     N = len(X)
     idx = []
@@ -62,9 +62,9 @@ class GenerationalDistance:
     def __init__(
         self,
         ref: np.ndarray,
-        func: Callable,
-        jac: Callable,
-        hess: Callable,
+        func: Callable = None,
+        jac: Callable = None,
+        hess: Callable = None,
         p: float = 2,
     ):
         """Generational Distance
@@ -102,9 +102,7 @@ class GenerationalDistance:
             assert X is not None
             Y = np.array([self.func(x) for x in X])
         self._compute_indices(Y)
-        return np.mean(self.D[np.arange(len(Y)), self.indices] ** self.p) ** (
-            1 / self.p
-        )
+        return np.mean(self.D[np.arange(len(Y)), self.indices] ** self.p) ** (1 / self.p)
 
     def compute_derivatives(
         self, X: np.ndarray, Y: np.ndarray = None, compute_hessian: bool = True
@@ -144,9 +142,7 @@ class GenerationalDistance:
             diff_norm_ = diff_norm_[..., np.newaxis]
             # TODO: test this part for p != 2
             term = (
-                c2
-                * np.tile(diff_norm_, (1, dim, dim))
-                * np.einsum("ij,ik->ijk", grad_, grad_)
+                c2 * np.tile(diff_norm_, (1, dim, dim)) * np.einsum("ij,ik->ijk", grad_, grad_)
                 if self.p != 2
                 else 0
             )
@@ -181,7 +177,7 @@ class InvertedGenerationalDistance:
                 the points in the approximation set by recursively removing the points which has nonzero
                 gradient (the nearest point to some reference point). Defaults to False.
         """
-        self.ref = preprocess(ref)
+        self.ref = preprocess_reference_set(ref)
         self.ref = ref
         self.p = p
         self.func = func
@@ -219,9 +215,8 @@ class InvertedGenerationalDistance:
             D[_indices, np.arange(self.M)] = np.inf
 
     def _cluster_reference_set(self, N: int):
-        km = KMedoids(n_clusters=N, random_state=0, method="pam", max_iter=800).fit(
-            self.ref
-        )
+        # TODO: `max_iter=800` might be too large
+        km = KMedoids(n_clusters=N, random_state=0, method="pam", max_iter=800).fit(self.ref)
         self._idx = km.medoid_indices_
         self._medroids = self.ref[km.medoid_indices_]
 
@@ -233,7 +228,7 @@ class InvertedGenerationalDistance:
         cost = cdist(Y, self._medroids, metric="minkowski", p=self.p)
         # min-weight assignment in a bipartite graph
         self._medoids_idx = linear_sum_assignment(cost)[1]
-        self._medroids = self._medroids[self._medoids_idx]
+        self._medroids = self._medroids[self._medoids_idx]  # re-order the medroids
 
     def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
         """compute the inverted generational distance value
@@ -255,9 +250,7 @@ class InvertedGenerationalDistance:
             return np.mean(np.sum((Y - self._medroids) ** 2, axis=1))
         else:
             self._compute_indices(Y)
-            return np.mean(self.D[self._indices, np.arange(self.M)] ** self.p) ** (
-                1 / self.p
-            )
+            return np.mean(self.D[self._indices, np.arange(self.M)] ** self.p) ** (1 / self.p)
 
     def compute_derivatives(
         self, X: np.ndarray, Y: np.ndarray = None, compute_hessian: bool = True
@@ -295,11 +288,7 @@ class InvertedGenerationalDistance:
         grad = c * np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
         if compute_hessian:
             H = np.array([self.hess(x) for x in X])  # (N, n_objective, dim, dim)
-            m = (
-                np.tile(self.m[..., np.newaxis], (1, dim, dim))
-                if not self.cluster_matching
-                else 1
-            )
+            m = np.tile(self.m[..., np.newaxis], (1, dim, dim)) if not self.cluster_matching else 1
             hessian = c * (
                 m * np.einsum("ijk,ijl->ikl", J, J) + np.einsum("ijkl,ij->ikl", H, diff)
             )  # (N, dim, dim)
