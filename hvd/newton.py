@@ -827,7 +827,7 @@ class DpN:
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
             Hessian = Hess[i]
-            Hessian = self._precondition_hessian(Hessian)
+            # Hessian = self._precondition_hessian(Hessian)
             # print(np.linalg.cond(Hessian))
             DR = (
                 np.r_[
@@ -840,12 +840,7 @@ class DpN:
             with warnings.catch_warnings():
                 warnings.filterwarnings("error")
                 try:
-                    # DR = self._precondition_hessian2(DR)
-                    # print(np.linalg.cond(DR))
-                    # step[i, idx[i]] = -1 * gmres(DR, R_[i].reshape(-1, 1)).ravel()
-                    v = solve(DR, R_[i].reshape(-1, 1)).ravel()
-                    # v /= min(1, np.linalg.norm(v))
-                    step[i, idx[i]] = -1 * v
+                    step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
                     R[i, idx[i]] = R_[i]
                 except Exception as err:
                     # in case of indefinite or singluar Hessian
@@ -865,8 +860,12 @@ class DpN:
     def _shift_reference_set(self):
         if self.iter_count == 0:
             indices = np.array([True] * len(self.Y))
+            # self.active_indicator._medroids = pd.read_csv(
+            #     "./ZDT-new/ZDT1_REF_Match_28points.csv", header=None
+            # ).values
         else:
             distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
+            # indices = np.isclose(distance, 0)
             indices = np.bitwise_and(
                 np.isclose(distance, 0),
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_primal], axis=1), 0),
@@ -894,6 +893,7 @@ class DpN:
         Q = qr(M.T)[0]
         n = -1 * np.abs(Q[:, -1])
         n /= np.linalg.norm(n)
+        # n = np.array([-0.71802520985334, -0.696017096065224])
         # the initial shift is a bit larger
         v = 0.05 * n if self.iter_count > 0 else 0.06 * n
         self.active_indicator._medroids[indices] += v
