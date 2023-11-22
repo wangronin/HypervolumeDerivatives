@@ -860,9 +860,6 @@ class DpN:
     def _shift_reference_set(self):
         if self.iter_count == 0:
             indices = np.array([True] * len(self.Y))
-            # self.active_indicator._medroids = pd.read_csv(
-            #     "./ZDT-new/ZDT1_REF_Match_28points.csv", header=None
-            # ).values
         else:
             distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
             # indices = np.isclose(distance, 0)
@@ -893,7 +890,6 @@ class DpN:
         Q = qr(M.T)[0]
         n = -1 * np.abs(Q[:, -1])
         n /= np.linalg.norm(n)
-        # n = np.array([-0.71802520985334, -0.696017096065224])
         # the initial shift is a bit larger
         v = 0.05 * n if self.iter_count > 0 else 0.06 * n
         self.active_indicator._medroids[indices] += v
