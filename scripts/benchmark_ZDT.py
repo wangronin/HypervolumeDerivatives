@@ -28,7 +28,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 10
+max_iters = 6
 f = ZDT1()
 n_jobs = 30
 ref_point = np.array([11, 11])
@@ -116,7 +116,6 @@ def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
     ax2.legend()
     plt.tight_layout()
     plt.savefig(fig_name, dpi=1000)
-    fig.close()
 
 
 def execute(run: int):
@@ -151,7 +150,7 @@ def execute(run: int):
     plot(y0, Y, ref, opt.hist_Y, opt.history_medroids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_func = GenerationalDistance(pareto_front)
     igd_func = InvertedGenerationalDistance(pareto_front)
-    return np.array([igd_func.compute(Y), gd_func.compute(Y), hypervolume(Y, ref_point)])
+    return np.array([igd_func.compute(Y=Y), gd_func.compute(Y=Y), hypervolume(Y, ref_point)])
 
 
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))

@@ -17,9 +17,12 @@ from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
+from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
+from hvd.hypervolume import hypervolume
 from hvd.problems import CF9, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3, MOOAnalytical
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
+ref_point = np.array([11, 11])
 
 
 class ProblemWrapper(ElementwiseProblem):
@@ -114,12 +117,17 @@ def minimize(
     data = pd.concat(data, axis=0)
     if run_id is not None:
         data.insert(0, "run", run_id)
-    return data
+
+    pareto_front = problem.pareto_front(1000)
+    gd_func = GenerationalDistance(pareto_front)
+    igd_func = InvertedGenerationalDistance(pareto_front)
+    # return data
+    return np.array([igd_func.compute(Y=res.F), gd_func.compute(Y=res.F), hypervolume(res.F, ref_point)])
 
 
 def get_algorithm(n_objective: int, algorithm_name: str):
     if algorithm_name == "NSGA-II":
-        algorithm = NSGA2(pop_size=100)
+        algorithm = NSGA2(pop_size=50)
     elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
         if n_objective == 2:
@@ -149,7 +157,9 @@ def get_algorithm(n_objective: int, algorithm_name: str):
 
 
 N = 30
-for problem_name in ["zdt1", "zdt2", "zdt3", "zdt4", "zdt6"]:
+for problem_name in [
+    "zdt1",
+]:  # "zdt2", "zdt3", "zdt4", "zdt6"]:
     # for problem_name in [f"dtlz{i}" for i in range(1, 8)]:
     # problem_name = problem.__class__.__name__
     print(problem_name)
@@ -157,19 +167,23 @@ for problem_name in ["zdt1", "zdt2", "zdt3", "zdt4", "zdt6"]:
     # problem = ModifiedObjective(ProblemWrapper(problem))
     # problem = ProblemWrapper(problem)
     problem = get_problem(problem_name)
-    termination = get_termination("n_gen", 500)
+    termination = get_termination("n_gen", 300)
 
-    for algorithm_name in ("NSGA-III",):
+    for algorithm_name in ("NSGA-II",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name)
-        # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        breakpoint()
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
         )
-        data = pd.concat(data, axis=0)
-        data = data[data.iteration >= 800]
+        df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
+        print(df)
+        df.to_csv(f"problem_name-NSGA-II.csv", index=False)
+        # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/{problem_name}_{algorithm_name}.csv", index=False)
-        mdic = {"data": data.values, "columns": data.columns.values}
-        savemat(f"./data/{problem_name.upper()}_{algorithm_name}.mat", mdic)
+        # save to Matlab's data format
+        # mdic = {"data": data.values, "columns": data.columns.values}
+        # savemat(f"./data/{problem_name.upper()}_{algorithm_name}.mat", mdic)

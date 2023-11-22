@@ -27,31 +27,35 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 7
-# problem = PymooProblemWithAD(ZDT1())
+run_id = 10
+max_iters = 6
 problem = CF4()
-pareto_front = problem.get_pareto_front(1000)
+pareto_front = problem.get_pareto_front(500)
 
 if 1 < 2:
     # load the reference set
-    # ref = pd.read_csv("./data-reference-set/ZDT/ZDT1_NSGA-II_run_1_ref.csv", header=0).values
-    ref = pd.read_csv("./data-reference-set/CF/CF4_GDE3_run_10_ref.csv", header=0).values
-    ref -= 0.04
+    # ref = pd.read_csv(
+    #     "./data-reference-set/CF/CF4_GDE3_run_10_ref.csv", header=0
+    # ).values
+    ref = pd.read_csv("./data-reference-set/CF4/CF4_GDE3_run_1_ref_shifted.csv", header=None).values
+    ref += 0.1
+    # ref -= 0.05
     # the load the final population from an EMOA
-    data = loadmat("./data/CF4_GDE3.mat")
+    data = loadmat("./data/CF/CF4_GDE3.mat")
     columns = (
         ["run", "iteration"]
-        + [f"x{i}" for i in range(1, 10 + 1)]
-        + [f"f{i}" for i in range(1, 2 + 1)]
-        + [f"h{i}" for i in range(1, 1 + 1)]
+        + [f"x{i}" for i in range(1, problem.n_decision_vars + 1)]
+        + [f"f{i}" for i in range(1, problem.n_objectives + 1)]
+        + [f"h{i}" for i in range(1, problem.n_eq_constr + 1)]
+        + [f"g{i}" for i in range(1, problem.n_ieq_constr + 1)]
     )
     # df = pd.DataFrame(data["data"], columns=[c[0] for c in data["columns"][0]])
     df = pd.DataFrame(data["data"], columns=columns)
     df = df[(df.run == 10) & (df.iteration == 999)]
     # x0 = df.loc[:, "x1":f"x{problem.n_var}"].iloc[1:, :].values
     # y0 = df.loc[:, "f1":f"f{problem.n_obj}"].iloc[1:, :].values
-    x0 = df.loc[:, "x1":f"x{problem.n_decision_vars}"].iloc[31:, :].values
-    y0 = df.loc[:, "f1":f"f{problem.n_objectives}"].iloc[31:, :].values
+    x0 = df.loc[:, "x1":f"x{problem.n_decision_vars}"].iloc[10:13, :].values
+    y0 = df.loc[:, "f1":f"f{problem.n_objectives}"].iloc[10:13, :].values
 # else:
 #     ref = problem.get_pareto_front(100) - 0.02
 #     x0 = problem.get_pareto_set(N, kind="uniform")
@@ -64,11 +68,11 @@ plt.subplots_adjust(right=0.93, left=0.05)
 
 ax0.plot(y0[:, 0], y0[:, 1], "r.", ms=7, alpha=0.5)
 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=4, alpha=0.2)
-ax0.plot(ref[:, 0], ref[:, 1], "b.", ms=4, mec="none", alpha=0.3)
+# ax0.plot(ref[:, 0], ref[:, 1], "b.", ms=4, mec="none", alpha=0.3)
 
 # ax1.plot(y0[:, 0], y0[:, 1], "r.", ms=7, alpha=0.5)
 ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=4, alpha=0.2)
-ax1.plot(ref[:, 0], ref[:, 1], "b.", ms=4, mec="none", alpha=0.3)
+# ax1.plot(ref[:, 0], ref[:, 1], "b.", ms=4, mec="none", alpha=0.3)
 
 opt = DpN(
     dim=problem.n_decision_vars,
@@ -86,20 +90,25 @@ opt = DpN(
     max_iters=max_iters,
     type="igd",
     verbose=True,
+    pareto_front=pareto_front,
 )
 
-delta = 0.03
 while not opt.terminate():
-    # ref -= delta
-    # delta *= 0.5  # exponential decay of the shift
-    opt.reference_set = ref
+    ax1.plot(
+        opt.reference_set[:, 0],
+        opt.reference_set[:, 1],
+        "b.",
+        ms=4,
+        mec="none",
+        alpha=0.3,
+    )
     opt.newton_iteration()
     opt.log()
+    # M = opt.active_indicator._medroids
+    # ax1.plot(M[:, 0], M[:, 1], "r^", ms=7, alpha=0.5)
 
 X = opt._get_primal_dual(opt.X)[0]
 Y = opt.Y
-M = opt.active_indicator._medroids
-ax1.plot(M[:, 0], M[:, 1], "r^", ms=7, alpha=0.5)
 ax1.plot(Y[:, 0], Y[:, 1], "r.", ms=7, alpha=0.5)
 
 if 1 < 2:
@@ -121,6 +130,15 @@ if 1 < 2:
             headwidth=2.5,
         )
 
+lines = []
+lines += ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.3)
+lines += ax1.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=0.9)
+lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
+colors = plt.get_cmap("tab20").colors
+# colors = [colors[2], colors[7], colors[13]]
+for i, M in enumerate(opt.history_medroids):
+    lines += ax1.plot(M[:, 0], M[:, 1], color=colors[i], ls="none", marker="^", mec="none", ms=7, alpha=0.7)
+
 ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
@@ -135,4 +153,4 @@ ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
 ax2.legend()
 plt.tight_layout()
-plt.savefig(f"ZDT1-{N}points.pdf", dpi=1000)
+plt.savefig(f"{problem.__class__.__name__}-run{run_id}.pdf", dpi=1000)
