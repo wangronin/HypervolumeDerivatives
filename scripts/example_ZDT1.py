@@ -24,7 +24,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 10
+max_iters = 13
 f = ZDT1(n_var=3)
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
@@ -134,3 +134,7 @@ ax2.set_xticks(range(1, max_iters + 1))
 ax2.legend()
 plt.tight_layout()
 plt.savefig(f"{f.__class__.__name__}.pdf", dpi=1000)
+
+# data = [np.c_[[i + 1] * 28, y] for i, y in enumerate(opt.hist_Y)]
+# df = pd.DataFrame(np.concatenate(data, axis=0), columns=["iteration", "f1", "f2"])
+# df.to_csv("ZDT1_example.csv")
