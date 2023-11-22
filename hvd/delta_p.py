@@ -268,10 +268,10 @@ class InvertedGenerationalDistance:
                 if `compute_hessian` = True, it returns (gradient, Hessian)
                 otherwise, it returns (gradient, )
         """
-        # TODO: implement p != 2
-        # c = 2 / self.M
         assert self.jac is not None
         assert self.hess is not None
+        # TODO: implement p != 2
+        # c = 2 / self.M
         c = 2
         dim = X.shape[1]
         if Y is None:
