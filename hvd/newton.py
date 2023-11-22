@@ -602,7 +602,6 @@ class DpN:
         self._delta_IGD: float = np.inf
         self.hist_R_norm: List[float] = []
         self.history_medroids: Dict[int, List] = dict()
-
         self.logger: logging.Logger = get_logger(
             logger_id=f"{self.__class__.__name__}",
             console=self.verbose,
@@ -828,7 +827,7 @@ class DpN:
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
             Hessian = Hess[i]
-            # Hessian = self._precondition_hessian(Hessian)
+            Hessian = self._precondition_hessian(Hessian)
             # print(np.linalg.cond(Hessian))
             DR = (
                 np.r_[
