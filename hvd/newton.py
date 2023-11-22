@@ -3,9 +3,10 @@ import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
+import pandas as pd
 from scipy.linalg import block_diag, cholesky, qr, solve
 from scipy.sparse import csc_matrix
-from scipy.sparse.linalg import spsolve
+from scipy.sparse.linalg import gmres, spsolve
 from scipy.spatial.distance import cdist
 
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
@@ -564,7 +565,7 @@ class DpN:
         self._initialize_logging()
         self._pareto_front = pareto_front
         self._perf_gd = GenerationalDistance(ref=pareto_front)
-        self._perf_igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=True)
+        self._perf_igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
 
     def _check_constraints(self):
         # initialize dual variables
@@ -600,7 +601,7 @@ class DpN:
         self._delta_GD: float = np.inf
         self._delta_IGD: float = np.inf
         self.hist_R_norm: List[float] = []
-        self.history_medroids = []
+        self.history_medroids: Dict[int, List] = dict()
 
         self.logger: logging.Logger = get_logger(
             logger_id=f"{self.__class__.__name__}",
@@ -695,15 +696,16 @@ class DpN:
         return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
 
     def newton_iteration(self):
+        # compute the initial indicator values. The first clustering and matching is executed here
         self._compute_indicator_value(self.Y)
+        # shift the reference set if needed
+        self._shift_reference_set()
         self.step, self.R = self._compute_netwon_step(X=self.X, Y=self.Y)
         self.step, self.max_step_size = self._handle_box_constraint(self.X, self.step)
         # backtracking line search for the step size
         self.step_size = self._line_search(self.X, self.step, self.R, self.max_step_size)
         # Newton iteration
         self.X += self.step_size.reshape(-1, 1) * self.step
-        # shift the reference set if needed
-        self._shift_reference_set()
         # evaluation
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
 
@@ -718,7 +720,7 @@ class DpN:
         # self.hist_IGD += [self.IGD_value]
         self.hist_GD += [gd_value]
         self.hist_IGD += [igd_value]
-        self.hist_R_norm += [np.mean(np.linalg.norm(self.R, axis=1))]
+        self.hist_R_norm += [np.linalg.norm(self.R.ravel())]
 
         if self.iter_count >= 2:
             self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
@@ -826,7 +828,8 @@ class DpN:
         # compute the Newton step for each approximation point - lower computation costs
         for i in range(N):
             Hessian = Hess[i]
-            Hessian = self._precondition_hessian(Hessian)
+            # Hessian = self._precondition_hessian(Hessian)
+            # print(np.linalg.cond(Hessian))
             DR = (
                 np.r_[
                     np.c_[Hessian, H[i].T],
@@ -838,7 +841,12 @@ class DpN:
             with warnings.catch_warnings():
                 warnings.filterwarnings("error")
                 try:
-                    step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
+                    # DR = self._precondition_hessian2(DR)
+                    # print(np.linalg.cond(DR))
+                    # step[i, idx[i]] = -1 * gmres(DR, R_[i].reshape(-1, 1)).ravel()
+                    v = solve(DR, R_[i].reshape(-1, 1)).ravel()
+                    # v /= min(1, np.linalg.norm(v))
+                    step[i, idx[i]] = -1 * v
                     R[i, idx[i]] = R_[i]
                 except Exception as err:
                     # in case of indefinite or singluar Hessian
@@ -852,14 +860,20 @@ class DpN:
             # L = self._precondition_hessian(DR)
             # step[i, idx[i]] = -1 * cho_solve((L, True), R_[i].reshape(-1, 1)).ravel()
             # R[i, idx[i]] = R_[i]
+        # print(np.linalg.norm(step, axis=0))
         return step, R
 
     def _shift_reference_set(self):
-        if self.iter_count == 0:  # log the first set of matched points
-            self.history_medroids.append(self.active_indicator._medroids)
+        if self.iter_count == 0:
+            indices = np.array([True] * len(self.Y))
+        else:
+            distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
+            indices = np.bitwise_and(
+                np.isclose(distance, 0),
+                np.isclose(np.linalg.norm(self.step[:, : self.dim_primal], axis=1), 0),
+            )
 
-        distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
-        if 11 < 2 or np.all(~np.isclose(distance, 0, rtol=1e-4, atol=1e-4)):
+        if np.all(~indices):
             return
 
         # take the feasible subset of the approximation set
@@ -881,11 +895,18 @@ class DpN:
         Q = qr(M.T)[0]
         n = -1 * np.abs(Q[:, -1])
         n /= np.linalg.norm(n)
-        v = 0.05 * n
-        self.reference_set = self.reference_set + v
-        self.active_indicator.compute(self.Y)
-        self.history_medroids.append(self.active_indicator._medroids)
-        self.logger.info(f"reference set is shifted by {v}")
+        # the initial shift is a bit larger
+        v = 0.05 * n if self.iter_count > 0 else 0.06 * n
+        self.active_indicator._medroids[indices] += v
+        if self.iter_count == 0:
+            # after the initial shifting, we need re-match the target and `self.Y`
+            self.active_indicator._match(self.Y)
+            # log the first set of matched points
+            self.history_medroids = [[m] for m in self.active_indicator._medroids]
+        else:
+            for i, k in enumerate(np.nonzero(indices)[0]):
+                self.history_medroids[k].append(self.active_indicator._medroids[indices][i])
+        self.logger.info(f"{np.sum(indices)} target points are shifted by {v}")
 
     def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if 1 < 2:
@@ -937,8 +958,9 @@ class DpN:
                 X_[i] += step_size[i] * step[i]
                 # TODO: maybe pass in the `grad` to avoid computing the re-matching?
                 R_ = self._compute_R(X_)[0][i]
+                k = min(len(R[i]), len(R_))
                 # Armijo–Goldstein condition
-                cond = np.linalg.norm(R_) <= (1 - c * step_size[i]) * np.linalg.norm(R[i])
+                cond = np.linalg.norm(R_[:k]) <= (1 - c * step_size[i]) * np.linalg.norm(R[i][:k])
                 if cond:
                     break
                 else:
@@ -952,9 +974,7 @@ class DpN:
                     # alpha *= 0.5
                     step_size[i] *= 0.5
             else:
-                # step[i] = -1 * step[i]
                 pass
-                # step_size[i] = -0.5 * max_step_size[i]
                 # self.logger.warn("Armijo's backtracking line search failed")
         return step_size
 
@@ -985,3 +1005,25 @@ class DpN:
                 self.logger.warn("Pre-conditioning the HV Hessian failed")
                 return H
         return L.dot(L.T)
+
+    def _precondition_hessian2(self, H: np.ndarray) -> np.ndarray:
+        """Precondition the Hessian matrix to make sure it is positive definite
+
+        Args:
+            H (np.ndarray): the Hessian matrix
+
+        Returns:
+            np.ndarray: the lower triagular decomposition of the preconditioned Hessian
+        """
+        # pre-condition the Hessian
+        beta = 1e-6
+        v = np.min(np.diag(H))
+        tau = 0 if v > 0 else -v + beta
+        I = np.eye(H.shape[0])
+        for _ in range(40):
+            k = np.linalg.cond(H)
+            if k <= 1e3:
+                break
+            H += tau * I
+            tau = max(2 * tau, beta)
+        return H

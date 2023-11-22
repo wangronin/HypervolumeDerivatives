@@ -177,7 +177,7 @@ class InvertedGenerationalDistance:
                 the points in the approximation set by recursively removing the points which has nonzero
                 gradient (the nearest point to some reference point). Defaults to False.
         """
-        self.ref = preprocess_reference_set(ref)
+        # self.ref = preprocess_reference_set(ref)
         self.ref = ref
         self.p = p
         self.func = func
@@ -225,6 +225,7 @@ class InvertedGenerationalDistance:
         # if the clustering hasn't been done, or the number of approximation points changes
         if not hasattr(self, "_medroids") or len(self._medroids) != N:
             self._cluster_reference_set(N)
+
         cost = cdist(Y, self._medroids, metric="minkowski", p=self.p)
         # min-weight assignment in a bipartite graph
         self._medoids_idx = linear_sum_assignment(cost)[1]

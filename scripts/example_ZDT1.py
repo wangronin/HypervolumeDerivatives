@@ -22,17 +22,16 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-
 np.random.seed(66)
 
 max_iters = 10
 f = ZDT1(n_var=3)
 problem = PymooProblemWithAD(f)
-pareto_front = problem.get_pareto_front(500)
+pareto_front = problem.get_pareto_front(1000)
 
 # load the reference set
 ref = pd.read_csv("./ZDT-new/ZDT1_REF_Filling.csv", header=None).values
-medroids = pd.read_csv("./ZDT-new/ZDT1_REF_Match_30points.csv", header=None).values
+medroids = pd.read_csv("./ZDT-new/ZDT1_REF_Match_28points.csv", header=None).values
 # the load the final population from an EMOA
 x0 = pd.read_csv("./ZDT-new/ZDT1_Pop_x.csv", header=None).values
 y0 = pd.read_csv("./ZDT-new/ZDT1_Pop_y.csv", header=None).values
@@ -52,7 +51,6 @@ lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
 for handle in lgnd.legend_handles:
     handle.set_markersize(10)
 
-ref -= 0.03  # the initial shift
 opt = DpN(
     dim=problem.n_var,
     n_objective=problem.n_obj,
@@ -100,26 +98,33 @@ if 1 < 2:
 lines = []
 lines += ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.3)
 lines += ax1.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=0.9)
-lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
+
 colors = plt.get_cmap("tab20").colors
-colors = [colors[2], colors[7], colors[13]]
+colors = [colors[2], colors[12], colors[13]]
+shifts = []
 for i, M in enumerate(opt.history_medroids):
-    lines += ax1.plot(M[:, 0], M[:, 1], color=colors[i], ls="none", marker="^", mec="none", ms=7, alpha=0.7)
+    c = colors[len(M) - 1]
+    for j, x in enumerate(M):
+        line = ax1.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
+        if j == len(shifts):
+            shifts.append(line)
+lines += shifts
+lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
+counts = np.unique([len(m) for m in opt.history_medroids], return_counts=True)[1]
 lgnd = ax1.legend(
     lines,
-    ["Pareto front", r"$Y_0$", r"$Y_{\mathrm{final}}$"]
-    + [f"Shift {i + 1}" for i in range(len(opt.history_medroids))],
+    ["Pareto front", r"$Y_0$"]
+    + [f"{i + 1} shift(s): {k} points" for i, k in enumerate(counts)]
+    + [r"$Y_{\mathrm{final}}$"],
 )
 for handle in lgnd.legend_handles:
     handle.set_markersize(12)
 
-ax1.set_ylim([0, 1.1])
 ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
 ax22 = ax2.twinx()
-# ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
 ax2.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
 ax22.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
 ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
