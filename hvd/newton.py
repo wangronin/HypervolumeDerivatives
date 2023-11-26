@@ -856,6 +856,7 @@ class DpN:
             # log the initial medroids
             self.history_medroids = [[m] for m in self.active_indicator._medroids]
             indices = np.isclose(distance, 0)
+            indices = np.array([True] * len(self.Y))
         else:
             indices = np.bitwise_and(
                 np.isclose(distance, 0),
@@ -865,10 +866,25 @@ class DpN:
         if np.all(~indices):
             return
 
+        if self._eta is None:
+            n_cluster = len(np.unique(self.Y_label))
+            Y_idx = [np.nonzero(self.Y_label == i)[0] for i in range(n_cluster)]
+            self._eta = dict()
+            for i in range(n_cluster):
+                Y = self.Y[Y_idx[i]]
+                # compute the normal vector to CHIM
+                idx = Y.argmin(axis=0)
+                Z = Y[idx, :]
+                M = Z[1:] - Z[0]
+                Q = qr(M.T)[0]
+                n = -1 * np.abs(Q[:, -1])
+                n /= np.linalg.norm(n)
+                self._eta[i] = n
+
         indices = np.nonzero(indices)[0]
         if isinstance(self._ref, dict):
-            eta_idx = self.Y_label[indices]
             for i, k in enumerate(indices):
+                eta_idx = self.Y_label[indices]
                 n = self._eta[eta_idx[i]].ravel()
                 # the initial shift is a bit larger
                 v = 0.05 * n if self.iter_count > 0 else 0.06 * n
