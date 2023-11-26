@@ -834,7 +834,7 @@ class DpN:
         for r in range(N):
             Hessian, c, h = Hess[r], idx[r], H[r]
             # TODO: check if preconditioning is needed automatically
-            Hessian = self._precondition_hessian(Hessian)
+            # Hessian = self._precondition_hessian(Hessian)
             Z = np.zeros((len(h), len(h)))
             DR = np.r_[np.c_[Hessian, h.T], np.c_[h, Z]] if self._constrained else Hessian
             with warnings.catch_warnings():
@@ -852,16 +852,29 @@ class DpN:
 
     def _shift_reference_set(self):
         distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
+
         if self.iter_count == 0:
             # log the initial medroids
-            self.history_medroids = [[m] for m in self.active_indicator._medroids]
+            self.history_medroids = [[m.copy()] for m in self.active_indicator._medroids]
             indices = np.isclose(distance, 0)
-            indices = np.array([True] * len(self.Y))
+            # indices = np.array([True] * len(self.Y))
         else:
             indices = np.bitwise_and(
                 np.isclose(distance, 0),
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_primal], axis=1), 0),
             )
+        if 1 < 2:
+            import matplotlib.pyplot as plt
+
+            Y = self.Y
+            M = self.active_indicator._medroids
+            fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
+            ax.plot(M[:, 0], M[:, 1], "k^", mfc="none")
+            ax.plot(Y[:, 0], Y[:, 1], "g+")
+            for i in range(len(Y)):
+                ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
+            plt.tight_layout()
+            plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
 
         if np.all(~indices):
             return
@@ -887,7 +900,7 @@ class DpN:
                 eta_idx = self.Y_label[indices]
                 n = self._eta[eta_idx[i]].ravel()
                 # the initial shift is a bit larger
-                v = 0.05 * n if self.iter_count > 0 else 0.06 * n
+                v = 0.05 * n if self.iter_count > 0 else 0.03 * n
                 m = self.active_indicator._medroids[k] + v
                 self.active_indicator.set_medroids(m, k)
         else:
@@ -970,7 +983,7 @@ class DpN:
                 R_ = self._compute_R(X_)[0][i]
                 k = min(len(R[i]), len(R_))
                 # Armijo–Goldstein condition
-                cond = np.linalg.norm(R_[:k]) <= (1 - c * step_size[i]) * np.linalg.norm(R[i][:k])
+                cond = np.linalg.norm(R_) <= (1 - c * step_size[i]) * np.linalg.norm(R[i])
                 if cond:
                     break
                 else:
