@@ -34,7 +34,7 @@ n_jobs = 30
 ref_point = np.array([11, 11])
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
-path = "./ZDT-new/ZDT3/"
+path = "./ZDT/ZDT3/"
 
 data = loadmat("./data/ZDT/ZDT1_NSGA-II.mat")
 columns = (
