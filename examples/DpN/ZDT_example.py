@@ -102,7 +102,7 @@ while not opt.terminate():
 
 X = opt._get_primal_dual(opt.X)[0]
 Y = opt.Y
-M = opt.active_indicator._medroids
+M = opt.active_indicator._medroids_cluster
 # x1 = M[:, 0]
 # x2 = [f_x2(*_) for _ in zip(x1, M[:, 1])]
 # M_x = np.c_[x1, x2]

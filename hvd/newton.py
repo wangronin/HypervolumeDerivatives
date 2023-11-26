@@ -3,10 +3,9 @@ import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-import pandas as pd
 from scipy.linalg import block_diag, cholesky, qr, solve
 from scipy.sparse import csc_matrix
-from scipy.sparse.linalg import gmres, spsolve
+from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
 
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
@@ -504,6 +503,7 @@ class DpN:
         xtol: float = 0,
         verbose: bool = True,
         pareto_front: Union[List[float], np.ndarray] = None,
+        eta=None,
     ):
         """
         Args:
@@ -566,6 +566,7 @@ class DpN:
         self._pareto_front = pareto_front
         self._perf_gd = GenerationalDistance(ref=pareto_front)
         self._perf_igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
+        self._eta = eta
 
     def _check_constraints(self):
         # initialize dual variables
@@ -612,11 +613,15 @@ class DpN:
         return self._ref
 
     @reference_set.setter
-    def reference_set(self, ref: np.ndarray):
+    def reference_set(self, ref: Union[np.ndarray, List[np.ndarray]]):
         self._ref = ref
-        self._gd = GenerationalDistance(ref=ref, func=self.func, jac=self.jac, hess=self.hessian)
+        if isinstance(ref, dict):
+            self.__ref = np.concatenate([v for v in ref.values()], axis=0)
+        else:
+            self.__ref = ref
+        self._gd = GenerationalDistance(ref=self.__ref, func=self.func, jac=self.jac, hess=self.hessian)
         self._igd = InvertedGenerationalDistance(
-            ref=ref,
+            ref=self._ref,
             func=self.func,
             jac=self.jac,
             hess=self.hessian,
@@ -818,90 +823,110 @@ class DpN:
     def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         N = X.shape[0]
         primal_vars = self._get_primal_dual(X)[0]
-        step = np.zeros((N, self.dim))  # Netwon steps
+        newton_step = np.zeros((N, self.dim))  # Netwon steps
         R = np.zeros((N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
         grad, Hess = self.active_indicator.compute_derivatives(primal_vars, Y)
         # the root-finding problem and the gradient of the equality constraints
-        R_, H, idx = self._compute_R(X, Y, grad=grad)
+        R_list, H, idx = self._compute_R(X, Y, grad=grad)
         # compute the Newton step for each approximation point - lower computation costs
-        for i in range(N):
-            Hessian = Hess[i]
-            # Hessian = self._precondition_hessian(Hessian)
-            # print(np.linalg.cond(Hessian))
-            DR = (
-                np.r_[
-                    np.c_[Hessian, H[i].T],
-                    np.c_[H[i], np.zeros((len(H[i]), len(H[i])))],
-                ]
-                if self._constrained
-                else Hessian
-            )
+        for r in range(N):
+            Hessian, c, h = Hess[r], idx[r], H[r]
+            # TODO: check if preconditioning is needed automatically
+            Hessian = self._precondition_hessian(Hessian)
+            Z = np.zeros((len(h), len(h)))
+            DR = np.r_[np.c_[Hessian, h.T], np.c_[h, Z]] if self._constrained else Hessian
             with warnings.catch_warnings():
                 warnings.filterwarnings("error")
                 try:
-                    step[i, idx[i]] = -1 * solve(DR, R_[i].reshape(-1, 1)).ravel()
-                    R[i, idx[i]] = R_[i]
-                except Exception as err:
-                    # in case of indefinite or singluar Hessian
+                    newton_step[r, c] = -1 * solve(DR, R_list[r].reshape(-1, 1)).ravel()
+                    R[r, c] = R_list[r]
+                except Exception:  # in case of singluar Hessian, shouldn't really happen
                     w, V = np.linalg.eigh(DR)
                     w[np.isclose(w, 0)] = 1e-10
                     D = np.diag(1 / w)
-                    step[i, idx[i]] = -1 * (V @ D @ V.T @ R_[i].reshape(-1, 1)).ravel()
-                    R[i, idx[i]] = R_[i]
-
-            # TODO: figure out the following preconditioning is needed
-            # L = self._precondition_hessian(DR)
-            # step[i, idx[i]] = -1 * cho_solve((L, True), R_[i].reshape(-1, 1)).ravel()
-            # R[i, idx[i]] = R_[i]
-        # print(np.linalg.norm(step, axis=0))
-        return step, R
+                    newton_step[r, c] = -1 * (V @ D @ V.T @ R_list[r].reshape(-1, 1)).ravel()
+                    R[r, c] = R_list[r]
+        return newton_step, R
 
     def _shift_reference_set(self):
         if self.iter_count == 0:
-            indices = np.array([True] * len(self.Y))
+            # the medroids should be already computed at this moment
+            if 1 < 2:
+                import pandas as pd
+
+                self._component_medroids_idx = pd.read_csv(
+                    f"~/Downloads/reference/ZDT3_NSGA-II_run_1_lastpopu_labels.csv", header=None
+                ).values.ravel()[0:50]
+                self._component_medroids_idx -= 1
+
+            self.history_medroids = [[m] for m in self.active_indicator._medroids]
+            # indices = np.array([True] * len(self.Y))
+            distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
+            indices = np.isclose(distance, 0)
         else:
             distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
-            # indices = np.isclose(distance, 0)
             indices = np.bitwise_and(
                 np.isclose(distance, 0),
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_primal], axis=1), 0),
             )
 
+        if 11 < 2:
+            import matplotlib.pyplot as plt
+
+            Y = self.Y
+            M = self.active_indicator._medroids
+            fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
+            ax.plot(M[:, 0], M[:, 1], "k^")
+            ax.plot(Y[:, 0], Y[:, 1], "k+")
+            for i in range(len(Y)):
+                ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
+            plt.tight_layout()
+            plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
+
         if np.all(~indices):
             return
 
-        # take the feasible subset of the approximation set
-        Y = self.Y
-        if self._constrained and self.q != 0:
-            N = len(self.X)
-            primal_vars = self._get_primal_dual(self.X)[0]
-            cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
-            idx = np.array([all(v <= 0) for v in cstr_value])
-            Y = self.Y[idx]
-
-        # get the non-dominated subset
-        idx = non_domin_sort(Y, only_front_indices=True)[0]
-        Y = Y[idx]
-        # compute the normal vector to CHIM
-        idx = Y.argmin(axis=0)
-        Z = Y[idx, :]
-        M = Z[1:] - Z[0]
-        Q = qr(M.T)[0]
-        n = -1 * np.abs(Q[:, -1])
-        n /= np.linalg.norm(n)
-        # the initial shift is a bit larger
-        v = 0.05 * n if self.iter_count > 0 else 0.06 * n
-        self.active_indicator._medroids[indices] += v
-        if self.iter_count == 0:
-            # after the initial shifting, we need re-match the target and `self.Y`
-            self.active_indicator._match(self.Y)
-            # log the first set of matched points
-            self.history_medroids = [[m] for m in self.active_indicator._medroids]
+        indices = np.nonzero(indices)[0]
+        if 1 < 2:
+            eta_idx = self._component_medroids_idx[indices]
+            for i, k in enumerate(indices):
+                n = self._eta[eta_idx[i]].ravel()
+                # the initial shift is a bit larger
+                v = 0.05 * n if self.iter_count > 0 else 0.06 * n
+                m = self.active_indicator._medroids[k] + v
+                self.active_indicator.set_medroids(m, k)
         else:
-            for i, k in enumerate(np.nonzero(indices)[0]):
-                self.history_medroids[k].append(self.active_indicator._medroids[indices][i])
-        self.logger.info(f"{np.sum(indices)} target points are shifted by {v}")
+            # take the feasible subset of the approximation set
+            Y = self.Y
+            if self._constrained and self.q != 0:
+                N = len(self.X)
+                primal_vars = self._get_primal_dual(self.X)[0]
+                cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
+                idx = np.array([all(v <= 0) for v in cstr_value])
+                Y = self.Y[idx]
+
+            # get the non-dominated subset
+            idx = non_domin_sort(Y, only_front_indices=True)[0]
+            Y = Y[idx]
+            # compute the normal vector to CHIM
+            idx = Y.argmin(axis=0)
+            Z = Y[idx, :]
+            M = Z[1:] - Z[0]
+            Q = qr(M.T)[0]
+            n = -1 * np.abs(Q[:, -1])
+            n /= np.linalg.norm(n)
+            v = 0.05 * n if self.iter_count > 0 else 0.06 * n
+            m = self.active_indicator._medroids[k] + v
+            self.active_indicator.set_medroids(m, k)
+        # after the initial shifting, we need re-match the target and `self.Y`
+        # self.active_indicator._match(self.Y)
+        # log the first set of matched points
+        # self.history_medroids = [[m] for m in self.active_indicator._medroids]
+        # else:
+        for i, k in enumerate(indices):
+            self.history_medroids[k].append(self.active_indicator._medroids[indices][i])
+        self.logger.info(f"{len(indices)} target points are shifted")
 
     def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if 1 < 2:

@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib import rcParams
 
 from hvd.newton import DpN
@@ -54,7 +55,7 @@ x0 = f.get_pareto_set(50, kind="uniform")
 x0[:, 0:2] += 0.08 * np.random.rand(len(x0), 2)  # perturb the initial solution a bit
 # x0 += 0.02 * np.random.rand(len(x0), dim)  # perturb the initial solution a bit
 # y0 = np.array([f.objective(x) for x in x0])
-
+N = len(x0)
 opt = DpN(
     dim=dim,
     n_objective=3,
@@ -64,7 +65,7 @@ opt = DpN(
     hessian=f.objective_hessian,
     h=f.constraint,
     h_jac=f.constraint_jacobian,
-    mu=len(x0),
+    mu=N,
     lower_bounds=0,
     upper_bounds=1,
     x0=x0,
@@ -144,3 +145,7 @@ ax.legend()
 
 plt.tight_layout()
 plt.savefig(f"{type(f).__name__}-{len(x0)}.pdf", dpi=700)
+
+data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
+df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
+df.to_csv(f"{f.__class__.__name__}_example.csv")
