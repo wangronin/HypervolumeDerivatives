@@ -140,7 +140,7 @@ def run(problem, id: int, verbose: bool = True):
         opt.log()
 
     # plot the result
-    plot_trajectory(y0, opt.Y, ref, pareto_front, opt.active_indicator._medroids, opt, id)
+    plot_trajectory(y0, opt.Y, ref, pareto_front, opt.active_indicator._medroids_cluster, opt, id)
     # measure the performance after optimization
     X = opt._get_primal_dual(opt.X)[0]
     Y = opt.Y
