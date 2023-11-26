@@ -28,12 +28,13 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 6
-f = ZDT1()
+max_iters = 8
+f = ZDT3()
 n_jobs = 30
 ref_point = np.array([11, 11])
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
+path = "./ZDT-new/ZDT3/"
 
 data = loadmat("./data/ZDT/ZDT1_NSGA-II.mat")
 columns = (
@@ -45,11 +46,15 @@ data = pd.DataFrame(data["data"], columns=columns)
 
 
 def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
+    all_ref = np.concatenate([v for v in ref.values()], axis=0)
+    medroids0 = np.vstack([m[0] for m in history_medroids])
+
     fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
     plt.subplots_adjust(right=0.93, left=0.05)
     ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
     ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
-    ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
+    ax0.plot(all_ref[:, 0], all_ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
+    ax0.plot(medroids0[:, 0], medroids0[:, 1], "r^", mec="none", ms=7, alpha=0.8)
     ax0.set_title("Objective space (Initialization)")
     ax0.set_xlabel(r"$f_1$")
     ax0.set_ylabel(r"$f_2$")
@@ -119,13 +124,20 @@ def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
 
 
 def execute(run: int):
+    ref_label = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_component_id.csv", header=None).values[0]
+    n_cluster = len(np.unique(ref_label))
     # load the reference set
-    ref = pd.read_csv(f"./data-reference-set/ZDT/ZDT1_NSGA-II_run_{run}_ref.csv", header=None).values
-    # the load the final population from an EMOA
-    df = data[(data.run == run) & (data.iteration == 999)]
-    x0 = df.loc[:, "x1":f"x{problem.n_var}"].iloc[:50, :].values
-    y0 = df.loc[:, "f1":f"f{problem.n_obj}"].iloc[:50, :].values
+    ref = dict()
+    eta = dict()
+    for i in range(n_cluster):
+        ref[i] = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_filling_comp{i+1}.csv", header=None).values
+        eta[i] = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_eta_{i+1}.csv", header=None).values
 
+    # the load the final population from an EMOA
+    x0 = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_lastpopu_x.csv", header=None).values[0:50]
+    y0 = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_lastpopu_y.csv", header=None).values[0:50]
+    Y_label = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_lastpopu_labels.csv", header=None).values.ravel()
+    Y_label = Y_label[0:50] - 1
     opt = DpN(
         dim=problem.n_var,
         n_objective=problem.n_obj,
@@ -142,7 +154,9 @@ def execute(run: int):
         max_iters=max_iters,
         type="igd",
         verbose=False,
-        pareto_front=problem.get_pareto_front(500),
+        pareto_front=pareto_front,
+        eta=eta,
+        Y_label=Y_label,
     )
     opt.run()
     Y = opt.Y
