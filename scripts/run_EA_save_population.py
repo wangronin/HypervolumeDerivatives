@@ -158,7 +158,7 @@ def get_algorithm(n_objective: int, algorithm_name: str):
 
 N = 30
 for problem_name in [
-    "zdt1",
+    "zdt3",
 ]:  # "zdt2", "zdt3", "zdt4", "zdt6"]:
     # for problem_name in [f"dtlz{i}" for i in range(1, 8)]:
     # problem_name = problem.__class__.__name__
@@ -167,19 +167,17 @@ for problem_name in [
     # problem = ModifiedObjective(ProblemWrapper(problem))
     # problem = ProblemWrapper(problem)
     problem = get_problem(problem_name)
-    termination = get_termination("n_gen", 300)
+    termination = get_termination("n_gen", 3000)
 
     for algorithm_name in ("NSGA-II",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name)
-        data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
-        breakpoint()
+        # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
         )
         df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-        print(df)
-        df.to_csv(f"problem_name-NSGA-II.csv", index=False)
+        df.to_csv(f"{problem_name}-NSGA-II.csv", index=False)
         # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)

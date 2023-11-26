@@ -11,7 +11,7 @@ from scipy.io import loadmat
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
-from hvd.zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.zdt import ZDT3, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -35,14 +35,6 @@ ref_point = np.array([11, 11])
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
 path = "./ZDT/ZDT3/"
-
-data = loadmat("./data/ZDT/ZDT1_NSGA-II.mat")
-columns = (
-    ["run", "iteration"]
-    + [f"x{i}" for i in range(1, problem.n_var + 1)]
-    + [f"f{i}" for i in range(1, problem.n_obj + 1)]
-)
-data = pd.DataFrame(data["data"], columns=columns)
 
 
 def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
