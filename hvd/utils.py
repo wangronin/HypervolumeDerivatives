@@ -7,8 +7,58 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import numpy as np
+from scipy.linalg import cholesky
+from sklearn.neighbors import LocalOutlierFactor
 
 __author__ = "Hao Wang"
+
+
+def precondition_hessian(H: np.ndarray) -> np.ndarray:
+    """Precondition the Hessian matrix to make sure it is positive definite
+
+    Args:
+        H (np.ndarray): the Hessian matrix
+
+    Returns:
+        np.ndarray: the lower triagular decomposition of the preconditioned Hessian
+    """
+    # pre-condition the Hessian
+    try:
+        L = cholesky(H, lower=True)
+    except:
+        beta = 1e-6
+        v = np.min(np.diag(H))
+        tau = 0 if v > 0 else -v + beta
+        I = np.eye(H.shape[0])
+        for _ in range(35):
+            try:
+                L = cholesky(H + tau * I, lower=True)
+                break
+            except:
+                tau = max(2 * tau, beta)
+        else:
+            print("Pre-conditioning the HV Hessian failed")
+    return L
+
+
+def preprocess_reference_set(X: np.ndarray) -> np.ndarray:
+    """remove duplicated points and outliers"""
+    N = len(X)
+    idx = []
+    # remove duplicated points
+    for i in range(N):
+        x = X[i]
+        CON = np.all(
+            np.isclose(X[np.arange(N) != i], x, rtol=1e-3, atol=1e-4),
+            axis=1,
+        )
+        if all(~CON):
+            idx.append(i)
+
+    if len(idx) > 50:
+        X = X[idx]
+    score = LocalOutlierFactor(n_neighbors=max(5, int(len(X) / 10))).fit_predict(X)
+    return X[score != -1]
 
 
 class LoggerFormatter(logging.Formatter):

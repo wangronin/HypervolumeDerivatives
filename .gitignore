@@ -9,6 +9,7 @@
 *.ipynb
 *.tex
 *.csv
+*.mat
 data/
 model/
 

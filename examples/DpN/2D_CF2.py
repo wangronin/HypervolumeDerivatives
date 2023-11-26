@@ -25,10 +25,10 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
-# random.seed(42)
 
 max_iters = 10
 problem = CF2()
+pareto_front = CF2.get_pareto_front(500)
 
 df = pd.read_csv("./examples/DpN/CF2_x0.csv", header=0)
 x0 = df.iloc[:, 0:10].values
@@ -37,7 +37,7 @@ idx = np.nonzero((y0[:, 0] < 1) & (y0[:, 1] < 1))[0]
 x0 = x0[idx]
 y0 = y0[idx]
 x0[:, 0] += 0.01
-mu = len(x0)
+N = len(x0)
 y0 = np.array([problem.objective(x) for x in x0])
 ref = pd.read_csv("./examples/DpN/CF2_refset_nofillmeans_shifted.csv", header=None).values
 ref -= 0.03
@@ -52,9 +52,6 @@ ax1.plot(ref[:, 0], ref[:, 1], "k.", ms=3)
 ax1.plot(y0[:, 0], y0[:, 1], "r+")
 ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "r.", ms=1)
 
-# plt.show()
-# breakpoint()
-
 opt = DpN(
     dim=problem.n_decision_vars,
     n_objective=problem.n_objectives,
@@ -64,12 +61,13 @@ opt = DpN(
     hessian=problem.objective_hessian,
     g=problem.constraint,
     g_jac=problem.constraint_jacobian,
-    mu=mu,
+    mu=N,
     x0=x0,
     lower_bounds=problem.lower_bounds,
     upper_bounds=problem.upper_bounds,
     max_iters=max_iters,
     type="igd",
+    pareto_front=pareto_front,
     verbose=True,
 )
 
@@ -114,7 +112,7 @@ Y = opt.Y
 
 if 1 < 2:
     trajectory = np.array([y0] + opt.hist_Y)
-    for i in range(mu):
+    for i in range(N):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
         ax1.quiver(
             x[:-1],
@@ -149,5 +147,8 @@ ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
 ax2.legend()
 
-# plt.savefig(f"2D-CF2-{mu}.pdf", dpi=1000)
-plt.show()
+plt.savefig(f"2D-CF2-{N}.pdf", dpi=1000)
+
+data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
+df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
+df.to_csv("CF2_example.csv")
