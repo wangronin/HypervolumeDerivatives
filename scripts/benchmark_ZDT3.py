@@ -161,4 +161,4 @@ def execute(run: int):
 
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-df.to_csv(f"{f.__class__.__name__}.csv", index=False)
+df.to_csv(f"{f.__class__.__name__}-DpN.csv", index=False)
