@@ -504,6 +504,7 @@ class DpN:
         verbose: bool = True,
         pareto_front: Union[List[float], np.ndarray] = None,
         eta=None,
+        Y_label=None,
     ):
         """
         Args:
@@ -566,7 +567,9 @@ class DpN:
         self._pareto_front = pareto_front
         self._perf_gd = GenerationalDistance(ref=pareto_front)
         self._perf_igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
+        # TODO: fix those ad-hoc solutions
         self._eta = eta
+        self.Y_label = Y_label
 
     def _check_constraints(self):
         # initialize dual variables
@@ -615,11 +618,7 @@ class DpN:
     @reference_set.setter
     def reference_set(self, ref: Union[np.ndarray, List[np.ndarray]]):
         self._ref = ref
-        if isinstance(ref, dict):
-            self.__ref = np.concatenate([v for v in ref.values()], axis=0)
-        else:
-            self.__ref = ref
-        self._gd = GenerationalDistance(ref=self.__ref, func=self.func, jac=self.jac, hess=self.hessian)
+        self._gd = GenerationalDistance(ref=self._ref, func=self.func, jac=self.jac, hess=self.hessian)
         self._igd = InvertedGenerationalDistance(
             ref=self._ref,
             func=self.func,
@@ -751,7 +750,7 @@ class DpN:
 
     def _compute_indicator_value(self, Y: np.ndarray):
         self.GD_value = self._gd.compute(Y=Y)
-        self.IGD_value = self._igd.compute(Y=Y)
+        self.IGD_value = self._igd.compute(Y=Y, Y_label=self.Y_label)
 
     def _compute_R(
         self, X: np.ndarray, Y: np.ndarray = None, grad: np.ndarray = None
@@ -774,7 +773,9 @@ class DpN:
         N = len(X)
         primal_vars, dual_vars = self._get_primal_dual(X)
         if grad is None:
-            grad = self.active_indicator.compute_derivatives(primal_vars, Y, compute_hessian=False)
+            grad = self.active_indicator.compute_derivatives(
+                primal_vars, Y, Y_label=self.Y_label, compute_hessian=False
+            )
 
         cstr_value, active_indices, H = None, None, None
         # inequality constraint function value, if exists
@@ -826,7 +827,7 @@ class DpN:
         newton_step = np.zeros((N, self.dim))  # Netwon steps
         R = np.zeros((N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
-        grad, Hess = self.active_indicator.compute_derivatives(primal_vars, Y)
+        grad, Hess = self.active_indicator.compute_derivatives(primal_vars, Y, Y_label=self.Y_label)
         # the root-finding problem and the gradient of the equality constraints
         R_list, H, idx = self._compute_R(X, Y, grad=grad)
         # compute the Newton step for each approximation point - lower computation costs
@@ -850,46 +851,23 @@ class DpN:
         return newton_step, R
 
     def _shift_reference_set(self):
+        distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
         if self.iter_count == 0:
-            # the medroids should be already computed at this moment
-            if 1 < 2:
-                import pandas as pd
-
-                self._component_medroids_idx = pd.read_csv(
-                    f"~/Downloads/reference/ZDT3_NSGA-II_run_1_lastpopu_labels.csv", header=None
-                ).values.ravel()[0:50]
-                self._component_medroids_idx -= 1
-
+            # log the initial medroids
             self.history_medroids = [[m] for m in self.active_indicator._medroids]
-            # indices = np.array([True] * len(self.Y))
-            distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
             indices = np.isclose(distance, 0)
         else:
-            distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
             indices = np.bitwise_and(
                 np.isclose(distance, 0),
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_primal], axis=1), 0),
             )
 
-        if 11 < 2:
-            import matplotlib.pyplot as plt
-
-            Y = self.Y
-            M = self.active_indicator._medroids
-            fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
-            ax.plot(M[:, 0], M[:, 1], "k^")
-            ax.plot(Y[:, 0], Y[:, 1], "k+")
-            for i in range(len(Y)):
-                ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
-            plt.tight_layout()
-            plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
-
         if np.all(~indices):
             return
 
         indices = np.nonzero(indices)[0]
-        if 1 < 2:
-            eta_idx = self._component_medroids_idx[indices]
+        if isinstance(self._ref, dict):
+            eta_idx = self.Y_label[indices]
             for i, k in enumerate(indices):
                 n = self._eta[eta_idx[i]].ravel()
                 # the initial shift is a bit larger
@@ -919,11 +897,7 @@ class DpN:
             v = 0.05 * n if self.iter_count > 0 else 0.06 * n
             m = self.active_indicator._medroids[k] + v
             self.active_indicator.set_medroids(m, k)
-        # after the initial shifting, we need re-match the target and `self.Y`
-        # self.active_indicator._match(self.Y)
-        # log the first set of matched points
-        # self.history_medroids = [[m] for m in self.active_indicator._medroids]
-        # else:
+        # log the updated medroids
         for i, k in enumerate(indices):
             self.history_medroids[k].append(self.active_indicator._medroids[indices][i])
         self.logger.info(f"{len(indices)} target points are shifted")
@@ -1026,24 +1000,16 @@ class DpN:
                 return H
         return L.dot(L.T)
 
-    def _precondition_hessian2(self, H: np.ndarray) -> np.ndarray:
-        """Precondition the Hessian matrix to make sure it is positive definite
 
-        Args:
-            H (np.ndarray): the Hessian matrix
+# if 11 < 2:
+#     import matplotlib.pyplot as plt
 
-        Returns:
-            np.ndarray: the lower triagular decomposition of the preconditioned Hessian
-        """
-        # pre-condition the Hessian
-        beta = 1e-6
-        v = np.min(np.diag(H))
-        tau = 0 if v > 0 else -v + beta
-        I = np.eye(H.shape[0])
-        for _ in range(40):
-            k = np.linalg.cond(H)
-            if k <= 1e3:
-                break
-            H += tau * I
-            tau = max(2 * tau, beta)
-        return H
+#     Y = self.Y
+#     M = self.active_indicator._medroids
+#     fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
+#     ax.plot(M[:, 0], M[:, 1], "k^")
+#     ax.plot(Y[:, 0], Y[:, 1], "k+")
+#     for i in range(len(Y)):
+#         ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
+#     plt.tight_layout()
+#     plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
