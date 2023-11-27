@@ -863,7 +863,7 @@ class DpN:
                 np.isclose(distance, 0),
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_primal], axis=1), 0),
             )
-        if 1 < 2:
+        if 11 < 2:
             import matplotlib.pyplot as plt
 
             Y = self.Y

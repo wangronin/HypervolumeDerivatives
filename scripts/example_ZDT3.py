@@ -25,13 +25,13 @@ rcParams["ytick.major.width"] = 1
 np.random.seed(66)
 
 max_iters = 8
-run = 2
+run = 7
 f = ZDT3()
 problem = PymooProblemWithAD(f)
-pareto_front = problem.get_pareto_front(1000)
+pareto_front = problem.get_pareto_front(500)
 
 # load the reference set
-path = "./ZDT-new/ZDT3/"
+path = "./ZDT/ZDT3/"
 ref_label = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_component_id.csv", header=None).values[0]
 n_cluster = len(np.unique(ref_label))
 ref = dict()
@@ -47,20 +47,6 @@ y0 = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_lastpopu_y.csv", header=None).v
 Y_label = pd.read_csv(path + f"ZDT3_NSGA-II_run_{run}_lastpopu_labels.csv", header=None).values.ravel()[0:50]
 Y_label -= 1
 N = len(x0)
-
-fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
-plt.subplots_adjust(right=0.93, left=0.05)
-
-ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
-ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
-ax0.plot(all_ref[:, 0], all_ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
-
-ax0.set_title("Objective space (Initialization)")
-ax0.set_xlabel(r"$f_1$")
-ax0.set_ylabel(r"$f_2$")
-lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
-for handle in lgnd.legend_handles:
-    handle.set_markersize(10)
 
 opt = DpN(
     dim=problem.n_var,
@@ -84,9 +70,22 @@ opt = DpN(
 )
 opt.run()
 medroids0 = np.vstack([m[0] for m in opt.history_medroids])
-ax0.plot(medroids0[:, 0], medroids0[:, 1], "r^", mec="none", ms=7, alpha=0.8)
 X = opt._get_primal_dual(opt.X)[0]
 Y = opt.Y
+
+fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
+plt.subplots_adjust(right=0.93, left=0.05)
+
+ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
+ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
+ax0.plot(all_ref[:, 0], all_ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
+ax0.plot(medroids0[:, 0], medroids0[:, 1], "r^", mec="none", ms=7, alpha=0.8)
+ax0.set_title("Objective space (Initialization)")
+ax0.set_xlabel(r"$f_1$")
+ax0.set_ylabel(r"$f_2$")
+lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
+for handle in lgnd.legend_handles:
+    handle.set_markersize(10)
 
 if 1 < 2:
     trajectory = np.array([y0] + opt.hist_Y)

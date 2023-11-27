@@ -28,14 +28,15 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 6
-f = ZDT1()
+max_iters = 8
 n_jobs = 30
 ref_point = np.array([11, 11])
+problem_name = sys.argv[1]
+f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
 
-data = loadmat("./data/ZDT/ZDT1_NSGA-II.mat")
+data = loadmat("./data/ZDT/{problem_name}_NSGA-II.mat")
 columns = (
     ["run", "iteration"]
     + [f"x{i}" for i in range(1, problem.n_var + 1)]
@@ -120,7 +121,9 @@ def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
 
 def execute(run: int):
     # load the reference set
-    ref = pd.read_csv(f"./data-reference-set/ZDT/ZDT1_NSGA-II_run_{run}_ref.csv", header=None).values
+    ref = pd.read_csv(
+        f"./data-reference-set/ZDT/{problem_name}_NSGA-II_run_{run}_ref.csv", header=None
+    ).values
     # the load the final population from an EMOA
     df = data[(data.run == run) & (data.iteration == 999)]
     x0 = df.loc[:, "x1":f"x{problem.n_var}"].iloc[:50, :].values
@@ -146,7 +149,7 @@ def execute(run: int):
     )
     opt.run()
     Y = opt.Y
-    fig_name = f"./figure/{f.__class__.__name__}-run{run}.pdf"
+    fig_name = f"./figure/{problem_name}-run{run}.pdf"
     plot(y0, Y, ref, opt.hist_Y, opt.history_medroids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_func = GenerationalDistance(pareto_front)
     igd_func = InvertedGenerationalDistance(pareto_front)
@@ -155,4 +158,4 @@ def execute(run: int):
 
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-df.to_csv(f"{f.__class__.__name__}.csv", index=False)
+df.to_csv(f"{problem_name}-DpN.csv", index=False)
