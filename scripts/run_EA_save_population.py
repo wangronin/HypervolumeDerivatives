@@ -157,8 +157,9 @@ def get_algorithm(n_objective: int, algorithm_name: str):
 
 
 N = 30
+problem = sys.argv[1]
 for problem_name in [
-    "zdt3",
+    problem,
 ]:  # "zdt2", "zdt3", "zdt4", "zdt6"]:
     # for problem_name in [f"dtlz{i}" for i in range(1, 8)]:
     # problem_name = problem.__class__.__name__
