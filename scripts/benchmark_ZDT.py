@@ -32,6 +32,7 @@ max_iters = 8
 n_jobs = 30
 ref_point = np.array([11, 11])
 problem_name = sys.argv[1]
+print(problem_name)
 f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
@@ -145,7 +146,7 @@ def execute(run: int):
         max_iters=max_iters,
         type="igd",
         verbose=False,
-        pareto_front=problem.get_pareto_front(500),
+        pareto_front=pareto_front,
     )
     opt.run()
     Y = opt.Y
