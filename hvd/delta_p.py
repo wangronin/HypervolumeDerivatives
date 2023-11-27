@@ -111,21 +111,26 @@ class ClusteredMetroids:
         self.recluster = recluster
         self.p = p
 
-    def compute(self, X: Union[dict, np.ndarray], Y: Union[dict, np.ndarray], Y_idx) -> np.ndarray:
+    def compute(
+        self, X: Union[dict, np.ndarray], Y: Union[dict, np.ndarray], Y_idx: np.ndarray = None
+    ) -> np.ndarray:
         # if we have single component
         X = [X] if isinstance(X, np.ndarray) else X
         Y = [Y] if isinstance(Y, np.ndarray) else Y
         n, m = len(X), len(Y)
         N, dim = np.sum([len(y) for y in Y]), X[0].shape[1]
         assert n >= m  # TODO: find a solution here
-        # match the clusters of `X` and `Y`
-        iu = np.triu_indices(n=n, m=m)
-        cost = np.zeros((n, m))
-        cost[iu] = [directed_hausdorff(X[i], Y[j])[0] for (i, j) in zip(*iu)]
-        cost = cost + cost.T
-        idx = linear_sum_assignment(cost)[1]
+        if n == 1 and m == 1:
+            idx = [0]
+        else:
+            # match the clusters of `X` and `Y`
+            iu = np.triu_indices(n=n, m=m)
+            cost = np.zeros((n, m))
+            cost[iu] = [directed_hausdorff(X[i], Y[j])[0] for (i, j) in zip(*iu)]
+            cost = cost + cost.T
+            idx = linear_sum_assignment(cost)[1]
         # compute the medroids for each cluster of `X`
-        self.Y_idx = Y_idx
+        self.Y_idx = [list(range(len(Y[0])))] if Y_idx is None else Y_idx
         out = np.zeros((N, dim))
         self._medroids_idx = np.empty(N, dtype=object)
         for k in range(n):
@@ -138,8 +143,8 @@ class ClusteredMetroids:
                 medroids = self._cluster(X=X[k], N=len(Y_))
             medroids = self._match(medroids, Y_)
             self._medroids[k] = medroids
-            out[Y_idx[k]] = medroids
-            for i, j in enumerate(Y_idx[k]):
+            out[self.Y_idx[k]] = medroids
+            for i, j in enumerate(self.Y_idx[k]):
                 self._medroids_idx[j] = (k, i)
 
         # number of medroids per each cluster
@@ -230,6 +235,7 @@ class InvertedGenerationalDistance:
 
     def _match(self, Y: np.ndarray, Y_label: None):
         Y_ = Y
+        Y_idx = None
         # if the reference set is clustered, then also try to cluster the approximation set
         if isinstance(self.ref, dict):
             # eps = 0.15 * np.min(pdist(Y))
