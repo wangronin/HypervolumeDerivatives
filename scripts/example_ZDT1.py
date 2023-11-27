@@ -30,26 +30,13 @@ problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
 
 # load the reference set
-ref = pd.read_csv("./ZDT-new/ZDT1_REF_Filling.csv", header=None).values
-medroids = pd.read_csv("./ZDT-new/ZDT1_REF_Match_28points.csv", header=None).values
+ref = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Filling.csv", header=None).values
+medroids = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Match_28points.csv", header=None).values
 # the load the final population from an EMOA
-x0 = pd.read_csv("./ZDT-new/ZDT1_Pop_x.csv", header=None).values
-y0 = pd.read_csv("./ZDT-new/ZDT1_Pop_y.csv", header=None).values
+x0 = pd.read_csv("./ZDT/ZDT1/ZDT1_Pop_x.csv", header=None).values
+y0 = pd.read_csv("./ZDT/ZDT1/ZDT1_Pop_y.csv", header=None).values
 N = len(x0)
 
-fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
-plt.subplots_adjust(right=0.93, left=0.05)
-
-ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
-ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
-ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
-ax0.plot(medroids[:, 0], medroids[:, 1], "r^", mec="none", ms=7, alpha=0.8)
-ax0.set_title("Objective space (Initialization)")
-ax0.set_xlabel(r"$f_1$")
-ax0.set_ylabel(r"$f_2$")
-lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
-for handle in lgnd.legend_handles:
-    handle.set_markersize(10)
 
 opt = DpN(
     dim=problem.n_var,
@@ -69,10 +56,21 @@ opt = DpN(
     verbose=True,
     pareto_front=pareto_front,
 )
+opt.run()
 
-while not opt.terminate():
-    opt.newton_iteration()
-    opt.log()
+fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
+plt.subplots_adjust(right=0.93, left=0.05)
+
+ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
+ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
+ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
+ax0.plot(medroids[:, 0], medroids[:, 1], "r^", mec="none", ms=7, alpha=0.8)
+ax0.set_title("Objective space (Initialization)")
+ax0.set_xlabel(r"$f_1$")
+ax0.set_ylabel(r"$f_2$")
+lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
+for handle in lgnd.legend_handles:
+    handle.set_markersize(10)
 
 X = opt._get_primal_dual(opt.X)[0]
 Y = opt.Y
