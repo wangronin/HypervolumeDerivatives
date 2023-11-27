@@ -37,7 +37,7 @@ f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
 
-data = loadmat("./data/ZDT/{problem_name}_NSGA-II.mat")
+data = loadmat(f"./data/ZDT/{problem_name}_NSGA-II.mat")
 columns = (
     ["run", "iteration"]
     + [f"x{i}" for i in range(1, problem.n_var + 1)]
