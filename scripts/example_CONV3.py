@@ -5,9 +5,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
+from scipy.spatial.distance import cdist
 
 from hvd.newton import DpN
 from hvd.problems import CONV3
+from hvd.utils import non_domin_sort
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -32,10 +34,14 @@ pareto_front = problem.get_pareto_front(5000)
 # load the reference set
 path = "./CONV3_example/"
 ref = pd.read_csv(path + f"CONV3_NSGA-II_run_1_ref.csv", header=None).values
-medroids = pd.read_csv(path + f"CONV3_NSGA-II_run_1_ref.csv", header=None).values
+idx = non_domin_sort(ref, only_front_indices=True)[0]
+ref = ref[idx]
+idx = cdist(pareto_front, ref).min(axis=0).argsort()
+idx = idx[0:-10]
+ref = ref[idx]
 # the load the final population from an EMOA
-x0 = pd.read_csv(path + f"CONV3_NSGA-II_run_1_lastpopu_x.csv", header=None).values[:30]
-y0 = pd.read_csv(path + f"CONV3_NSGA-II_run_1_lastpopu_y.csv", header=None).values[:30]
+x0 = pd.read_csv(path + f"CONV3_NSGA-II_run_1_lastpopu_x.csv", header=None).values[:100]
+y0 = pd.read_csv(path + f"CONV3_NSGA-II_run_1_lastpopu_y.csv", header=None).values[:100]
 N = len(x0)
 
 opt = DpN(
@@ -91,7 +97,7 @@ ax1 = fig.add_subplot(1, 3, 2, projection="3d")
 ax1.set_box_aspect((1, 1, 1))
 ax1.view_init(50, -20)
 
-if 1 < 2:
+if 11 < 2:
     trajectory = np.array([y0] + opt.hist_Y)
     for i in range(N):
         x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]

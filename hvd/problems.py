@@ -1,8 +1,7 @@
 import autograd.numpy as np
 import numpy as _np
 from autograd import hessian, jacobian
-from autograd.numpy import (abs, arange, cos, exp, mean, pi, prod, sign, sin,
-                            sqrt, sum, tile)
+from autograd.numpy import abs, arange, cos, exp, mean, pi, prod, sign, sin, sqrt, sum, tile
 
 from .utils import timeit
 
@@ -273,6 +272,7 @@ class CONV3(MOOAnalytical):
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
         w = np.random.rand(N, 3)
+        w /= w.sum(axis=1).reshape(-1, 1)
         X = w @ np.vstack([self.a1, self.a2, self.a3])
         return np.array([self.objective(x) for x in X])
 
