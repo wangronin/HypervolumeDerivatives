@@ -1,16 +1,20 @@
-#!/bin/env bash
-
+#!/bin/bash
 #SBATCH --job-name=DpN
-#SBATCH --partition=cpu-long
-#SBATCH --mem-per-cpu=1G
-#SBATCH --time=7-00:00:00
-#SBATCH --mail-user=h.wang@liacs.leidenuniv.nl
-#SBATCH --mail-type=END,FAIL
+#SBATCH --array=0-3
 #SBATCH --ntasks=1
+#SBATCH --nodes=1
 #SBATCH --cpus-per-task=15
-#SBATCH --error="./err/HVI/%x-%j-%a.err"
-#SBATCH --output="./out/HVI/%x-%j-%a.out"
+#SBATCH --partition=cpu-short
+#SBATCH --time=03:00:00
+#SBATCH --error="%x-%j-%a.err"
+#SBATCH --output="%x-%j-%a.out"
+#SBATCH --mail-type=END,FAIL
 
-PROBLEMS=(CF1 CF2 CF3 CF4 CF5 CF6 CF7 CF8 CF9)
-cd $HOME/HypervolumeDerivatives
-srun -N1 -n1 -c15 --exclusive python scripts/benchmark_hybrid_DpN.py &
+source .bashrc
+cd $HOME/HypervolumeDerivatives/
+source venv/bin/activate
+export PYTHONPATH=./:$PYTHONPATH
+problems=(ZDT1 ZDT2 ZDT4 ZDT6)
+
+srun --ntasks=1 --cpus-per-task=15 python scripts/benchmark_ZDT.py ${problems[$SLURM_ARRAY_TASK_ID]}
+srun --ntasks=1 --cpus-per-task=15 python scripts/run_EA_save_population.py ${problems[$SLURM_ARRAY_TASK_ID]}

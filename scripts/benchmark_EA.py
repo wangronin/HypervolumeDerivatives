@@ -118,12 +118,16 @@ def minimize(
     if run_id is not None:
         data.insert(0, "run", run_id)
 
+    pareto_front = problem.pareto_front(1000)
+    # gd_func = GenerationalDistance(pareto_front)
+    # igd_func = InvertedGenerationalDistance(pareto_front)
     return data
+    # return np.array([igd_func.compute(Y=res.F), gd_func.compute(Y=res.F), hypervolume(res.F, ref_point)])
 
 
 def get_algorithm(n_objective: int, algorithm_name: str):
     if algorithm_name == "NSGA-II":
-        algorithm = NSGA2(pop_size=300)
+        algorithm = NSGA2(pop_size=50)
     elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
         if n_objective == 2:
@@ -153,16 +157,17 @@ def get_algorithm(n_objective: int, algorithm_name: str):
 
 
 N = 30
-# for problem_name in [
-# CONV3(),
-# ]:
-# "zdt2", "zdt3", "zdt4", "zdt6"]:
-# for problem_name in [f"dtlz{i}" for i in range(1, 8)]:
-# problem_name = problem.__class__.__name__
-for problem in [CONV3()]:
+problem = sys.argv[1]
+for problem_name in [
+    problem,
+]:  # "zdt2", "zdt3", "zdt4", "zdt6"]:
+    # for problem_name in [f"dtlz{i}" for i in range(1, 8)]:
+    # problem_name = problem.__class__.__name__
+    print(problem_name)
     # problem = ModifiedObjective(get_problem(problem_name))
-    problem = ModifiedObjective(ProblemWrapper(problem))
-    # problem = get_problem(problem_name)
+    # problem = ModifiedObjective(ProblemWrapper(problem))
+    # problem = ProblemWrapper(problem)
+    problem = get_problem(problem_name)
     termination = get_termination("n_gen", 3000)
 
     for algorithm_name in ("NSGA-II",):
@@ -173,7 +178,7 @@ for problem in [CONV3()]:
             for i in range(N)
         )
         df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-        # df.to_csv(f"{problem_name}-NSGA-II.csv", index=False)
+        df.to_csv(f"{problem_name}-NSGA-II.csv", index=False)
         # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)

@@ -31,12 +31,11 @@ pareto_front = problem.get_pareto_front(1000)
 
 # load the reference set
 ref = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Filling.csv", header=None).values
-medroids = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Match_28points.csv", header=None).values
+medroids = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Match_30points.csv", header=None).values
 # the load the final population from an EMOA
 x0 = pd.read_csv("./ZDT/ZDT1/ZDT1_Pop_x.csv", header=None).values
 y0 = pd.read_csv("./ZDT/ZDT1/ZDT1_Pop_y.csv", header=None).values
 N = len(x0)
-
 
 opt = DpN(
     dim=problem.n_var,
@@ -122,10 +121,10 @@ ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
-ax22 = ax2.twinx()
-ax2.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
-ax22.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
-ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
+# ax22 = ax2.twinx()
+# ax2.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
+ax2.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
+ax2.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
