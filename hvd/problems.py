@@ -1,7 +1,8 @@
 import autograd.numpy as np
 import numpy as _np
 from autograd import hessian, jacobian
-from autograd.numpy import abs, arange, cos, exp, mean, pi, prod, sign, sin, sqrt, sum, tile
+from autograd.numpy import (abs, arange, cos, exp, mean, pi, prod, sign, sin,
+                            sqrt, sum, tile)
 
 from .utils import timeit
 
@@ -251,6 +252,29 @@ class Eq1IDTLZ4(Eq1DTLZ4):
         return (1 + g) / 2 - (1 + g) * _cumprod(np.concatenate([[1], np.cos(x_ * np.pi / 2)]))[
             ::-1
         ] * np.concatenate([[1], np.sin(x_[::-1] * np.pi / 2)])
+
+
+class CONV3(MOOAnalytical):
+    def __init__(self):
+        self.n_objectives = 3
+        self.n_decision_vars = 3
+        self.lower_bounds = -3 * np.ones(self.n_decision_vars)
+        self.upper_bounds = 3 * np.ones(self.n_decision_vars)
+        self.a1 = -1 * np.ones(self.n_decision_vars)
+        self.a2 = np.ones(self.n_decision_vars)
+        self.a3 = np.r_[-1 * np.ones(self.n_decision_vars - 1), 1]
+        super().__init__()
+
+    @timeit
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        func = lambda x, a: np.sum((x - a) ** 2)
+        return np.array([func(x, self.a1), func(x, self.a2), func(x, self.a3)])
+        # return np.vstack([func(x, self.a1), func(x, self.a2), func(x, self.a3)]).T
+
+    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
+        w = np.random.rand(N, 3)
+        X = w @ np.vstack([self.a1, self.a2, self.a3])
+        return np.array([self.objective(x) for x in X])
 
 
 class CONV4(MOOAnalytical):

@@ -723,7 +723,7 @@ class DpN:
         # self.hist_IGD += [self.IGD_value]
         self.hist_GD += [gd_value]
         self.hist_IGD += [igd_value]
-        self.hist_R_norm += [np.linalg.norm(self.R.ravel())]
+        self.hist_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
 
         if self.iter_count >= 2:
             self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
@@ -777,7 +777,7 @@ class DpN:
                 primal_vars, Y, Y_label=self.Y_label, compute_hessian=False
             )
 
-        cstr_value, active_indices, H = None, None, None
+        cstr_value, active_indices, H = None, None, [[] for _ in range(N)]
         # inequality constraint function value, if exists
         if self.g is not None:
             # TODO: make it a class property
@@ -834,7 +834,7 @@ class DpN:
         for r in range(N):
             Hessian, c, h = Hess[r], idx[r], H[r]
             # TODO: check if preconditioning is needed automatically
-            # Hessian = self._precondition_hessian(Hessian)
+            Hessian = self._precondition_hessian(Hessian)
             Z = np.zeros((len(h), len(h)))
             DR = np.r_[np.c_[Hessian, h.T], np.c_[h, Z]] if self._constrained else Hessian
             with warnings.catch_warnings():
@@ -855,8 +855,9 @@ class DpN:
 
         if self.iter_count == 0:
             # log the initial medroids
-            self.history_medroids = [[m.copy()] for m in self.active_indicator._medroids]
-            indices = np.isclose(distance, 0)
+            # self.history_medroids = [[m.copy()] for m in self.active_indicator._medroids]
+            # indices = np.isclose(distance, 0)
+            indices = np.array([True] * len(self.Y))
         else:
             indices = np.bitwise_and(
                 np.isclose(distance, 0),
@@ -922,13 +923,18 @@ class DpN:
             Q = qr(M.T)[0]
             n = -1 * np.abs(Q[:, -1])
             n /= np.linalg.norm(n)
-            v = 0.06 * n if self.iter_count > 0 else 0.06 * n
+            # n = np.array([-0.716896703894658, -0.697179400115189])
+            v = 0.05 * n if self.iter_count > 0 else 0.06 * n
             for k in indices:
                 m = self.active_indicator._medroids[k] + v
                 self.active_indicator.set_medroids(m, k)
-        # log the updated medroids
-        for i, k in enumerate(indices):
-            self.history_medroids[k].append(self.active_indicator._medroids[indices][i])
+
+        if self.iter_count == 0:
+            self.history_medroids = [[m.copy()] for m in self.active_indicator._medroids]
+        else:
+            # log the updated medroids
+            for i, k in enumerate(indices):
+                self.history_medroids[k].append(self.active_indicator._medroids[indices][i])
         self.logger.info(f"{len(indices)} target points are shifted")
 
     def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
