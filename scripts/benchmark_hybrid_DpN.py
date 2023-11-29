@@ -11,7 +11,7 @@ from scipy.io import loadmat
 
 from hvd.delta_p import InvertedGenerationalDistance
 from hvd.newton import DpN
-from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9
+from hvd.problems.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9
 
 np.random.seed(66)
 

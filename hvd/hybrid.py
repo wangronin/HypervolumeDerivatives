@@ -10,11 +10,11 @@ from pymoo.optimize import minimize
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 
-from hvd.problems import CONV4, MOOAnalytical
+from hvd.problems.problems import CONV4, MOOAnalytical
 
 from .interpolate import ReferenceSetInterpolation
 from .newton import DpN
-from .problems import MOOAnalytical
+from .problems.problems import MOOAnalytical
 
 
 class ProblemWrapper(ElementwiseProblem):

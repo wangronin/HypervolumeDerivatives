@@ -17,30 +17,34 @@ from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
-from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.hypervolume import hypervolume
-from hvd.problems import CF9, CONV3, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3, MOOAnalytical
+from hvd.problems import CF9, CONV3, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3
+from hvd.problems.problems import MOOAnalytical
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 ref_point = np.array([11, 11])
 
 
 class ProblemWrapper(ElementwiseProblem):
+    """Wrap of the problem I wrote into `Pymoo`'s problem"""
+
     def __init__(self, problem: MOOAnalytical) -> None:
         self._problem = problem
         super().__init__(
-            n_var=problem.n_decision_vars,
-            n_obj=problem.n_objectives,
-            xl=problem.lower_bounds,
-            xu=problem.upper_bounds,
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
             n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
             n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
         )
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
-        out["F"] = self._problem.objective(x)  # objective value
-        if hasattr(self._problem, "constraint"):
-            out["H"] = self._problem.constraint(x)  # equality constraint value
+        x = np.atleast_2d(x)
+        out["F"] = np.array([self._problem.objective(_) for _ in x])  # objective value
+        if hasattr(self._problem, "eq_constraint"):
+            out["H"] = self._problem.eq_constraint(x)  # equality constraint value
+        if hasattr(self._problem, "ieq_constraint"):
+            out["G"] = self._problem.ieq_constraint(x)  # inequality constraint value
 
 
 class ModifiedObjective(Problem):
@@ -165,9 +169,10 @@ for problem in [CONV3()]:
     # problem = get_problem(problem_name)
     termination = get_termination("n_gen", 3000)
 
-    for algorithm_name in ("NSGA-II",):
+    for algorithm_name in ("NSGA-III",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name)
-        # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        breakpoint()
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)

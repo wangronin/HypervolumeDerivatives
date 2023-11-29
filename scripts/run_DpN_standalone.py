@@ -8,8 +8,8 @@ from matplotlib import rcParams
 from scipy.io import loadmat
 
 from hvd.newton import DpN
-from hvd.problems import CF1, CF2, CF3, CF4
-from hvd.zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.problems.problems import CF1, CF2, CF3, CF4
+from hvd.problems.zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -81,8 +81,8 @@ opt = DpN(
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
-    g=problem.constraint,
-    g_jac=problem.constraint_jacobian,
+    g=problem.eq_constraint,
+    g_jac=problem.eq_constraint_jacobian,
     mu=N,
     x0=x0,
     lower_bounds=problem.lower_bounds,

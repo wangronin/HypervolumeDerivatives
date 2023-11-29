@@ -3,7 +3,16 @@ import numpy as np
 from matplotlib import rcParams
 
 from hvd.newton import HVN
-from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4, Eq1IDTLZ1, Eq1IDTLZ2, Eq1IDTLZ3, Eq1IDTLZ4
+from hvd.problems.problems import (
+    Eq1DTLZ1,
+    Eq1DTLZ2,
+    Eq1DTLZ3,
+    Eq1DTLZ4,
+    Eq1IDTLZ1,
+    Eq1IDTLZ2,
+    Eq1IDTLZ3,
+    Eq1IDTLZ4,
+)
 
 
 def bilog(x):
