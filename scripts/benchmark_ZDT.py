@@ -11,7 +11,7 @@ from scipy.io import loadmat
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
-from hvd.zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.problems.zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -145,7 +145,7 @@ def execute(run: int):
         upper_bounds=problem.xu,
         max_iters=max_iters,
         type="igd",
-        verbose=False,
+        verbose=True,
         pareto_front=pareto_front,
     )
     opt.run()
@@ -157,6 +157,9 @@ def execute(run: int):
     return np.array([igd_func.compute(Y=Y), gd_func.compute(Y=Y), hypervolume(Y, ref_point)])
 
 
+execute(run=29)
+
+breakpoint()
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
 df.to_csv(f"{problem_name}-DpN.csv", index=False)

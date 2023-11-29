@@ -3,7 +3,7 @@ from autograd import hessian, jacobian
 from pymoo.core.problem import Problem
 from pymoo.util.normalization import normalize
 
-from .utils import timeit
+from ..utils import timeit
 
 # NOTE: `np.abs` is taken on `f1 / g` for ZDT1, 3, and 4 to avoid numerical issues
 # when the decision var. are out of bound

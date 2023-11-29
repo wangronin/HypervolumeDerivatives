@@ -11,7 +11,7 @@ from scipy.io import loadmat
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
-from hvd.zdt import ZDT3, PymooProblemWithAD
+from hvd.problems.zdt import ZDT3, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17

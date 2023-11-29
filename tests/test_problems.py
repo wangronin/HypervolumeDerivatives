@@ -1,5 +1,6 @@
 import numpy as np
-from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4
+
+from hvd.problems.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4
 
 
 def test_Eq1DTLZ1():

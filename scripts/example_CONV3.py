@@ -8,7 +8,7 @@ from matplotlib import rcParams
 from scipy.spatial.distance import cdist
 
 from hvd.newton import DpN
-from hvd.problems import CONV3
+from hvd.problems.problems import CONV3
 from hvd.utils import non_domin_sort
 
 plt.style.use("ggplot")
@@ -45,8 +45,8 @@ y0 = pd.read_csv(path + f"CONV3_NSGA-II_run_1_lastpopu_y.csv", header=None).valu
 N = len(x0)
 
 opt = DpN(
-    dim=problem.n_decision_vars,
-    n_objective=problem.n_objectives,
+    dim=problem.n_var,
+    n_objective=problem.n_obj,
     ref=ref,
     func=problem.objective,
     jac=problem.objective_jacobian,
@@ -55,8 +55,8 @@ opt = DpN(
     # g_jac=problem.ieq_jacobian,
     mu=N,
     x0=x0,
-    lower_bounds=problem.lower_bounds,
-    upper_bounds=problem.upper_bounds,
+    lower_bounds=problem.xl,
+    upper_bounds=problem.xu,
     max_iters=max_iters,
     type="igd",
     verbose=True,

@@ -9,7 +9,7 @@ import pandas as pd
 from matplotlib import rcParams
 
 from hvd.newton import DpN
-from hvd.problems import CF2
+from hvd.problems.problems import CF2
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -59,8 +59,8 @@ opt = DpN(
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
-    g=problem.constraint,
-    g_jac=problem.constraint_jacobian,
+    g=problem.eq_constraint,
+    g_jac=problem.eq_constraint_jacobian,
     mu=N,
     x0=x0,
     lower_bounds=problem.lower_bounds,

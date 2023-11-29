@@ -9,7 +9,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 
 from hvd.hypervolume import hypervolume
 from hvd.newton import HVN
-from hvd.problems import (
+from hvd.problems.problems import (
     Eq1DTLZ1,
     Eq1DTLZ2,
     Eq1DTLZ3,

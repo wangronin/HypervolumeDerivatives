@@ -834,7 +834,7 @@ class DpN:
         for r in range(N):
             Hessian, c, h = Hess[r], idx[r], H[r]
             # TODO: check if preconditioning is needed automatically
-            Hessian = self._precondition_hessian(Hessian)
+            # Hessian = self._precondition_hessian(Hessian)
             Z = np.zeros((len(h), len(h)))
             DR = np.r_[np.c_[Hessian, h.T], np.c_[h, Z]] if self._constrained else Hessian
             with warnings.catch_warnings():
@@ -1034,17 +1034,3 @@ class DpN:
                 self.logger.warn("Pre-conditioning the HV Hessian failed")
                 return H
         return L.dot(L.T)
-
-
-# if 11 < 2:
-#     import matplotlib.pyplot as plt
-
-#     Y = self.Y
-#     M = self.active_indicator._medroids
-#     fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
-#     ax.plot(M[:, 0], M[:, 1], "k^")
-#     ax.plot(Y[:, 0], Y[:, 1], "k+")
-#     for i in range(len(Y)):
-#         ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
-#     plt.tight_layout()
-#     plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
