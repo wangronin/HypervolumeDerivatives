@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=DpN
+#SBATCH --job-name=MOEA
 #SBATCH --array=0-21
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
@@ -10,7 +10,7 @@
 #SBATCH --output="%x-%j-%a.out"
 #SBATCH --mail-type=END,FAIL
 
-source .bashrc
+cd ~ && source .bashrc
 cd $HOME/HypervolumeDerivatives/
 source venv/bin/activate
 export PYTHONPATH=./:$PYTHONPATH
