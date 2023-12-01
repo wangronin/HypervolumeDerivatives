@@ -8,8 +8,7 @@ from matplotlib import rcParams
 from scipy.io import loadmat
 
 from hvd.newton import DpN
-from hvd.problems.problems import CF1, CF2, CF3, CF4
-from hvd.problems.zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.problems import CF1, CF2, CF3, CF4, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17

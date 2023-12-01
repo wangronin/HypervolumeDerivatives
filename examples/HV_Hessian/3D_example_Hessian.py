@@ -1,7 +1,7 @@
 import numpy as np
 
 from hvd import HypervolumeDerivatives
-from hvd.problems.problems import Eq1DTLZ1
+from hvd.problems import Eq1DTLZ1
 
 np.set_printoptions(edgeitems=30, linewidth=100000)
 

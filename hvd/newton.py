@@ -654,7 +654,7 @@ class DpN:
 
         self._X0 = X0
         self.Y = np.array([self.func(x) for x in self._X0])  # (mu, n_objective)
-        self.X = np.c_[self._X0, np.ones((self.mu, self.dim_dual)) / self.mu]  # (mu, dim)
+        self.X = np.c_[self._X0, np.zeros((self.mu, self.dim_dual)) / self.mu]  # (mu, dim)
 
     @property
     def lower_bounds(self):
@@ -852,29 +852,14 @@ class DpN:
 
     def _shift_reference_set(self):
         distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
-
-        if self.iter_count == 0:
-            # log the initial medroids
-            # self.history_medroids = [[m.copy()] for m in self.active_indicator._medroids]
-            # indices = np.isclose(distance, 0)
-            indices = np.array([True] * len(self.Y))
-        else:
-            indices = np.bitwise_and(
+        indices = (
+            np.array([True] * len(self.Y))
+            if self.iter_count == 0
+            else np.bitwise_and(
                 np.isclose(distance, 0),
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_primal], axis=1), 0),
             )
-        if 11 < 2:
-            import matplotlib.pyplot as plt
-
-            Y = self.Y
-            M = self.active_indicator._medroids
-            fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
-            ax.plot(M[:, 0], M[:, 1], "k^", mfc="none")
-            ax.plot(Y[:, 0], Y[:, 1], "g+")
-            for i in range(len(Y)):
-                ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
-            plt.tight_layout()
-            plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
+        )
 
         if np.all(~indices):
             return
@@ -930,6 +915,7 @@ class DpN:
                 self.active_indicator.set_medroids(m, k)
 
         if self.iter_count == 0:
+            # log the initial medroids
             self.history_medroids = [[m.copy()] for m in self.active_indicator._medroids]
         else:
             # log the updated medroids
@@ -1034,3 +1020,16 @@ class DpN:
                 self.logger.warn("Pre-conditioning the HV Hessian failed")
                 return H
         return L.dot(L.T)
+
+        # if 11 < 2:
+        #     import matplotlib.pyplot as plt
+
+        #     Y = self.Y
+        #     M = self.active_indicator._medroids
+        #     fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
+        #     ax.plot(M[:, 0], M[:, 1], "k^", mfc="none")
+        #     ax.plot(Y[:, 0], Y[:, 1], "g+")
+        #     for i in range(len(Y)):
+        #         ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
+        #     plt.tight_layout()
+        #     plt.savefig(f"{self.iter_count}.pdf", dpi=1000)

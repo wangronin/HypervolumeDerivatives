@@ -1,52 +1,9 @@
 import autograd.numpy as np
-from autograd import hessian, jacobian
 from pymoo.core.problem import Problem
 from pymoo.util.normalization import normalize
 
-from ..utils import timeit
-
 # NOTE: `np.abs` is taken on `f1 / g` for ZDT1, 3, and 4 to avoid numerical issues
 # when the decision var. are out of bound
-
-
-class PymooProblemWithAD:
-    def __init__(self, problem: Problem) -> None:
-        self._problem = problem
-        self.n_obj = self._problem.n_obj
-        self.n_var = self._problem.n_var
-        self.n_eq_constr = self._problem.n_eq_constr
-        # box constraints are converted to inequality constraints
-        self.n_ieq_constr = self._problem.n_ieq_constr + 2 * self.n_var
-        self.xl = self._problem.xl
-        self.xu = self._problem.xu
-        self._objective_jacobian = jacobian(self._problem._evaluate)
-        self._objective_hessian = hessian(self._problem._evaluate)
-        self._ieq_jacobian = jacobian(self.ieq_constraint)
-        self.CPU_time: int = 0  # measured in nanoseconds
-
-    def objective(self, x: np.ndarray) -> np.ndarray:
-        return self._problem._evaluate(x)
-
-    def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.concatenate([self.xl - x, x - self.xu])
-
-    @timeit
-    def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return self._objective_jacobian(x)
-
-    @timeit
-    def objective_hessian(self, x: np.ndarray) -> np.ndarray:
-        return self._objective_hessian(x)
-
-    @timeit
-    def ieq_jacobian(self, x) -> np.ndarray:
-        return self._ieq_jacobian(x)
-
-    def get_pareto_set(self, *args, **kwargs) -> np.ndarray:
-        return self._problem._calc_pareto_set(*args, **kwargs)
-
-    def get_pareto_front(self, *args, **kwargs) -> np.ndarray:
-        return self._problem._calc_pareto_front(*args, **kwargs)
 
 
 class ZDT(Problem):

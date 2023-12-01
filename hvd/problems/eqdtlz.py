@@ -1,7 +1,7 @@
 import autograd.numpy as np
 
 from ..utils import timeit
-from .problems import ConstrainedMOOAnalytical, MOOAnalytical, _cumprod
+from .base import ConstrainedMOOAnalytical, MOOAnalytical, _cumprod
 
 
 class _DTLZ(MOOAnalytical):
