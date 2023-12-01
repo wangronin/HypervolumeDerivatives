@@ -15,11 +15,12 @@ from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
 from pymoo.core.problem import ElementwiseProblem as PymooElementwiseProblem
 from pymoo.core.problem import Problem as PymooProblem
 from pymoo.problems.many import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
+from pymoo.problems.multi import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
-from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
+from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from hvd.problems.problems import MOOAnalytical
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
@@ -146,7 +147,7 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
             ref_dirs = get_reference_directions("uniform", 2, n_partitions=99)
         elif n_objective == 3:
             ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
-        algorithm = MOEAD(ref_dirs)
+        algorithm = MOEAD(ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7)
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=pop_size)
 
@@ -157,7 +158,6 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 N = 30
 problems = [
-    DTLZ7(),
     CF1(),
     CF2(),
     CF3(),
@@ -179,6 +179,7 @@ problems = [
     DTLZ4(),
     DTLZ5(),
     DTLZ6(),
+    DTLZ7(),
 ]
 
 idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
@@ -187,7 +188,7 @@ problem_name = problem.__class__.__name__
 problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
 termination = get_termination("n_gen", 2000)
 
-for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA", "MOEAD"):
+for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
     algorithm = get_algorithm(
         problem.n_obj, algorithm_name, problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
     )
