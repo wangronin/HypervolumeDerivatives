@@ -9,7 +9,7 @@ import pandas as pd
 from matplotlib import rcParams
 
 from hvd.newton import DpN
-from hvd.problems.problems import CF2
+from hvd.problems import CF2
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17

@@ -8,7 +8,7 @@ from matplotlib import rcParams
 from scipy.spatial.distance import cdist
 
 from hvd.newton import DpN
-from hvd.problems.problems import CONV3
+from hvd.problems import CONV3
 from hvd.utils import non_domin_sort
 
 plt.style.use("ggplot")

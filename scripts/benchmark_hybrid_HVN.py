@@ -9,17 +9,8 @@ from pymoo.util.ref_dirs import get_reference_directions
 
 from hvd.hypervolume import hypervolume
 from hvd.newton import HVN
-from hvd.problems.problems import (
-    Eq1DTLZ1,
-    Eq1DTLZ2,
-    Eq1DTLZ3,
-    Eq1DTLZ4,
-    Eq1IDTLZ1,
-    Eq1IDTLZ2,
-    Eq1IDTLZ3,
-    Eq1IDTLZ4,
-    MOOAnalytical,
-)
+from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4, Eq1IDTLZ1, Eq1IDTLZ2, Eq1IDTLZ3, Eq1IDTLZ4
+from hvd.problems.base import MOOAnalytical
 from hvd.utils import non_domin_sort
 
 

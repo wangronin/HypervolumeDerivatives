@@ -6,7 +6,7 @@ sys.path.insert(0, "./")
 import numpy as np
 import pandas as pd
 
-from hvd.problems.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3
+from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3
 
 np.random.seed(42)
 

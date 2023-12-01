@@ -21,7 +21,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
 from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
-from hvd.problems.problems import MOOAnalytical
+from hvd.problems.base import MOOAnalytical
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 data_path = "/data1/wangh5"
@@ -124,7 +124,7 @@ def minimize(
     data = pd.concat(data, axis=0)
     if run_id is not None:
         data.insert(0, "run", run_id)
-    return data
+    return data[data.iteration >= 1500]
 
 
 def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:

@@ -19,7 +19,8 @@ from scipy.io import savemat
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
-from hvd.problems.problems import CF9, CONV3, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3, MOOAnalytical
+from hvd.problems import CF9, CONV3, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3
+from hvd.problems.base import MOOAnalytical
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 ref_point = np.array([11, 11])

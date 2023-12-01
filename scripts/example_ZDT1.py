@@ -7,7 +7,7 @@ import pandas as pd
 from matplotlib import rcParams
 
 from hvd.newton import DpN
-from hvd.problems.zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.problems import ZDT1, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -128,7 +128,7 @@ ax2.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
-ax2.legend()
+# ax2.legend()
 plt.tight_layout()
 plt.savefig(f"{f.__class__.__name__}.pdf", dpi=1000)
 
