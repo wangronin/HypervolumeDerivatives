@@ -23,7 +23,7 @@ from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, ZDT1
 from hvd.problems.problems import MOOAnalytical
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
-data_path = "./"
+data_path = "/data1/wangh5"
 
 
 class ProblemWrapper(PymooElementwiseProblem):
