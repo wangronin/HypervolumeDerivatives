@@ -6,25 +6,27 @@ sys.path.insert(0, "./")
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
+from pymoo.algorithms.base.genetic import GeneticAlgorithm
 from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.sms import SMSEMOA
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
-from pymoo.core.problem import ElementwiseProblem, Problem
-from pymoo.problems import get_problem
+from pymoo.core.problem import ElementwiseProblem as PymooElementwiseProblem
+from pymoo.core.problem import Problem as PymooProblem
+from pymoo.problems.many import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
-from hvd.problems import CF9, CONV3, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3
+from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from hvd.problems.problems import MOOAnalytical
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
-ref_point = np.array([11, 11])
+data_path = "./"
 
 
-class ProblemWrapper(ElementwiseProblem):
+class ProblemWrapper(PymooElementwiseProblem):
     """Wrap of the problem I wrote into `Pymoo`'s problem"""
 
     def __init__(self, problem: MOOAnalytical) -> None:
@@ -47,7 +49,7 @@ class ProblemWrapper(ElementwiseProblem):
             out["G"] = self._problem.ieq_constraint(x)  # inequality constraint value
 
 
-class ModifiedObjective(Problem):
+class ModifiedObjective(PymooProblem):
     """Modified objective function based on the following paper:
 
     Ishibuchi, H.; Matsumoto, T.; Masuyama, N.; Nojima, Y.
@@ -56,7 +58,7 @@ class ModifiedObjective(Problem):
     Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020.
     """
 
-    def __init__(self, problem: Problem) -> None:
+    def __init__(self, problem: PymooProblem) -> None:
         self._problem = problem
         self._alpha = 0.02
         super().__init__(
@@ -121,13 +123,14 @@ def minimize(
     data = pd.concat(data, axis=0)
     if run_id is not None:
         data.insert(0, "run", run_id)
-
     return data
 
 
-def get_algorithm(n_objective: int, algorithm_name: str):
+def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:
+    pop_size = 100 if n_objective == 2 else 300
+
     if algorithm_name == "NSGA-II":
-        algorithm = NSGA2(pop_size=300)
+        algorithm = NSGA2(pop_size=pop_size)
     elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
         if n_objective == 2:
@@ -136,53 +139,65 @@ def get_algorithm(n_objective: int, algorithm_name: str):
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=20)
         elif n_objective == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
-        algorithm = NSGA3(pop_size=400, ref_dirs=ref_dirs)
-
+        algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
         if n_objective == 2:
             ref_dirs = get_reference_directions("uniform", 2, n_partitions=99)
         elif n_objective == 3:
-            ref_dirs = get_reference_directions("uniform", 3, n_partitions=13)
-        algorithm = MOEAD(
-            ref_dirs,
-            n_neighbors=15,
-            prob_neighbor_mating=0.7,
-        )
+            ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
+        algorithm = MOEAD(ref_dirs)
     elif algorithm_name == "SMS-EMOA":
-        algorithm = SMSEMOA(pop_size=100)
-    if 11 < 2:
+        algorithm = SMSEMOA(pop_size=pop_size)
+
+    if constrained:
         algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
     return algorithm
 
 
 N = 30
-# for problem_name in [
-# CONV3(),
-# ]:
-# "zdt2", "zdt3", "zdt4", "zdt6"]:
-# for problem_name in [f"dtlz{i}" for i in range(1, 8)]:
-# problem_name = problem.__class__.__name__
-for problem in [CONV3()]:
-    # problem = ModifiedObjective(get_problem(problem_name))
-    problem = ModifiedObjective(ProblemWrapper(problem))
-    # problem = get_problem(problem_name)
-    termination = get_termination("n_gen", 3000)
+problems = [
+    DTLZ7(),
+    CF1(),
+    CF2(),
+    CF3(),
+    CF4(),
+    CF5(),
+    CF6(),
+    CF7(),
+    CF8(),
+    CF9(),
+    CF10(),
+    ZDT1(),
+    ZDT2(),
+    ZDT3(),
+    ZDT4(),
+    ZDT6(),
+    DTLZ1(),
+    DTLZ2(),
+    DTLZ3(),
+    DTLZ4(),
+    DTLZ5(),
+    DTLZ6(),
+]
 
-    for algorithm_name in ("NSGA-III",):
-        algorithm = get_algorithm(problem.n_obj, algorithm_name)
-        data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
-        breakpoint()
-        data = Parallel(n_jobs=N)(
-            delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
-            for i in range(N)
-        )
-        df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-        # df.to_csv(f"{problem_name}-NSGA-II.csv", index=False)
-        # data = pd.concat(data, axis=0)
-        # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
-        # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)
-        # data.to_csv(f"./data/{problem_name}_{algorithm_name}.csv", index=False)
-        # save to Matlab's data format
-        # mdic = {"data": data.values, "columns": data.columns.values}
-        # savemat(f"./data/{problem_name.upper()}_{algorithm_name}.mat", mdic)
+idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
+problem = problems[idx]
+problem_name = problem.__class__.__name__
+problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
+termination = get_termination("n_gen", 2000)
+
+for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA", "MOEAD"):
+    algorithm = get_algorithm(
+        problem.n_obj, algorithm_name, problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
+    )
+    # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+    data = Parallel(n_jobs=N)(
+        delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
+        for i in range(N)
+    )
+    data = pd.concat(data, axis=0)
+    # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+    # save to Matlab's data format
+    mdic = {"data": data.values, "columns": data.columns.values}
+    savemat(f"{data_path}/{problem_name.upper()}_{algorithm_name}.mat", mdic)
