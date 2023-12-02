@@ -7,8 +7,7 @@ import pandas as pd
 from matplotlib import rcParams
 
 from hvd.newton import DpN
-from hvd.problems.dtlz import DTLZ7
-from hvd.problems.zdt import PymooProblemWithAD
+from hvd.problems import DTLZ7, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17

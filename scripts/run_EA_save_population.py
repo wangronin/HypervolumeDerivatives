@@ -102,9 +102,7 @@ def minimize(
         if termination is not None:
             if copy_termination:
                 termination = copy.deepcopy(termination)
-
             kwargs["termination"] = termination
-
         algorithm.setup(problem, **kwargs)
 
     # actually execute the algorithm
@@ -112,7 +110,7 @@ def minimize(
     while algorithm.has_next():
         algorithm.next()
         pop = copy.deepcopy(algorithm.pop)
-        if algorithm.n_gen == k + 1:
+        if algorithm.n_gen == k + 1 and (k <= 100 or k >= 1500):
             df = pd.DataFrame(pop_to_numpy(pop), columns=columns)
             df.insert(0, "iteration", k)
             data.append(df)
@@ -124,7 +122,7 @@ def minimize(
     data = pd.concat(data, axis=0)
     if run_id is not None:
         data.insert(0, "run", run_id)
-    return data[data.iteration >= 1500]
+    return data
 
 
 def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:
@@ -152,7 +150,8 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
         algorithm = SMSEMOA(pop_size=pop_size)
 
     if constrained:
-        algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
+        if algorithm_name != "MOEAD":
+            algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
     return algorithm
 
 
@@ -187,11 +186,11 @@ problem = problems[idx]
 problem_name = problem.__class__.__name__
 problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
 termination = get_termination("n_gen", 2000)
+constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
-for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
-    algorithm = get_algorithm(
-        problem.n_obj, algorithm_name, problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
-    )
+# for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
+for algorithm_name in ["SMS-EMOA"]:
+    algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
     # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
     data = Parallel(n_jobs=N)(
         delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
