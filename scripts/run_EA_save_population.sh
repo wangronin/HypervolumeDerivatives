@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=15
-#SBATCH --partition=cpu-short
+#SBATCH --partition=cpu-medium
 #SBATCH --time=03:00:00
 #SBATCH --error="%x-%j-%a.err"
 #SBATCH --output="%x-%j-%a.out"
