@@ -37,16 +37,16 @@ pareto_front = problem.get_pareto_front(1000)
 path = "./ZDT/ZDT3/"
 
 
-def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
+def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
     all_ref = np.concatenate([v for v in ref.values()], axis=0)
-    medroids0 = np.vstack([m[0] for m in history_medroids])
+    medoids0 = np.vstack([m[0] for m in history_medoids])
 
     fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
     plt.subplots_adjust(right=0.93, left=0.05)
     ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
     ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
     ax0.plot(all_ref[:, 0], all_ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
-    ax0.plot(medroids0[:, 0], medroids0[:, 1], "r^", mec="none", ms=7, alpha=0.8)
+    ax0.plot(medoids0[:, 0], medoids0[:, 1], "r^", mec="none", ms=7, alpha=0.8)
     ax0.set_title("Objective space (Initialization)")
     ax0.set_xlabel(r"$f_1$")
     ax0.set_ylabel(r"$f_2$")
@@ -79,7 +79,7 @@ def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
     colors = plt.get_cmap("tab20").colors
     colors = [colors[2], colors[12], colors[13]]
     shifts = []
-    for i, M in enumerate(history_medroids):
+    for i, M in enumerate(history_medoids):
         c = colors[len(M) - 1]
         for j, x in enumerate(M):
             line = ax1.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
@@ -88,7 +88,7 @@ def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
 
     lines += shifts
     lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
-    counts = np.unique([len(m) for m in history_medroids], return_counts=True)[1]
+    counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
     lgnd = ax1.legend(
         lines,
         ["Pareto front"]
@@ -139,7 +139,7 @@ def execute(run: int):
         hessian=problem.objective_hessian,
         g=problem.ieq_constraint,
         g_jac=problem.ieq_jacobian,
-        mu=len(x0),
+        N=len(x0),
         x0=x0,
         lower_bounds=problem.xl,
         upper_bounds=problem.xu,
@@ -153,7 +153,7 @@ def execute(run: int):
     opt.run()
     Y = opt.Y
     fig_name = f"./figure/{f.__class__.__name__}-run{run}.pdf"
-    plot(y0, Y, ref, opt.hist_Y, opt.history_medroids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    plot(y0, Y, ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_func = GenerationalDistance(pareto_front)
     igd_func = InvertedGenerationalDistance(pareto_front)
     return np.array([igd_func.compute(Y=Y), gd_func.compute(Y=Y), hypervolume(Y, ref_point)])

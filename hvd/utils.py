@@ -7,10 +7,49 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import numpy as np
-from scipy.linalg import cholesky
+from scipy.linalg import cholesky, qr
 from sklearn.neighbors import LocalOutlierFactor
 
 __author__ = "Hao Wang"
+
+# if 11 < 2:
+#     import matplotlib.pyplot as plt
+
+#     Y = self.Y
+#     M = self.active_indicator._medoids
+#     fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
+#     ax.plot(M[:, 0], M[:, 1], "k^", mfc="none")
+#     ax.plot(Y[:, 0], Y[:, 1], "g+")
+#     for i in range(len(Y)):
+#         ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
+#     plt.tight_layout()
+#     plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
+
+
+def merge_lists(x, y):
+    if x is None:
+        return y
+    if y is None:
+        return x
+
+    assert len(x) == len(y)
+    out = []
+    for k in range(len(x)):
+        v, w = x[k], y[k]
+        N = len(v)
+        out.append(np.array([np.r_[v[i], w[i]] for i in range(N)]))
+    return tuple(out)
+
+
+def compute_chim(Y: np.ndarray) -> np.ndarray:
+    # compute the normal vector to CHIM
+    idx = Y.argmin(axis=0)
+    Z = Y[idx, :]
+    M = Z[1:] - Z[0]
+    Q = qr(M.T)[0]
+    n = -1 * np.abs(Q[:, -1])
+    n /= np.linalg.norm(n)
+    return n.ravel()
 
 
 def precondition_hessian(H: np.ndarray) -> np.ndarray:

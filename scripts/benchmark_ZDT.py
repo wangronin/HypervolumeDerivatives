@@ -46,7 +46,7 @@ columns = (
 data = pd.DataFrame(data["data"], columns=columns)
 
 
-def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
+def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
     fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
     plt.subplots_adjust(right=0.93, left=0.05)
     ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
@@ -84,7 +84,7 @@ def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
     colors = plt.get_cmap("tab20").colors
     colors = [colors[2], colors[12], colors[13]]
     shifts = []
-    for i, M in enumerate(history_medroids):
+    for i, M in enumerate(history_medoids):
         c = colors[len(M) - 1]
         for j, x in enumerate(M):
             line = ax1.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
@@ -93,7 +93,7 @@ def plot(y0, Y, ref, hist_Y, history_medroids, hist_IGD, hist_R_norm, fig_name):
 
     lines += shifts
     lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
-    counts = np.unique([len(m) for m in history_medroids], return_counts=True)[1]
+    counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
     lgnd = ax1.legend(
         lines,
         ["Pareto front"]
@@ -139,7 +139,7 @@ def execute(run: int):
         hessian=problem.objective_hessian,
         g=problem.ieq_constraint,
         g_jac=problem.ieq_jacobian,
-        mu=len(x0),
+        N=len(x0),
         x0=x0,
         lower_bounds=problem.xl,
         upper_bounds=problem.xu,
@@ -151,7 +151,7 @@ def execute(run: int):
     opt.run()
     Y = opt.Y
     fig_name = f"./figure/{problem_name}-run{run}.pdf"
-    plot(y0, Y, ref, opt.hist_Y, opt.history_medroids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    plot(y0, Y, ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_func = GenerationalDistance(pareto_front)
     igd_func = InvertedGenerationalDistance(pareto_front)
     return np.array([igd_func.compute(Y=Y), gd_func.compute(Y=Y), hypervolume(Y, ref_point)])

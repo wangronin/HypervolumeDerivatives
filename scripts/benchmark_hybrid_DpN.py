@@ -123,7 +123,7 @@ def run(problem, id: int, verbose: bool = True):
         hessian=problem.objective_hessian,
         g=problem.constraint,
         g_jac=problem.constraint_jacobian,
-        mu=N,
+        N=N,
         x0=x0,
         lower_bounds=problem.lower_bounds,
         upper_bounds=problem.upper_bounds,
@@ -140,7 +140,7 @@ def run(problem, id: int, verbose: bool = True):
         opt.log()
 
     # plot the result
-    plot_trajectory(y0, opt.Y, ref, pareto_front, opt.active_indicator._medroids_cluster, opt, id)
+    plot_trajectory(y0, opt.Y, ref, pareto_front, opt.active_indicator._medoids_cluster, opt, id)
     # measure the performance after optimization
     X = opt._get_primal_dual(opt.X)[0]
     Y = opt.Y

@@ -1,9 +1,8 @@
-from typing import Callable, Dict, Tuple, Union
+from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist, directed_hausdorff, pdist
-from sklearn.cluster import DBSCAN
 from sklearn_extra.cluster import KMedoids
 
 __authors__ = ["Hao Wang"]
@@ -105,20 +104,54 @@ class GenerationalDistance:
             return grad
 
 
-class ClusteredMetroids:
-    def __init__(self, n_components: int, p: float = 2, recluster: bool = False) -> None:
-        self._medroids = {i: None for i in range(n_components)}
-        self.recluster = recluster
+class ReferenceSet:
+    def __init__(self, ref: np.ndarray, p: float = 2) -> None:
+        self._ref = {0: ref} if isinstance(ref, np.ndarray) else ref
+        assert isinstance(self._ref, dict)
+        self.n_components = len(self._ref)
         self.p = p
+        self.dim = self._ref[0].shape[1]
+        self.N = len(self.reference_set)
+        self._medoids = {i: None for i in range(self.n_components)}
 
-    def compute(
-        self, X: Union[dict, np.ndarray], Y: Union[dict, np.ndarray], Y_idx: np.ndarray = None
-    ) -> np.ndarray:
-        # if we have single component
-        X = [X] if isinstance(X, np.ndarray) else X
+    @property
+    def reference_set(self) -> np.ndarray:
+        return np.concatenate(list(self._ref.values()), axis=0)
+
+    def match(self, Y: Union[dict, np.ndarray], Y_idx: Union[List, None] = None) -> np.ndarray:
+        Y, Y_idx = self._check_Y(Y, Y_idx)
+        N = sum([len(y) for y in Y])
+        # match the components of the reference set and `Y`
+        idx = self._match_components(Y)
+        out = np.zeros((N, self.dim))
+        self._medoids_idx = np.empty(N, dtype=object)
+        for k in range(self.n_components):
+            Y_ = Y[idx[k]]
+            assert len(self._ref[k]) >= len(Y_)
+            try:
+                medoids = self._medoids[k]
+                assert len(medoids) == len(Y_)
+            except:
+                medoids = self._cluster(X=self._ref[k], N=len(Y_))
+            medoids = self._match(medoids, Y_)
+            self._medoids[k] = medoids
+            out[Y_idx[k]] = medoids
+            for i, j in enumerate(Y_idx[k]):
+                self._medoids_idx[j] = (k, i)
+        return out
+
+    def set_medoids(self, medroid: np.ndarray, k: int):
+        # update the medoids
+        c, idx = self._medoids_idx[k]
+        self._medoids[c][idx] = medroid
+
+    def _check_Y(self, Y: Union[dict, np.ndarray], Y_idx: Union[List, None]) -> Tuple[np.ndarray, np.ndarray]:
         Y = [Y] if isinstance(Y, np.ndarray) else Y
-        n, m = len(X), len(Y)
-        N, dim = np.sum([len(y) for y in Y]), X[0].shape[1]
+        Y_idx = [list(range(len(Y[0])))] if Y_idx is None else Y_idx
+        return Y, Y_idx
+
+    def _match_components(self, Y: Dict[int, np.ndarray]) -> np.ndarray:
+        n, m = self.n_components, len(Y)
         assert n >= m  # TODO: find a solution here
         if n == 1 and m == 1:
             idx = [0]
@@ -126,44 +159,19 @@ class ClusteredMetroids:
             # match the clusters of `X` and `Y`
             iu = np.triu_indices(n=n, m=m)
             cost = np.zeros((n, m))
-            cost[iu] = [directed_hausdorff(X[i], Y[j])[0] for (i, j) in zip(*iu)]
+            cost[iu] = [directed_hausdorff(self._ref[i], Y[j])[0] for (i, j) in zip(*iu)]
             cost = cost + cost.T
             idx = linear_sum_assignment(cost)[1]
-        # compute the medroids for each cluster of `X`
-        self.Y_idx = [list(range(len(Y[0])))] if Y_idx is None else Y_idx
-        out = np.zeros((N, dim))
-        self._medroids_idx = np.empty(N, dtype=object)
-        for k in range(n):
-            Y_ = Y[idx[k]]
-            assert len(X[k]) >= len(Y_)
-            try:
-                medroids = self._medroids[k]
-                assert len(medroids) == len(Y_)
-            except:
-                medroids = self._cluster(X=X[k], N=len(Y_))
-            medroids = self._match(medroids, Y_)
-            self._medroids[k] = medroids
-            out[self.Y_idx[k]] = medroids
-            for i, j in enumerate(self.Y_idx[k]):
-                self._medroids_idx[j] = (k, i)
-
-        # number of medroids per each cluster
-        self._n_medroids = [len(m) for m in self._medroids.values()]
-        return out
+        return idx
 
     def _cluster(self, X: np.ndarray, N: int) -> np.ndarray:
-        km = KMedoids(n_clusters=N, random_state=0, method="pam").fit(X)
+        km = KMedoids(n_clusters=N, random_state=0, init="k-medoids++").fit(X)
         return X[km.medoid_indices_]
 
     def _match(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
         cost = cdist(Y, X, metric="minkowski", p=self.p)
         idx = linear_sum_assignment(cost)[1]  # min-weight assignment in a bipartite graph
         return X[idx]
-
-    def set_medroids(self, medroid: np.ndarray, k: int):
-        # update the medroids
-        c, idx = self._medroids_idx[k]
-        self._medroids[c][idx] = medroid
 
 
 class InvertedGenerationalDistance:
@@ -189,18 +197,14 @@ class InvertedGenerationalDistance:
                 the points in the approximation set by recursively removing the points which has nonzero
                 gradient (the nearest point to some reference point). Defaults to False.
         """
-        # self.ref = preprocess_reference_set(ref)
-        self.ref = ref
+        self.ref = ReferenceSet(ref, p)
         self.p = p
         self.func = func
         self.jac = jac
         self.hess = hess
-        self.M = len(self.ref)
+        self.M = self.ref.N
         self.recursive = recursive
         self.cluster_matching = cluster_matching
-        if self.cluster_matching:
-            n_components = len(self.ref) if isinstance(self.ref, dict) else 1
-            self._clustered_metroids = ClusteredMetroids(n_components, self.p)
 
     def _compute_indices(self, Y: np.ndarray):
         """find for each reference point, the index of its closest point in the approximation set
@@ -209,7 +213,7 @@ class InvertedGenerationalDistance:
             Y (np.ndarray): the objective points of shape (N, n_objective).
         """
         N = len(Y)
-        self.D = cdist(Y, self.ref, metric="minkowski", p=self.p)
+        self.D = cdist(Y, self.ref.reference_set, metric="minkowski", p=self.p)
         # for each reference point, the index of its closest point in the approximation set `Y`
         self._indices = np.argmin(self.D, axis=0)
         # for each point `p`` in `Y`, the indices of points in the reference set
@@ -229,21 +233,19 @@ class InvertedGenerationalDistance:
                 break
             D[_indices, np.arange(self.M)] = np.inf
 
-    def set_medroids(self, v, k):
-        self._medroids[k] = v
-        self._clustered_metroids.set_medroids(v, k)
-
-    def _match(self, Y: np.ndarray, Y_label: None):
+    def _match(self, Y: np.ndarray, Y_label: np.ndarray = None):
         Y_ = Y
         Y_idx = None
         # if the reference set is clustered, then also try to cluster the approximation set
-        if isinstance(self.ref, dict):
-            # eps = 0.15 * np.min(pdist(Y))
-            # label1 = DBSCAN(eps=0.5, min_samples=2).fit_predict(Y)
+        if Y_label is not None:
             n_cluster = len(np.unique(Y_label))
             Y_idx = [np.nonzero(Y_label == i)[0] for i in range(n_cluster)]
             Y_ = [Y[idx] for idx in Y_idx]
-        self._medroids = self._clustered_metroids.compute(self.ref, Y_, Y_idx)
+        self._medoids = self.ref.match(Y_, Y_idx)
+
+    def shift_medoids(self, v: np.ndarray, k: int):
+        self._medoids[k] += v
+        self.ref.set_medoids(self._medoids[k], k)
 
     def compute(self, X: np.ndarray = None, Y: np.ndarray = None, Y_label: np.ndarray = None) -> float:
         """compute the inverted generational distance value
@@ -262,7 +264,7 @@ class InvertedGenerationalDistance:
             Y = np.array([self.func(x) for x in X])
         if self.cluster_matching:
             self._match(Y, Y_label)
-            return np.mean(np.sum((Y - self._medroids) ** 2, axis=1))
+            return np.mean(np.sum((Y - self._medoids) ** 2, axis=1))
         else:
             self._compute_indices(Y)
             return np.mean(self.D[self._indices, np.arange(self.M)] ** self.p) ** (1 / self.p)
@@ -294,7 +296,7 @@ class InvertedGenerationalDistance:
         J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
         if self.cluster_matching:
             self._match(Y, Y_label)
-            diff = Y - self._medroids  # (N, n_objective)
+            diff = Y - self._medoids  # (N, n_objective)
         else:
             self._compute_indices(Y)
             centroid = np.array([np.sum(self.ref[idx], axis=0) for idx in self.indices])

@@ -31,7 +31,7 @@ pareto_front = problem.get_pareto_front(1000)
 
 # load the reference set
 ref = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Filling.csv", header=None).values
-medroids = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Match_30points.csv", header=None).values
+medoids = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Match_30points.csv", header=None).values
 # the load the final population from an EMOA
 x0 = pd.read_csv("./ZDT/ZDT1/ZDT1_Pop_x.csv", header=None).values
 y0 = pd.read_csv("./ZDT/ZDT1/ZDT1_Pop_y.csv", header=None).values
@@ -46,7 +46,7 @@ opt = DpN(
     hessian=problem.objective_hessian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
-    mu=N,
+    N=N,
     x0=x0,
     lower_bounds=problem.xl,
     upper_bounds=problem.xu,
@@ -63,7 +63,7 @@ plt.subplots_adjust(right=0.93, left=0.05)
 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
 ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
 ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
-ax0.plot(medroids[:, 0], medroids[:, 1], "r^", mec="none", ms=7, alpha=0.8)
+ax0.plot(medoids[:, 0], medoids[:, 1], "r^", mec="none", ms=7, alpha=0.8)
 ax0.set_title("Objective space (Initialization)")
 ax0.set_xlabel(r"$f_1$")
 ax0.set_ylabel(r"$f_2$")
@@ -99,7 +99,7 @@ lines += ax1.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=0.9)
 colors = plt.get_cmap("tab20").colors
 colors = [colors[2], colors[12], colors[13]]
 shifts = []
-for i, M in enumerate(opt.history_medroids):
+for i, M in enumerate(opt.history_medoids):
     c = colors[len(M) - 1]
     for j, x in enumerate(M):
         line = ax1.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
@@ -107,7 +107,7 @@ for i, M in enumerate(opt.history_medroids):
             shifts.append(line)
 lines += shifts
 lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
-counts = np.unique([len(m) for m in opt.history_medroids], return_counts=True)[1]
+counts = np.unique([len(m) for m in opt.history_medoids], return_counts=True)[1]
 lgnd = ax1.legend(
     lines,
     ["Pareto front", r"$Y_0$"]
