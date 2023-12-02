@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --job-name=MOEA
-#SBATCH --array=0-21
+#SBATCH --array=0-9
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=15
 #SBATCH --partition=cpu-medium
-#SBATCH --time=03:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --error="%x-%j-%a.err"
 #SBATCH --output="%x-%j-%a.out"
 #SBATCH --mail-type=END,FAIL
