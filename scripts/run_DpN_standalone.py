@@ -75,7 +75,7 @@ ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=4, alpha=0
 
 opt = DpN(
     dim=problem.n_decision_vars,
-    n_objective=problem.n_objectives,
+    n_obj=problem.n_objectives,
     ref=ref,
     func=problem.objective,
     jac=problem.objective_jacobian,
@@ -84,8 +84,8 @@ opt = DpN(
     g_jac=problem.eq_constraint_jacobian,
     N=N,
     x0=x0,
-    lower_bounds=problem.lower_bounds,
-    upper_bounds=problem.upper_bounds,
+    xl=problem.lower_bounds,
+    xu=problem.upper_bounds,
     max_iters=max_iters,
     type="igd",
     verbose=True,

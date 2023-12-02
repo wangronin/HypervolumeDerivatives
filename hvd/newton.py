@@ -11,7 +11,7 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, set_bounds
+from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, precondition_hessian, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -79,7 +79,7 @@ class HVN:
         self.minimization = minimization
         self.dim_primal = dim
         self.n_objective = n_objective
-        self.mu = mu  # the population size
+        self.mu = mu
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self.ref = ref
@@ -474,24 +474,23 @@ class HVN:
 
 
 class DpN:
-    """Delta_p Newton method with constraints
+    """Delta_p Newton method with constraint handling
 
     Newton-Raphson method to minimize the Delta_p indicator, subject to equality/inequality constraints.
     The equalities are handled locally with the KKT condition.
     The inequalities are converted to equalities via the active set method.
-    TODO: add more description
     """
 
     def __init__(
         self,
         dim: int,
-        n_objective: int,
+        n_obj: int,
         func: callable,
         jac: callable,
         hessian: callable,
         ref: Union[List[float], np.ndarray],
-        lower_bounds: Union[List[float], np.ndarray],
-        upper_bounds: Union[List[float], np.ndarray],
+        xl: Union[List[float], np.ndarray],
+        xu: Union[List[float], np.ndarray],
         type: str = "deltap",
         N: int = 5,
         h: Callable = None,
@@ -539,10 +538,10 @@ class DpN:
         assert type in ["gd", "igd", "deltap"]
         self.type = type
         self.dim_p = dim
-        self.n_objective = n_objective
-        self.N = N  # the population/archive size
-        self.xl = lower_bounds
-        self.xu = upper_bounds
+        self.n_obj = n_obj
+        self.N = N
+        self.xl = xl
+        self.xu = xu
         # parameters controlling stop criteria
         self.xtol = xtol
         self.stop_dict: Dict = {}
@@ -559,10 +558,10 @@ class DpN:
         self.X0 = x0
         # auxiliary variables
         self.iter_count: int = 0
-        self.max_iters: int = max_iters
-        self.g_tol: float = -1e-8  # threshold for the active method
+        self.max_iters: int = self.N * 10 if max_iters is None else max_iters
         self.verbose: bool = verbose
         self._initialize_logging()
+        # TODO: implement those as callbacks
         self._pareto_front = pareto_front
         self._perf_gd = GenerationalDistance(ref=pareto_front)
         self._perf_igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
@@ -589,7 +588,7 @@ class DpN:
             v = self.g(x)
             self.n_ieq = 1 if isinstance(v, (int, float)) else len(v)
 
-        self.dim_d = self.n_ieq + self.n_eq
+        self.dim_d = self.n_eq + self.n_ieq
         self.dim = self.dim_p + self.dim_d
         self._get_primal_dual = lambda X: (X[:, : self.dim_p], X[:, self.dim_p :])
 
@@ -665,15 +664,6 @@ class DpN:
         self._xu = set_bounds(ub, self.dim_p)
 
     @property
-    def maxiter(self):
-        return self._maxiter
-
-    @maxiter.setter
-    def maxiter(self, n: int):
-        if n is None:
-            self._maxiter = len(self.X) * 100
-
-    @property
     def active_indicator(
         self,
     ) -> Union[GenerationalDistance, InvertedGenerationalDistance]:
@@ -744,9 +734,7 @@ class DpN:
         self.GD_value = self._gd.compute(Y=Y)
         self.IGD_value = self._igd.compute(Y=Y, Y_label=self.Y_label)
 
-    def _evaluate_constraints(
-        self, primal_vars: np.ndarray, type: str = "eq", compute_gradient: bool = True
-    ) -> List:
+    def _evaluate_constraints(self, primal_vars: np.ndarray, type: str = "eq", compute_gradient: bool = True):
         N = len(primal_vars)
         func = self.h if type == "eq" else self.g
         jac = self.h_jac if type == "eq" else self.g_jac
@@ -810,7 +798,7 @@ class DpN:
         for r in range(self.N):
             Hessian, c, h = Hessian[r], idx[r], H[r]
             # TODO: check if preconditioning is needed automatically
-            # Hessian = self._precondition_hessian(Hessian)
+            # Hessian = precondition_hessian(Hessian)
             Z = np.zeros((len(h), len(h)))
             DR = np.r_[np.c_[Hessian, h.T], np.c_[h, Z]] if self._constrained else Hessian
             with warnings.catch_warnings():
@@ -895,9 +883,6 @@ class DpN:
             step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
             step[:, : self.dim_p] = step_primal
             # re-calculate the `max_step_size` for projected directions
-            # v = step_primal[idx] @ normal_vectors
-            # s = np.array([dist[idx][i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-            # max_step_size[idx] = np.array([min(1, np.nanmin(_)) for _ in s])
             v = step[:, : self.dim_p] @ normal_vectors
             s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
             max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
@@ -909,8 +894,6 @@ class DpN:
         """backtracking line search with Armijo's condition"""
         c = 1e-5
         N_ = len(X)
-        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
-        # the step-size control
         if np.all(np.isclose(step, 0)):
             return np.ones(N_)
 
@@ -940,31 +923,3 @@ class DpN:
                 pass
                 # self.logger.warn("Armijo's backtracking line search failed")
         return step_size
-
-    def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
-        """Precondition the Hessian matrix to make sure it is positive definite
-
-        Args:
-            H (np.ndarray): the Hessian matrix
-
-        Returns:
-            np.ndarray: the lower triagular decomposition of the preconditioned Hessian
-        """
-        # pre-condition the Hessian
-        try:
-            L = cholesky(H, lower=True)
-        except:
-            beta = 1e-6
-            v = np.min(np.diag(H))
-            tau = 0 if v > 0 else -v + beta
-            I = np.eye(H.shape[0])
-            for _ in range(40):
-                try:
-                    L = cholesky(H + tau * I, lower=True)
-                    break
-                except:
-                    tau = max(2 * tau, beta)
-            else:
-                self.logger.warn("Pre-conditioning the HV Hessian failed")
-                return H
-        return L.dot(L.T)
