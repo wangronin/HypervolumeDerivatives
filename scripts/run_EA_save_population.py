@@ -23,7 +23,8 @@ from scipy.io import savemat
 from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from hvd.problems.base import MOOAnalytical
 
-pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
+# pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
+pop_to_numpy = lambda pop: np.array([np.r_[ind.F, ind.H, ind.G] for ind in pop])
 data_path = "/data1/wangh5"
 
 
@@ -87,8 +88,8 @@ def minimize(
 ):
     data = []
     columns = (
-        [f"x{i}" for i in range(1, problem.n_var + 1)]
-        + [f"f{i}" for i in range(1, problem.n_obj + 1)]
+        # [f"x{i}" for i in range(1, problem.n_var + 1)]
+        [f"f{i}" for i in range(1, problem.n_obj + 1)]
         + [f"h{i}" for i in range(1, problem.n_eq_constr + 1)]
         + [f"g{i}" for i in range(1, problem.n_ieq_constr + 1)]
     )
