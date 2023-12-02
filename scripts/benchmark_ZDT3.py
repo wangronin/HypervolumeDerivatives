@@ -132,7 +132,7 @@ def execute(run: int):
     Y_label = Y_label[0:50] - 1
     opt = DpN(
         dim=problem.n_var,
-        n_objective=problem.n_obj,
+        n_obj=problem.n_obj,
         ref=ref,
         func=problem.objective,
         jac=problem.objective_jacobian,
@@ -141,8 +141,8 @@ def execute(run: int):
         g_jac=problem.ieq_jacobian,
         N=len(x0),
         x0=x0,
-        lower_bounds=problem.xl,
-        upper_bounds=problem.xu,
+        xl=problem.xl,
+        xu=problem.xu,
         max_iters=max_iters,
         type="igd",
         verbose=False,

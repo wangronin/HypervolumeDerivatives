@@ -110,7 +110,7 @@ class NSGA_DpN:
     ):
         self._newton = DpN(
             dim=self.n_decision_vars,
-            n_objective=self.n_objectives,
+            n_obj=self.n_objectives,
             ref=reference_set,
             x0=X0,
             func=problem.objective,
@@ -118,8 +118,8 @@ class NSGA_DpN:
             hessian=problem.objective_hessian,
             h=problem.constraint if hasattr(problem, "constraint") else None,
             h_jac=problem.constraint_jacobian if hasattr(problem, "constraint_jacobian") else None,
-            lower_bounds=problem.lower_bounds,
-            upper_bounds=problem.upper_bounds,
+            xl=problem.lower_bounds,
+            xu=problem.upper_bounds,
             max_iters=n_iters_newton,
             verbose=True,
         )
