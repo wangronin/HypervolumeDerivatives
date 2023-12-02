@@ -86,7 +86,7 @@ opt = DpN(
     hessian=problem.objective_hessian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
-    mu=N,
+    N=N,
     x0=x0,
     lower_bounds=problem.xl,
     upper_bounds=problem.xu,
@@ -102,7 +102,7 @@ while not opt.terminate():
 
 X = opt._get_primal_dual(opt.X)[0]
 Y = opt.Y
-M = opt.active_indicator._medroids_cluster
+M = opt.active_indicator._medoids_cluster
 # x1 = M[:, 0]
 # x2 = [f_x2(*_) for _ in zip(x1, M[:, 1])]
 # M_x = np.c_[x1, x2]

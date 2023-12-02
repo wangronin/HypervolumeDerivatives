@@ -82,7 +82,7 @@ opt = DpN(
     hessian=problem.objective_hessian,
     g=problem.eq_constraint,
     g_jac=problem.eq_constraint_jacobian,
-    mu=N,
+    N=N,
     x0=x0,
     lower_bounds=problem.lower_bounds,
     upper_bounds=problem.upper_bounds,
@@ -103,7 +103,7 @@ while not opt.terminate():
     )
     opt.newton_iteration()
     opt.log()
-    # M = opt.active_indicator._medroids
+    # M = opt.active_indicator._medoids
     # ax1.plot(M[:, 0], M[:, 1], "r^", ms=7, alpha=0.5)
 
 X = opt._get_primal_dual(opt.X)[0]
@@ -135,7 +135,7 @@ lines += ax1.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=0.9)
 lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
 colors = plt.get_cmap("tab20").colors
 # colors = [colors[2], colors[7], colors[13]]
-for i, M in enumerate(opt.history_medroids):
+for i, M in enumerate(opt.history_medoids):
     lines += ax1.plot(M[:, 0], M[:, 1], color=colors[i], ls="none", marker="^", mec="none", ms=7, alpha=0.7)
 
 ax1.set_title("Objective space")

@@ -3,7 +3,7 @@ import warnings
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cholesky, qr, solve
+from scipy.linalg import block_diag, cholesky, solve
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
@@ -11,7 +11,7 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import get_logger, non_domin_sort, set_bounds
+from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -493,7 +493,7 @@ class DpN:
         lower_bounds: Union[List[float], np.ndarray],
         upper_bounds: Union[List[float], np.ndarray],
         type: str = "deltap",
-        mu: int = 5,
+        N: int = 5,
         h: Callable = None,
         h_jac: callable = None,
         g: Callable = None,
@@ -538,11 +538,11 @@ class DpN:
         """
         assert type in ["gd", "igd", "deltap"]
         self.type = type
-        self.dim_primal = dim
+        self.dim_p = dim
         self.n_objective = n_objective
-        self.mu = mu  # the population/archive size
-        self.lower_bounds = lower_bounds
-        self.upper_bounds = upper_bounds
+        self.N = N  # the population/archive size
+        self.xl = lower_bounds
+        self.xu = upper_bounds
         # parameters controlling stop criteria
         self.xtol = xtol
         self.stop_dict: Dict = {}
@@ -555,42 +555,43 @@ class DpN:
         self.g: Callable = g
         self.g_jac: Callable = g_jac
         self._check_constraints()
+        self._set_indicator(ref)
         self.X0 = x0
-        self.reference_set = ref
         # auxiliary variables
         self.iter_count: int = 0
         self.max_iters: int = max_iters
         self.g_tol: float = -1e-8  # threshold for the active method
         self.verbose: bool = verbose
-        # self.eps: float = 1e-10 * np.max(self.upper_bounds - self.lower_bounds)
         self._initialize_logging()
         self._pareto_front = pareto_front
         self._perf_gd = GenerationalDistance(ref=pareto_front)
         self._perf_igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
-        # TODO: fix those ad-hoc solutions
+        # TODO: fix those ad-hoc variable for shifting and clustering of `Y`
         self._eta = eta
         self.Y_label = Y_label
+        if self.Y_label is None:
+            self.Y_label = np.array([0] * self.N, dtype=int)
+            self.n_cluster = 1
+            self.Y_idx = [list(range(self.N))]
+        else:
+            self.n_cluster = len(np.unique(self.Y_label))
+            self.Y_idx = [np.nonzero(self.Y_label == i)[0] for i in range(self.n_cluster)]
 
     def _check_constraints(self):
         # initialize dual variables
-        # `p`: the number of equality constraints
-        # `q`: the number of inequality constraints
-        self.p, self.q = 0, 0
+        self.n_eq, self.n_ieq = 0, 0
         self._constrained = self.h is not None or self.g is not None
-        x = np.random.rand(self.dim_primal) * (self.upper_bounds - self.lower_bounds) + self.lower_bounds
+        x = np.random.rand(self.dim_p) * (self.xu - self.xl) + self.xl
         if self.h is not None:
             v = self.h(x)
-            self.p = 1 if isinstance(v, (int, float)) else len(v)
+            self.n_eq = 1 if isinstance(v, (int, float)) else len(v)
         if self.g is not None:
             v = self.g(x)
-            self.q = 1 if isinstance(v, (int, float)) else len(v)
+            self.n_ieq = 1 if isinstance(v, (int, float)) else len(v)
 
-        self.dim_dual = self.q + self.p
-        self.dim = self.dim_primal + self.dim_dual
-        self._get_primal_dual = lambda X: (
-            X[:, : self.dim_primal],
-            X[:, self.dim_primal :],
-        )
+        self.dim_d = self.n_ieq + self.n_eq
+        self.dim = self.dim_p + self.dim_d
+        self._get_primal_dual = lambda X: (X[:, : self.dim_p], X[:, self.dim_p :])
 
     def _initialize_logging(self):
         """parameters for logging the history"""
@@ -605,22 +606,16 @@ class DpN:
         self._delta_GD: float = np.inf
         self._delta_IGD: float = np.inf
         self.hist_R_norm: List[float] = []
-        self.history_medroids: Dict[int, List] = dict()
+        self.history_medoids: Dict[int, List] = dict()
         self.logger: logging.Logger = get_logger(
             logger_id=f"{self.__class__.__name__}",
             console=self.verbose,
         )
 
-    @property
-    def reference_set(self):
-        return self._ref
-
-    @reference_set.setter
-    def reference_set(self, ref: Union[np.ndarray, List[np.ndarray]]):
-        self._ref = ref
-        self._gd = GenerationalDistance(ref=self._ref, func=self.func, jac=self.jac, hess=self.hessian)
+    def _set_indicator(self, ref: Union[np.ndarray, Dict[int, np.ndarray]]):
+        self._gd = GenerationalDistance(ref=ref, func=self.func, jac=self.jac, hess=self.hessian)
         self._igd = InvertedGenerationalDistance(
-            ref=self._ref,
+            ref=ref,
             func=self.func,
             jac=self.jac,
             hess=self.hessian,
@@ -638,39 +633,36 @@ class DpN:
             X0 = np.asarray(X0)
             # assert np.all(X0 - self.lower_bounds >= 0)
             # assert np.all(X0 - self.upper_bounds <= 0)
-            X0 = np.clip(X0, self.lower_bounds, self.upper_bounds)
+            X0 = np.clip(X0, self.xl, self.xu)
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
-            X0 += 1e-5 * (X0 - self.lower_bounds == 0).astype(int)
-            X0 -= 1e-5 * (X0 - self.upper_bounds == 0).astype(int)
-            self.mu = len(X0)
+            X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
+            X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
+            self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
-            assert self.mu is not None
-            assert all(~np.isinf(self.lower_bounds)) & all(~np.isinf(self.upper_bounds))
-            X0 = (
-                np.random.rand(self.mu, self.dim_primal) * (self.upper_bounds - self.lower_bounds)
-                + self.lower_bounds
-            )  # (mu, dim_primal)
+            assert self.N is not None
+            assert all(~np.isinf(self.xl)) & all(~np.isinf(self.xu))
+            X0 = np.random.rand(self.N, self.dim_p) * (self.xu - self.xl) + self.xl  # (mu, dim_primal)
 
         self._X0 = X0
         self.Y = np.array([self.func(x) for x in self._X0])  # (mu, n_objective)
-        self.X = np.c_[self._X0, np.zeros((self.mu, self.dim_dual)) / self.mu]  # (mu, dim)
+        self.X = np.c_[self._X0, np.zeros((self.N, self.dim_d)) / self.N]  # (mu, dim)
 
     @property
-    def lower_bounds(self):
-        return self._lower_bounds
+    def xl(self):
+        return self._xl
 
-    @lower_bounds.setter
-    def lower_bounds(self, lb: np.ndarray):
-        self._lower_bounds = set_bounds(lb, self.dim_primal)
+    @xl.setter
+    def xl(self, lb: np.ndarray):
+        self._xl = set_bounds(lb, self.dim_p)
 
     @property
-    def upper_bounds(self):
-        return self._upper_bounds
+    def xu(self):
+        return self._xu
 
-    @upper_bounds.setter
-    def upper_bounds(self, ub: np.ndarray):
-        self._upper_bounds = set_bounds(ub, self.dim_primal)
+    @xu.setter
+    def xu(self, ub: np.ndarray):
+        self._xu = set_bounds(ub, self.dim_p)
 
     @property
     def maxiter(self):
@@ -699,11 +691,11 @@ class DpN:
         return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
 
     def newton_iteration(self):
-        # compute the initial indicator values. The first clustering and matching is executed here
+        # compute the initial indicator values. The first clustering and matching is executed here.
         self._compute_indicator_value(self.Y)
         # shift the reference set if needed
         self._shift_reference_set()
-        self.step, self.R = self._compute_netwon_step(X=self.X, Y=self.Y)
+        self.step, self.R = self._compute_netwon_step()
         self.step, self.max_step_size = self._handle_box_constraint(self.X, self.step)
         # backtracking line search for the step size
         self.step_size = self._line_search(self.X, self.step, self.R, self.max_step_size)
@@ -752,6 +744,21 @@ class DpN:
         self.GD_value = self._gd.compute(Y=Y)
         self.IGD_value = self._igd.compute(Y=Y, Y_label=self.Y_label)
 
+    def _evaluate_constraints(
+        self, primal_vars: np.ndarray, type: str = "eq", compute_gradient: bool = True
+    ) -> List:
+        N = len(primal_vars)
+        func = self.h if type == "eq" else self.g
+        jac = self.h_jac if type == "eq" else self.g_jac
+        if func is None:
+            return None
+        value = np.array([func(x) for x in primal_vars]).reshape(self.N, -1)
+        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-10 for v in value]
+        active_indices = np.array(active_indices)
+        if compute_gradient:
+            H = [jac(x).reshape(-1, self.dim_p) for x in primal_vars]
+        return (value, active_indices, H) if compute_gradient else (value, active_indices)
+
     def _compute_R(
         self, X: np.ndarray, Y: np.ndarray = None, grad: np.ndarray = None
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
@@ -766,73 +773,42 @@ class DpN:
 
         Returns:
             Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
-                (R, H, active_indices) -> the rooting-finding problem,
+                (R, H, idx) -> the rooting-finding problem,
                 the Jacobian of the equality constraints, and
                 the indices that are active among primal-dual variables
         """
-        N = len(X)
         primal_vars, dual_vars = self._get_primal_dual(X)
         if grad is None:
-            grad = self.active_indicator.compute_derivatives(
-                primal_vars, Y, Y_label=self.Y_label, compute_hessian=False
-            )
-
-        cstr_value, active_indices, H = None, None, [[] for _ in range(N)]
-        # inequality constraint function value, if exists
-        if self.g is not None:
-            # TODO: make it a class property
-            cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
-            active_indices = [v >= -1e-10 for v in cstr_value]  # (N, q)
-            # gradients of the inequality constraints
-            # TODO: only compute the gradient for active ineq. cstr.
-            H = [self.g_jac(x).reshape(self.q, -1) for x in primal_vars]  # (N, q, dim)
-
-        # equality constraint function value, if exists
-        if self.h is not None:
-            eq_cstr = np.array([self.h(_) for _ in primal_vars]).reshape(N, -1)  # (N, p)
-            cstr_value = (
-                eq_cstr if cstr_value is None else [np.r_[cstr_value[i], eq_cstr[i]] for i in range(N)]
-            )  # (N, q + p)
-            # gradients of the equality constraints
-            H_ = [self.h_jac(x).reshape(self.p, -1) for x in primal_vars]  # (N, q, dim)
-            H = H_ if H is None else [np.r_[H[i], H_[i]] for i in range(N)]  # (N, q + p)
-            idx = [np.array([True] * self.p) for _ in range(N)]
-            active_indices = (
-                idx if active_indices is None else [np.r_[active_indices[i], idx[i]] for i in range(N)]
-            )
+            grad = self.active_indicator.compute_derivatives(primal_vars, Y, self.Y_label, False)
 
         R = grad  # the unconstrained case
+        idx = None
         if self._constrained:
-            # the Jacobian of the inequalities
-            H = [H[i][idx, :] for i, idx in enumerate(active_indices)]
+            func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
+            eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=True)
+            ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=True)
+            value, idx, H = merge_lists(eq, ieq)
+            # the Jacobian of the active constraints
+            H = [H[i][idx, :] for i, idx in enumerate(idx)]
             # the root-finding problem
-            R = [
-                np.r_[
-                    grad[i] + np.einsum("j,jk->k", dual_vars[i, idx], H[i]),
-                    cstr_value[i, idx],
-                ]
-                for i, idx in enumerate(active_indices)
-            ]
-        # the indices indicating which primal-dual variables are active
-        active_indices = (
-            [[True] * self.dim_primal] * N
-            if active_indices is None
-            else [np.r_[[True] * self.dim_primal, x] for x in active_indices]
-        )
-        return R, H, active_indices
+            R = [np.r_[func(grad[i], dual_vars[i, k], H[i]), value[i, k]] for i, k in enumerate(idx)]
+        return R, H, idx
 
-    def _compute_netwon_step(self, X: np.ndarray, Y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        N = X.shape[0]
-        primal_vars = self._get_primal_dual(X)[0]
-        newton_step = np.zeros((N, self.dim))  # Netwon steps
-        R = np.zeros((N, self.dim))  # the root-finding problem
+    def _compute_netwon_step(self) -> Tuple[np.ndarray, np.ndarray]:
+        primal_vars = self._get_primal_dual(self.X)[0]  # primal variables
+        newton_step = np.zeros((self.N, self.dim))  # Netwon steps
+        R = np.zeros((self.N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
-        grad, Hess = self.active_indicator.compute_derivatives(primal_vars, Y, Y_label=self.Y_label)
-        # the root-finding problem and the gradient of the equality constraints
-        R_list, H, idx = self._compute_R(X, Y, grad=grad)
+        grad, Hessian = self.active_indicator.compute_derivatives(primal_vars, self.Y, self.Y_label)
+        # the root-finding problem and the gradient of the active constraints
+        R_list, H, active_indices = self._compute_R(self.X, self.Y, grad=grad)
+        idx = np.array([[True] * self.dim_p] * self.N)
+        if active_indices is not None:
+            idx = np.c_[idx, active_indices]
+
         # compute the Newton step for each approximation point - lower computation costs
-        for r in range(N):
-            Hessian, c, h = Hess[r], idx[r], H[r]
+        for r in range(self.N):
+            Hessian, c, h = Hessian[r], idx[r], H[r]
             # TODO: check if preconditioning is needed automatically
             # Hessian = self._precondition_hessian(Hessian)
             Z = np.zeros((len(h), len(h)))
@@ -851,76 +827,48 @@ class DpN:
         return newton_step, R
 
     def _shift_reference_set(self):
-        distance = np.linalg.norm(self.Y - self.active_indicator._medroids, axis=1)
-        indices = (
+        """shift the reference set when the following conditions are True:
+        1. always shift the first reference set (`self.iter_count == 0`); Otherwise, weird matching can happen
+        2. if at least one approximation point is close to its matched target and the Newton step is not zero.
+        """
+        distance = np.linalg.norm(self.Y - self.active_indicator._medoids, axis=1)
+        masks = (
             np.array([True] * len(self.Y))
             if self.iter_count == 0
             else np.bitwise_and(
                 np.isclose(distance, 0),
-                np.isclose(np.linalg.norm(self.step[:, : self.dim_primal], axis=1), 0),
+                np.isclose(np.linalg.norm(self.step[:, : self.dim_p], axis=1), 0),
             )
         )
-
-        if np.all(~indices):
+        indices = np.nonzero(masks)[0]
+        if len(indices) == 0:
             return
 
-        indices = np.nonzero(indices)[0]
-        if isinstance(self._ref, dict):
-            if self._eta is None:
-                n_cluster = len(np.unique(self.Y_label))
-                Y_idx = [np.nonzero(self.Y_label == i)[0] for i in range(n_cluster)]
-                self._eta = dict()
-                for i in range(n_cluster):
-                    Y = self.Y[Y_idx[i]]
-                    # compute the normal vector to CHIM
-                    idx = Y.argmin(axis=0)
-                    Z = Y[idx, :]
-                    M = Z[1:] - Z[0]
-                    Q = qr(M.T)[0]
-                    n = -1 * np.abs(Q[:, -1])
-                    n /= np.linalg.norm(n)
-                    self._eta[i] = n
+        if self._eta is None:
+            self._eta = dict()
+            for i in range(self.n_cluster):
+                Y = self.Y[self.Y_idx[i]]
+                X = self.X[self.Y_idx[i]]
+                if self.n_ieq != 0:
+                    cstr_value = np.array([self.g(_) for _ in self._get_primal_dual(X)[0]])
+                    idx = np.array([all(v <= 0) for v in cstr_value])
+                    Y = Y[idx]
+                # get the non-dominated subset
+                idx = non_domin_sort(Y, only_front_indices=True)[0]
+                self._eta[i] = compute_chim(Y[idx])
 
-            for i, k in enumerate(indices):
-                eta_idx = self.Y_label[indices]
-                n = self._eta[eta_idx[i]].ravel()
-                # the initial shift is a bit larger
-                v = 0.05 * n if self.iter_count > 0 else 0.03 * n
-                m = self.active_indicator._medroids[k] + v
-                self.active_indicator.set_medroids(m, k)
+        # shift the medoids
+        for i, k in enumerate(indices):
+            n = self._eta[self.Y_label[k]]
+            v = 0.05 * n if self.iter_count > 0 else 0.05 * n  # the initial shift is a bit larger
+            self.active_indicator.shift_medoids(v, k)
+
+        if self.iter_count == 0:  # record the initial medoids
+            self.history_medoids = [[m.copy()] for m in self.active_indicator._medoids]
         else:
-            # take the feasible subset of the approximation set
-            Y = self.Y
-            if self._constrained and self.q != 0:
-                N = len(self.X)
-                primal_vars = self._get_primal_dual(self.X)[0]
-                cstr_value = np.array([self.g(_) for _ in primal_vars]).reshape(N, -1)  # (N, q)
-                idx = np.array([all(v <= 0) for v in cstr_value])
-                Y = self.Y[idx]
-
-            # get the non-dominated subset
-            idx = non_domin_sort(Y, only_front_indices=True)[0]
-            Y = Y[idx]
-            # compute the normal vector to CHIM
-            idx = Y.argmin(axis=0)
-            Z = Y[idx, :]
-            M = Z[1:] - Z[0]
-            Q = qr(M.T)[0]
-            n = -1 * np.abs(Q[:, -1])
-            n /= np.linalg.norm(n)
-            # n = np.array([-0.716896703894658, -0.697179400115189])
-            v = 0.05 * n if self.iter_count > 0 else 0.06 * n
-            for k in indices:
-                m = self.active_indicator._medroids[k] + v
-                self.active_indicator.set_medroids(m, k)
-
-        if self.iter_count == 0:
-            # log the initial medroids
-            self.history_medroids = [[m.copy()] for m in self.active_indicator._medroids]
-        else:
-            # log the updated medroids
+            # log the updated medoids
             for i, k in enumerate(indices):
-                self.history_medroids[k].append(self.active_indicator._medroids[indices][i])
+                self.history_medoids[k].append(self.active_indicator._medoids[indices][i])
         self.logger.info(f"{len(indices)} target points are shifted")
 
     def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -928,12 +876,12 @@ class DpN:
             return step, np.ones(len(X))
 
         primal_vars = self._get_primal_dual(X)[0]
-        step_primal = step[:, : self.dim_primal]
-        normal_vectors = np.c_[np.eye(self.dim_primal), -1 * np.eye(self.dim_primal)]
+        step_primal = step[:, : self.dim_p]
+        normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
         # calculate the maximal step-size
         dist = np.c_[
-            np.abs(primal_vars - self.lower_bounds),
-            np.abs(self.upper_bounds - primal_vars),
+            np.abs(primal_vars - self.xl),
+            np.abs(self.xu - primal_vars),
         ]
         v = step_primal @ normal_vectors
         s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
@@ -945,12 +893,12 @@ class DpN:
             proj_dim = [np.argmin(_) for _ in s[idx]]
             proj_axis = normal_vectors[:, proj_dim]
             step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
-            step[:, : self.dim_primal] = step_primal
+            step[:, : self.dim_p] = step_primal
             # re-calculate the `max_step_size` for projected directions
             # v = step_primal[idx] @ normal_vectors
             # s = np.array([dist[idx][i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
             # max_step_size[idx] = np.array([min(1, np.nanmin(_)) for _ in s])
-            v = step[:, : self.dim_primal] @ normal_vectors
+            v = step[:, : self.dim_p] @ normal_vectors
             s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
             max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
         return step, max_step_size
@@ -1020,16 +968,3 @@ class DpN:
                 self.logger.warn("Pre-conditioning the HV Hessian failed")
                 return H
         return L.dot(L.T)
-
-        # if 11 < 2:
-        #     import matplotlib.pyplot as plt
-
-        #     Y = self.Y
-        #     M = self.active_indicator._medroids
-        #     fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
-        #     ax.plot(M[:, 0], M[:, 1], "k^", mfc="none")
-        #     ax.plot(Y[:, 0], Y[:, 1], "g+")
-        #     for i in range(len(Y)):
-        #         ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
-        #     plt.tight_layout()
-        #     plt.savefig(f"{self.iter_count}.pdf", dpi=1000)

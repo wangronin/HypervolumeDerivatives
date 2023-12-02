@@ -86,7 +86,7 @@ opt = DpN(
     hessian=MOP1_Hessian,
     h=h,
     h_jac=h_Jacobian,
-    mu=len(x0),
+    N=len(x0),
     x0=x0,
     lower_bounds=-2,
     upper_bounds=2,
@@ -119,9 +119,7 @@ Z = np.array([MOP1(p) for p in np.array([X1.flatten(), X2.flatten()]).T])
 Z1 = Z[:, 0].reshape(-1, len(x))
 Z2 = Z[:, 1].reshape(-1, len(x))
 CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
-CS2 = ax0.contour(
-    X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6
-)
+CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
 
 if 1 < 2:
     trajectory = np.array([x0] + opt.hist_X)

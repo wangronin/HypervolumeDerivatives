@@ -58,7 +58,7 @@ opt = DpN(
     hessian=problem.objective_hessian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
-    mu=N,
+    N=N,
     x0=x0,
     lower_bounds=problem.xl,
     upper_bounds=problem.xu,
@@ -69,7 +69,7 @@ opt = DpN(
     Y_label=Y_label,
 )
 opt.run()
-medroids0 = np.vstack([m[0] for m in opt.history_medroids])
+medoids0 = np.vstack([m[0] for m in opt.history_medoids])
 X = opt._get_primal_dual(opt.X)[0]
 Y = opt.Y
 
@@ -82,7 +82,7 @@ ax0.view_init(70, -20)
 ax0.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=12, alpha=1)
 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.3)
 ax0.plot(all_ref[:, 0], all_ref[:, 1], all_ref[:, 2], "b.", mec="none", ms=5, alpha=0.2)
-ax0.plot(medroids0[:, 0], medroids0[:, 1], medroids0[:, 2], "r^", mec="none", ms=7, alpha=0.8)
+ax0.plot(medoids0[:, 0], medoids0[:, 1], medoids0[:, 2], "r^", mec="none", ms=7, alpha=0.8)
 
 ax0.set_title("Objective space (Initialization)")
 ax0.set_xlabel(r"$f_1$")
@@ -127,7 +127,7 @@ lines += ax1.plot(
 colors = plt.get_cmap("tab20").colors
 colors = [colors[2], colors[12], colors[13]]
 shifts = []
-for i, M in enumerate(opt.history_medroids):
+for i, M in enumerate(opt.history_medoids):
     c = colors[len(M) - 1]
     for j, x in enumerate(M):
         line = ax1.plot(x[0], x[1], x[2], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
@@ -135,7 +135,7 @@ for i, M in enumerate(opt.history_medroids):
             shifts.append(line)
 lines += shifts
 lines += ax1.plot(Y[:, 0], Y[:, 1], Y[:, 2], "k*", mec="none", ms=8, alpha=0.9)
-counts = np.unique([len(m) for m in opt.history_medroids], return_counts=True)[1]
+counts = np.unique([len(m) for m in opt.history_medoids], return_counts=True)[1]
 # lgnd = ax1.legend(
 #     handles=lines,
 #     labels=["Pareto front"]
