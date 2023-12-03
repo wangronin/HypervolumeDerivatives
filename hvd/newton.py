@@ -473,6 +473,14 @@ class HVN:
         return bool(self.stop_dict)
 
 
+class DecisionSet:
+    def __init__(self) -> None:
+        pass
+
+    def evaluate(self):
+        pass
+
+
 class DpN:
     """Delta_p Newton method with constraint handling
 
@@ -555,7 +563,7 @@ class DpN:
         self.g_jac: Callable = g_jac
         self._check_constraints()
         self._set_indicator(ref)
-        self.X0 = x0
+        self._initialize_approximation_set(x0)
         # auxiliary variables
         self.iter_count: int = 0
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
@@ -614,20 +622,10 @@ class DpN:
     def _set_indicator(self, ref: Union[np.ndarray, Dict[int, np.ndarray]]):
         self._gd = GenerationalDistance(ref=ref, func=self.func, jac=self.jac, hess=self.hessian)
         self._igd = InvertedGenerationalDistance(
-            ref=ref,
-            func=self.func,
-            jac=self.jac,
-            hess=self.hessian,
-            cluster_matching=True,
-            recursive=False,
+            ref=ref, func=self.func, jac=self.jac, hess=self.hessian, cluster_matching=True
         )
 
-    @property
-    def X0(self):
-        return self._X0
-
-    @X0.setter
-    def X0(self, X0: np.ndarray):
+    def _initialize_approximation_set(self, X0: np.ndarray):
         if X0 is not None:
             X0 = np.asarray(X0)
             # assert np.all(X0 - self.lower_bounds >= 0)
@@ -685,14 +683,20 @@ class DpN:
         self._compute_indicator_value(self.Y)
         # shift the reference set if needed
         self._shift_reference_set()
+        # evaluate the objective Jacobian, which will be re-used
+        self.J = np.array([self.jac(x) for x in self._get_primal_dual(self.X)[0]])
         self.step, self.R = self._compute_netwon_step()
-        self.step, self.max_step_size = self._handle_box_constraint(self.X, self.step)
         # backtracking line search for the step size
-        self.step_size = self._line_search(self.X, self.step, self.R, self.max_step_size)
+        self.step_size = self._line_search(self.X, self.step, self.R)
         # Newton iteration
         self.X += self.step_size.reshape(-1, 1) * self.step
         # evaluation
-        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
+        primal_vars = self._get_primal_dual(self.X)[0]
+        self.Y = np.array([self.func(x) for x in primal_vars])
+        if self.h is not None:
+            self.H = self._evaluate_constraints(primal_vars, type="eq")[0]
+        if self.g is not None:
+            self.G = self._evaluate_constraints(primal_vars, type="ieq")[0]
 
     def log(self):
         self.iter_count += 1
@@ -748,7 +752,7 @@ class DpN:
         return (value, active_indices, H) if compute_gradient else (value, active_indices)
 
     def _compute_R(
-        self, X: np.ndarray, Y: np.ndarray = None, grad: np.ndarray = None
+        self, X: np.ndarray, Y: np.ndarray = None, grad: np.ndarray = None, jacobian=None
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
         """compute the root-finding problem R
 
@@ -767,7 +771,7 @@ class DpN:
         """
         primal_vars, dual_vars = self._get_primal_dual(X)
         if grad is None:
-            grad = self.active_indicator.compute_derivatives(primal_vars, Y, self.Y_label, False)
+            grad = self.active_indicator.compute_derivatives(primal_vars, Y, self.Y_label, False, jacobian)
 
         R = grad  # the unconstrained case
         idx = None
@@ -787,7 +791,9 @@ class DpN:
         newton_step = np.zeros((self.N, self.dim))  # Netwon steps
         R = np.zeros((self.N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
-        grad, Hessian = self.active_indicator.compute_derivatives(primal_vars, self.Y, self.Y_label)
+        grad, Hessian = self.active_indicator.compute_derivatives(
+            primal_vars, self.Y, self.Y_label, jacobian=self.J
+        )
         # the root-finding problem and the gradient of the active constraints
         R_list, H, active_indices = self._compute_R(self.X, self.Y, grad=grad)
         idx = np.array([[True] * self.dim_p] * self.N)
@@ -796,11 +802,11 @@ class DpN:
 
         # compute the Newton step for each approximation point - lower computation costs
         for r in range(self.N):
-            Hessian, c, h = Hessian[r], idx[r], H[r]
+            c, h = idx[r], H[r]
             # TODO: check if preconditioning is needed automatically
             # Hessian = precondition_hessian(Hessian)
             Z = np.zeros((len(h), len(h)))
-            DR = np.r_[np.c_[Hessian, h.T], np.c_[h, Z]] if self._constrained else Hessian
+            DR = np.r_[np.c_[Hessian[r], h.T], np.c_[h, Z]] if self._constrained else Hessian[r]
             with warnings.catch_warnings():
                 warnings.filterwarnings("error")
                 try:
@@ -836,19 +842,13 @@ class DpN:
             self._eta = dict()
             for i in range(self.n_cluster):
                 Y = self.Y[self.Y_idx[i]]
-                X = self.X[self.Y_idx[i]]
-                if self.n_ieq != 0:
-                    cstr_value = np.array([self.g(_) for _ in self._get_primal_dual(X)[0]])
-                    idx = np.array([all(v <= 0) for v in cstr_value])
-                    Y = Y[idx]
-                # get the non-dominated subset
                 idx = non_domin_sort(Y, only_front_indices=True)[0]
                 self._eta[i] = compute_chim(Y[idx])
 
         # shift the medoids
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
-            v = 0.05 * n if self.iter_count > 0 else 0.05 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.06 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
@@ -859,52 +859,22 @@ class DpN:
                 self.history_medoids[k].append(self.active_indicator._medoids[indices][i])
         self.logger.info(f"{len(indices)} target points are shifted")
 
-    def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        if 1 < 2:
-            return step, np.ones(len(X))
-
-        primal_vars = self._get_primal_dual(X)[0]
-        step_primal = step[:, : self.dim_p]
-        normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
-        # calculate the maximal step-size
-        dist = np.c_[
-            np.abs(primal_vars - self.xl),
-            np.abs(self.xu - primal_vars),
-        ]
-        v = step_primal @ normal_vectors
-        s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-        max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
-        # max_step_size[max_step_size == 0] = 1
-        # project Newton's direction onto the box boundary
-        idx = max_step_size == 0
-        if np.any(idx) > 0:
-            proj_dim = [np.argmin(_) for _ in s[idx]]
-            proj_axis = normal_vectors[:, proj_dim]
-            step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
-            step[:, : self.dim_p] = step_primal
-            # re-calculate the `max_step_size` for projected directions
-            v = step[:, : self.dim_p] @ normal_vectors
-            s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-            max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
-        return step, max_step_size
-
-    def _line_search(
-        self, X: np.ndarray, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray
-    ) -> float:
+    def _line_search(self, X: np.ndarray, step: np.ndarray, R: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
         c = 1e-5
-        N_ = len(X)
+        N = len(X)
         if np.all(np.isclose(step, 0)):
-            return np.ones(N_)
+            return np.ones(N)
 
-        step_size = max_step_size
-        for i in range(N_):
+        self.active_indicator.re_match = False
+        J = self.J.copy()
+        step_size = np.ones(N)
+        for i in range(N):
             for _ in range(6):
                 X_ = X.copy()
                 X_[i] += step_size[i] * step[i]
-                # TODO: maybe pass in the `grad` to avoid computing the re-matching?
-                R_ = self._compute_R(X_)[0][i]
-                k = min(len(R[i]), len(R_))
+                J[i] = self.jac(self._get_primal_dual(X_)[0][i])
+                R_ = self._compute_R(X_, jacobian=J)[0][i]
                 # Armijo–Goldstein condition
                 cond = np.linalg.norm(R_) <= (1 - c * step_size[i]) * np.linalg.norm(R[i])
                 if cond:
@@ -921,5 +891,5 @@ class DpN:
                     step_size[i] *= 0.5
             else:
                 pass
-                # self.logger.warn("Armijo's backtracking line search failed")
+        self.active_indicator.re_match = True
         return step_size
