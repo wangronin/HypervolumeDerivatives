@@ -104,6 +104,7 @@ class GenerationalDistance:
             return grad
 
 
+# TODO: think of a better abstraction here.
 class ReferenceSet:
     def __init__(self, ref: np.ndarray, p: float = 2) -> None:
         self._ref = {0: ref} if isinstance(ref, np.ndarray) else ref
@@ -205,6 +206,7 @@ class InvertedGenerationalDistance:
         self.M = self.ref.N
         self.recursive = recursive
         self.cluster_matching = cluster_matching
+        self.re_match = True
 
     def _compute_indices(self, Y: np.ndarray):
         """find for each reference point, the index of its closest point in the approximation set
@@ -234,6 +236,8 @@ class InvertedGenerationalDistance:
             D[_indices, np.arange(self.M)] = np.inf
 
     def _match(self, Y: np.ndarray, Y_label: np.ndarray = None):
+        if not self.re_match and hasattr(self, "_medoids"):
+            return
         Y_ = Y
         Y_idx = None
         # if the reference set is clustered, then also try to cluster the approximation set
@@ -270,7 +274,12 @@ class InvertedGenerationalDistance:
             return np.mean(self.D[self._indices, np.arange(self.M)] ** self.p) ** (1 / self.p)
 
     def compute_derivatives(
-        self, X: np.ndarray, Y: np.ndarray = None, Y_label: np.ndarray = None, compute_hessian: bool = True
+        self,
+        X: np.ndarray,
+        Y: np.ndarray = None,
+        Y_label: np.ndarray = None,
+        compute_hessian: bool = True,
+        jacobian: np.ndarray = None,
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """compute the derivatives of the inverted generational distance^p
 
@@ -293,7 +302,10 @@ class InvertedGenerationalDistance:
         if Y is None:
             Y = np.array([self.func(x) for x in X])
         # Jacobian of the objective function
-        J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
+        if jacobian is None:
+            J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
+        else:
+            J = jacobian
         if self.cluster_matching:
             self._match(Y, Y_label)
             diff = Y - self._medoids  # (N, n_objective)
