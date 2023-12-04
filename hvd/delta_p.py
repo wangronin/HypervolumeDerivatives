@@ -279,7 +279,7 @@ class InvertedGenerationalDistance:
         Y: np.ndarray = None,
         Y_label: np.ndarray = None,
         compute_hessian: bool = True,
-        jacobian: np.ndarray = None,
+        Jacobian: np.ndarray = None,
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """compute the derivatives of the inverted generational distance^p
 
@@ -302,10 +302,10 @@ class InvertedGenerationalDistance:
         if Y is None:
             Y = np.array([self.func(x) for x in X])
         # Jacobian of the objective function
-        if jacobian is None:
+        if Jacobian is None:
             J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
         else:
-            J = jacobian
+            J = Jacobian
         if self.cluster_matching:
             self._match(Y, Y_label)
             diff = Y - self._medoids  # (N, n_objective)

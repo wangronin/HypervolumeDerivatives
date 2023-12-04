@@ -55,7 +55,7 @@ opt = DpN(
     verbose=True,
     pareto_front=pareto_front,
 )
-opt.run()
+X, Y, _ = opt.run()
 
 fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
 plt.subplots_adjust(right=0.93, left=0.05)
@@ -71,8 +71,6 @@ lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
 for handle in lgnd.legend_handles:
     handle.set_markersize(10)
 
-X = opt._get_primal_dual(opt.X)[0]
-Y = opt.Y
 if 1 < 2:
     trajectory = np.array([y0] + opt.hist_Y)
     for i in range(N):
