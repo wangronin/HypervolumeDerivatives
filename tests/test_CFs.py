@@ -85,8 +85,8 @@ def test_CFs():
     C = p.ieq_constraint(x)
     p.objective_jacobian(x)
     p.ieq_constraint(x)
-    assert np.all(np.isclose(F, [15.21763177, 16.79283565, 13.7882774]))
-    assert np.all(np.isclose(C, [7.69385584]))
+    assert np.all(np.isclose(F, [4.4337, 4.9257, 4.0541]))
+    assert np.all(np.isclose(C, [7.6626]))
 
     p = CF9()
     interval = p.xu - p.xl

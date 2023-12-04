@@ -625,7 +625,7 @@ class DpN:
         self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
         self._initialize(x0)
         self._set_indicator(ref, func, jac, hessian)
-        self._initialize_logging(verbose)
+        self._set_logging(verbose)
         # parameters controlling stop criteria
         self.xtol = xtol
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
@@ -684,7 +684,7 @@ class DpN:
         self._gd = GenerationalDistance(ref, func, jac, hessian)
         self._igd = InvertedGenerationalDistance(ref, func, jac, hessian, cluster_matching=True)
 
-    def _initialize_logging(self, verbose):
+    def _set_logging(self, verbose):
         """parameters for logging the history"""
         self.verbose: bool = verbose
         self.GD_value: float = None
@@ -742,18 +742,16 @@ class DpN:
         self._compute_indicator_value(self.state.Y)
         # shift the reference set if needed
         self._shift_reference_set()
-        # evaluate the objective Jacobian, which will be re-used
         self.step, self.R = self._compute_netwon_step()
         # backtracking line search for the step size
-        self.step_size = self._line_search(self.step, self.R)
+        self.step_size = self._backtracking_line_search(self.step, self.R)
         # Newton iteration and evaluation
-        self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
+        self.state.update(self.state.X + self.step_size * self.step)
 
     def log(self):
         self.iter_count += 1
         self.hist_Y += [self.state.Y.copy()]
         self.hist_X += [self.state.primal.copy()]
-        # compute Hausdorff distance w.r.t. the Pareto front
         gd_value = self._perf_gd.compute(Y=self.state.Y)
         igd_value = self._perf_igd.compute(Y=self.state.Y)
         self.hist_GD += [gd_value]
@@ -769,7 +767,7 @@ class DpN:
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"GD/IGD: {self.GD_value, self.IGD_value}")
-            self.logger.info(f"step size: {self.step_size}")
+            self.logger.info(f"step size: {self.step_size.ravel()}")
             if self._constrained:
                 self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
 
@@ -828,7 +826,7 @@ class DpN:
         for r in range(self.N):
             c, dh = idx[r], dH[r]
             # TODO: check if preconditioning is needed automatically
-            # Hessian = precondition_hessian(Hessian)
+            # Hessian[r] = precondition_hessian(Hessian[r])
             Z = np.zeros((len(dh), len(dh)))
             DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             with warnings.catch_warnings():
@@ -883,36 +881,44 @@ class DpN:
                 self.history_medoids[k].append(self.active_indicator._medoids[indices][i])
         self.logger.info(f"{len(indices)} target points are shifted")
 
-    def _line_search(self, step: np.ndarray, R: np.ndarray) -> float:
+    def _backtracking_line_search(self, step: np.ndarray, R: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
-        c = 1e-5
+        c1 = 1e-4
         if np.all(np.isclose(step, 0)):
-            return np.ones(self.N)
+            return np.ones((self.N, 1))
 
-        self.active_indicator.re_match = False
-        step_size = np.ones(self.N)
+        def phi_func(alpha, i):
+            state = deepcopy(self.state)
+            x = state.X[i]
+            x += alpha * step[i]
+            state.update_one(x, i)
+            self.active_indicator.re_match = False
+            R_ = self._compute_R(state)[0][i]
+            self.active_indicator.re_match = True
+            return np.linalg.norm(R_)
+
+        step_size = np.ones((self.N, 1))
         for i in range(self.N):
-            for _ in range(6):
-                state = deepcopy(self.state)
-                x = state.X[i]
-                x += step_size[i] * step[i]
-                state.update_one(x, i)
-                R_ = self._compute_R(state)[0][i]
+            phi = [np.linalg.norm(R[i])]
+            s = [0, 1]
+            for _ in range(10):
+                phi.append(phi_func(s[-1], i))
                 # Armijo–Goldstein condition
-                cond = np.linalg.norm(R_) <= (1 - c * step_size[i]) * np.linalg.norm(R[i])
-                if cond:
+                # when R norm is close to machine precision, it makes no sense to perform the line search
+                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+                if success:
                     break
                 else:
-                    # TODO: correct this part
-                    # if 11 < 2:
-                    #     phi0 = v if self.h is None else np.sum(R**2) / 2
-                    #     phi1 = v_ if self.h is None else np.sum(R_**2) / 2
-                    #     phi0prime = inc if self.h is None else -np.sum(R**2)
-                    #     alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
-                    # if 1 < 2:
-                    # alpha *= 0.5
-                    step_size[i] *= 0.5
+                    if 1 < 2:
+                        # cubic interpolation to compute the next step length
+                        d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
+                        d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
+                        s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
+                        s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
+                        s.append(s_)
+                    else:
+                        s.append(s[-1] * 0.5)
             else:
-                pass
-        self.active_indicator.re_match = True
+                self.logger.info("backtracking linear search failed")
+            step_size[i] = s[-1]
         return step_size

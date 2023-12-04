@@ -35,7 +35,7 @@ problem_name = sys.argv[1]
 print(problem_name)
 f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
-pareto_front = problem.get_pareto_front(1000)
+pareto_front = problem.get_pareto_front(500)
 
 data = loadmat(f"./data/ZDT/{problem_name}_NSGA-II.mat")
 columns = (
@@ -148,8 +148,7 @@ def execute(run: int):
         verbose=True,
         pareto_front=pareto_front,
     )
-    opt.run()
-    Y = opt.Y
+    X, Y, _ = opt.run()
     fig_name = f"./figure/{problem_name}-run{run}.pdf"
     plot(y0, Y, ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_func = GenerationalDistance(pareto_front)
@@ -157,7 +156,7 @@ def execute(run: int):
     return np.array([igd_func.compute(Y=Y), gd_func.compute(Y=Y), hypervolume(Y, ref_point)])
 
 
-execute(run=29)
+execute(run=2)
 
 breakpoint()
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))

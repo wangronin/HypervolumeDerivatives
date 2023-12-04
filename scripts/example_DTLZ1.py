@@ -66,14 +66,12 @@ opt = DpN(
     xu=problem.xu,
     max_iters=max_iters,
     type="igd",
-    verbose=True,
+    verbose=False,
     pareto_front=pareto_front,
     Y_label=Y_label,
 )
-opt.run()
+X, Y, _ = opt.run()
 medoids0 = np.vstack([m[0] for m in opt.history_medoids])
-X = opt._get_primal_dual(opt.X)[0]
-Y = opt.Y
 
 fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
 plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
@@ -168,7 +166,6 @@ ax2.set_xticks(range(1, max_iters + 1))
 ax2.legend()
 plt.tight_layout()
 plt.savefig(f"{f.__class__.__name__}.pdf", dpi=1000)
-plt.show()
 
 data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
 df = pd.DataFrame(data, columns=["iteration", "f1", "f2", "f3"])

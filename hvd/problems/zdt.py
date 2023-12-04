@@ -1,8 +1,9 @@
-import autograd.numpy as np
+import jax.numpy as jnp
+import numpy as np
 from pymoo.core.problem import Problem
 from pymoo.util.normalization import normalize
 
-# NOTE: `np.abs` is taken on `f1 / g` for ZDT1, 3, and 4 to avoid numerical issues
+# NOTE: `jnp.abs` is taken on `f1 / g` for ZDT1, 3, and 4 to avoid numerical issues
 # when the decision var. are out of bound
 
 
@@ -19,16 +20,19 @@ class ZDT(Problem):
 
 
 class ZDT1(ZDT):
+    def __init__(self, n_var=30, **kwargs):
+        super().__init__(n_var, **kwargs)
+
     def _calc_pareto_front(self, n_pareto_points=100):
         x = np.linspace(0, 1, n_pareto_points)
         return np.array([x, 1 - np.sqrt(x)]).T
 
     def _evaluate(self, x):
-        x = np.array([x])
+        x = jnp.array([x])
         f1 = x[:, 0]
-        g = 1 + 9.0 / (self.n_var - 1) * np.sum(x[:, 1:], axis=1)
-        f2 = g * (1 - np.power((np.abs(f1 / g)), 0.5))
-        return np.column_stack([f1, f2])[0]
+        g = 1 + 9.0 / (self.n_var - 1) * jnp.sum(x[:, 1:], axis=1)
+        f2 = g * (1 - jnp.power((jnp.abs(f1 / g)), 0.5))
+        return jnp.column_stack([f1, f2])[0]
 
 
 class ZDT2(ZDT):
@@ -37,12 +41,12 @@ class ZDT2(ZDT):
         return np.array([x, 1 - np.power(x, 2)]).T
 
     def _evaluate(self, x):
-        x = np.array([x])
+        x = jnp.array([x])
         f1 = x[:, 0]
-        c = np.sum(x[:, 1:], axis=1)
+        c = jnp.sum(x[:, 1:], axis=1)
         g = 1.0 + 9.0 * c / (self.n_var - 1)
-        f2 = g * (1 - np.power((f1 * 1.0 / g), 2))
-        return np.column_stack([f1, f2])[0]
+        f2 = g * (1 - jnp.power((f1 * 1.0 / g), 2))
+        return jnp.column_stack([f1, f2])[0]
 
 
 class ZDT3(ZDT):
@@ -87,20 +91,20 @@ class ZDT3(ZDT):
         return pf
 
     def _evaluate(self, x):
-        x = np.array([x])
+        x = jnp.array([x])
         f1 = x[:, 0]
-        c = np.sum(x[:, 1:], axis=1)
+        c = jnp.sum(x[:, 1:], axis=1)
         g = 1.0 + 9.0 * c / (self.n_var - 1)
-        f2 = g * (1 - np.power(np.abs(f1 * 1.0 / g), 0.5) - (f1 * 1.0 / g) * np.sin(10 * np.pi * f1))
-        return np.column_stack([f1, f2])[0]
+        f2 = g * (1 - jnp.power(jnp.abs(f1 * 1.0 / g), 0.5) - (f1 * 1.0 / g) * jnp.sin(10 * jnp.pi * f1))
+        return jnp.column_stack([f1, f2])[0]
 
 
 class ZDT4(ZDT):
     def __init__(self, n_var=10):
         super().__init__(n_var)
-        self.xl = -5 * np.ones(self.n_var)
+        self.xl = -5 * jnp.ones(self.n_var)
         self.xl[0] = 0.0
-        self.xu = 5 * np.ones(self.n_var)
+        self.xu = 5 * jnp.ones(self.n_var)
         self.xu[0] = 1.0
         self.func = self._evaluate
 
@@ -109,15 +113,15 @@ class ZDT4(ZDT):
         return np.array([x, 1 - np.sqrt(x)]).T
 
     def _evaluate(self, x):
-        x = np.array([x])
+        x = jnp.array([x])
         f1 = x[:, 0]
         g = 1.0
         g += 10 * (self.n_var - 1)
         for i in range(1, self.n_var):
-            g += x[:, i] * x[:, i] - 10.0 * np.cos(4.0 * np.pi * x[:, i])
-        h = 1.0 - np.sqrt(np.abs(f1 / g))
+            g += x[:, i] * x[:, i] - 10.0 * jnp.cos(4.0 * jnp.pi * x[:, i])
+        h = 1.0 - jnp.sqrt(jnp.abs(f1 / g))
         f2 = g * h
-        return np.column_stack([f1, f2])[0]
+        return jnp.column_stack([f1, f2])[0]
 
 
 class ZDT5(ZDT):
@@ -135,14 +139,14 @@ class ZDT5(ZDT):
         return pf
 
     def _evaluate(self, x, out, *args, **kwargs):
-        x = np.array([x])
+        x = jnp.array([x])
         x = x.astype(float)
 
         _x = [x[:, :30]]
         for i in range(self.m - 1):
             _x.append(x[:, 30 + i * self.n : 30 + (i + 1) * self.n])
 
-        u = np.column_stack([x_i.sum(axis=1) for x_i in _x])
+        u = jnp.column_stack([x_i.sum(axis=1) for x_i in _x])
         v = (2 + u) * (u < self.n) + 1 * (u == self.n)
         g = v[:, 1:].sum(axis=1)
 
@@ -153,7 +157,7 @@ class ZDT5(ZDT):
             f1 = normalize(f1, 1, 31)
             f2 = normalize(f2, (self.m - 1) * 1 / 31, (self.m - 1))
 
-        return np.column_stack([f1, f2])[0]
+        return jnp.column_stack([f1, f2])[0]
 
 
 class ZDT6(ZDT):
@@ -165,8 +169,8 @@ class ZDT6(ZDT):
         return np.array([x, 1 - np.power(x, 2)]).T
 
     def _evaluate(self, x):
-        x = np.array([x])
-        f1 = 1 - np.exp(-4 * x[:, 0]) * np.power(np.sin(6 * np.pi * x[:, 0]), 6)
-        g = 1 + 9.0 * np.power(max(0, np.sum(x[:, 1:], axis=1) / (self.n_var - 1.0)), 0.25)
-        f2 = g * (1 - np.power(f1 / g, 2))
-        return np.column_stack([f1, f2])[0]
+        x = jnp.array([x])
+        f1 = 1 - jnp.exp(-4 * x[:, 0]) * jnp.power(jnp.sin(6 * jnp.pi * x[:, 0]), 6)
+        g = 1 + 9.0 * jnp.power(max(0, jnp.sum(x[:, 1:], axis=1) / (self.n_var - 1.0)), 0.25)
+        f2 = g * (1 - jnp.power(f1 / g, 2))
+        return jnp.column_stack([f1, f2])[0]
