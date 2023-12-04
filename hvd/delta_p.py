@@ -2,7 +2,7 @@ from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
-from scipy.spatial.distance import cdist, directed_hausdorff, pdist
+from scipy.spatial.distance import cdist, directed_hausdorff
 from sklearn_extra.cluster import KMedoids
 
 __authors__ = ["Hao Wang"]

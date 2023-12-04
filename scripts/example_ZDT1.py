@@ -52,7 +52,7 @@ opt = DpN(
     xu=problem.xu,
     max_iters=max_iters,
     type="igd",
-    verbose=True,
+    verbose=False,
     pareto_front=pareto_front,
 )
 X, Y, _ = opt.run()
