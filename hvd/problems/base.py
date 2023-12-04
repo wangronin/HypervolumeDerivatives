@@ -91,7 +91,7 @@ class PymooProblemWithAD:
         self.n_ieq_constr = self._problem.n_ieq_constr + 2 * self.n_var
         self.xl = self._problem.xl
         self.xu = self._problem.xu
-        obj_func = partial(problem.__class__._evaluate, self)
+        obj_func = partial(problem.__class__._evaluate, problem)
         ieq_func = partial(PymooProblemWithAD.ieq_constraint, self)
         self._objective_jacobian = jit(jacrev(obj_func))
         self._objective_hessian = jit(hessian(obj_func))

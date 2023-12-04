@@ -1,8 +1,9 @@
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
+from fastdist import fastdist
 from scipy.optimize import linear_sum_assignment
-from scipy.spatial.distance import cdist, directed_hausdorff
+from scipy.spatial.distance import directed_hausdorff
 from sklearn_extra.cluster import KMedoids
 
 __authors__ = ["Hao Wang"]
@@ -34,7 +35,8 @@ class GenerationalDistance:
 
     def _compute_indices(self, Y: np.ndarray):
         # find for each approximation point, the index of its closest point in the reference set
-        self.D = cdist(Y, self.ref, metric="minkowski", p=self.p)
+        # self.D = cdist(Y, self.ref, metric="minkowski", p=self.p)
+        self.D = fastdist.matrix_to_matrix_distance(Y, self.ref, fastdist.euclidean, "euclidean")
         self.indices = np.argmin(self.D, axis=1)
 
     def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
@@ -170,7 +172,8 @@ class ReferenceSet:
         return X[km.medoid_indices_]
 
     def _match(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
-        cost = cdist(Y, X, metric="minkowski", p=self.p)
+        # cost = cdist(Y, X, metric="minkowski", p=self.p)
+        cost = fastdist.matrix_to_matrix_distance(Y, X, fastdist.euclidean, "euclidean")
         idx = linear_sum_assignment(cost)[1]  # min-weight assignment in a bipartite graph
         return X[idx]
 
@@ -215,7 +218,10 @@ class InvertedGenerationalDistance:
             Y (np.ndarray): the objective points of shape (N, n_objective).
         """
         N = len(Y)
-        self.D = cdist(Y, self.ref.reference_set, metric="minkowski", p=self.p)
+        self.D = fastdist.matrix_to_matrix_distance(
+            Y, self.ref.reference_set, fastdist.euclidean, "euclidean"
+        )
+        # self.D = cdist(Y, self.ref.reference_set, metric="minkowski", p=self.p)
         # for each reference point, the index of its closest point in the approximation set `Y`
         self._indices = np.argmin(self.D, axis=0)
         # for each point `p`` in `Y`, the indices of points in the reference set
