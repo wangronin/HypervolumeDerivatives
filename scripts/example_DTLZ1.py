@@ -25,7 +25,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 6
+max_iters = 10
 run = 1
 alg = "NSGA-II"
 path = "./DTLZ/DTLZ1/"
