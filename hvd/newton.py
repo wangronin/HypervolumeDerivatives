@@ -1,5 +1,6 @@
 import logging
 import warnings
+from copy import deepcopy
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
@@ -473,12 +474,82 @@ class HVN:
         return bool(self.stop_dict)
 
 
-class DecisionSet:
-    def __init__(self) -> None:
-        pass
+class State:
+    def __init__(
+        self,
+        dim_p: int,
+        n_eq: int,
+        n_ieq: int,
+        func: callable,
+        jac: callable,
+        h: callable = None,
+        h_jac: callable = None,
+        g: callable = None,
+        g_jac: callable = None,
+    ) -> None:
+        self.dim_p = dim_p
+        self.n_eq = n_eq
+        self.n_ieq = n_ieq
+        self.func = func
+        self.jac = jac
+        self.h = h
+        self.h_jac = h_jac
+        self.g = g
+        self.g_jac = g_jac
 
-    def evaluate(self):
-        pass
+    def update(self, X: np.ndarray, compute_gradient: bool = True):
+        self.X = X
+        primal_vars = self.primal
+        eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=compute_gradient)
+        ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=compute_gradient)
+        cstr_value, active_indices, dH = merge_lists(eq, ieq)
+        self.Y = np.array([self.func(x) for x in primal_vars])
+        self.J = np.array([self.jac(x) for x in primal_vars]) if compute_gradient else None
+        self.cstr_value = cstr_value
+        self.active_indices = active_indices
+        self.dH = dH
+
+    def update_one(self, x: np.ndarray, k: int):
+        self.X[k] = x
+        x = np.atleast_2d(x)
+        primal_vars = x[:, : self.dim_p]
+        eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=True)
+        ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=True)
+        cstr_value, active_indices, dH = merge_lists(eq, ieq)
+        self.Y[k] = self.func(primal_vars[0])
+        self.J[k] = self.jac(primal_vars[0])
+        self.cstr_value[k] = cstr_value
+        self.active_indices[k] = active_indices
+        self.dH[k] = dH
+
+    @property
+    def primal(self):
+        return self.X[:, : self.dim_p]
+
+    @property
+    def dual(self):
+        return self.X[:, self.dim_p :]
+
+    @property
+    def H(self):
+        return self.cstr_value[:, : self.n_eq]
+
+    @property
+    def G(self):
+        return self.cstr_value[:, self.n_eq :]
+
+    def _evaluate_constraints(self, primal_vars: np.ndarray, type: str = "eq", compute_gradient: bool = True):
+        N = len(primal_vars)
+        func = self.h if type == "eq" else self.g
+        jac = self.h_jac if type == "eq" else self.g_jac
+        if func is None:
+            return None
+        value = np.array([func(x) for x in primal_vars]).reshape(N, -1)
+        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-10 for v in value]
+        active_indices = np.array(active_indices)
+        if compute_gradient:
+            H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
+        return (value, active_indices, H) if compute_gradient else (value, active_indices)
 
 
 class DpN:
@@ -526,7 +597,7 @@ class DpN:
                 When it is not a `float`, it must have shape (dim, ).
             upper_bounds (Union[List[float], np.ndarray], optional): The upper bound of search variables.
                 When it is not a `float`, it must have must have shape (dim, ).
-            mu (int, optional): the approximation set size. Defaults to 5.
+            N (int, optional): the approximation set size. Defaults to 5.
             h (Callable, optional): the equality constraint function, should return a vector of shape
                 (n_equality, ). Defaults to None.
             h_jac (callable, optional): the Jacobian of equality constraint function,
@@ -550,25 +621,15 @@ class DpN:
         self.N = N
         self.xl = xl
         self.xu = xu
+        self._check_constraints(h, g)
+        self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
+        self._initialize(x0)
+        self._set_indicator(ref, func, jac, hessian)
+        self._initialize_logging(verbose)
         # parameters controlling stop criteria
         self.xtol = xtol
-        self.stop_dict: Dict = {}
-        # the objective function, gradient, and the Hessian
-        self.func: Callable = func
-        self.jac: Callable = jac
-        self.hessian: Callable = hessian
-        self.h: Callable = h
-        self.h_jac: Callable = h_jac
-        self.g: Callable = g
-        self.g_jac: Callable = g_jac
-        self._check_constraints()
-        self._set_indicator(ref)
-        self._initialize_approximation_set(x0)
-        # auxiliary variables
-        self.iter_count: int = 0
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
-        self.verbose: bool = verbose
-        self._initialize_logging()
+        self.stop_dict: Dict = {}
         # TODO: implement those as callbacks
         self._pareto_front = pareto_front
         self._perf_gd = GenerationalDistance(ref=pareto_front)
@@ -584,24 +645,48 @@ class DpN:
             self.n_cluster = len(np.unique(self.Y_label))
             self.Y_idx = [np.nonzero(self.Y_label == i)[0] for i in range(self.n_cluster)]
 
-    def _check_constraints(self):
+    def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables
         self.n_eq, self.n_ieq = 0, 0
-        self._constrained = self.h is not None or self.g is not None
+        self._constrained = h is not None or g is not None
         x = np.random.rand(self.dim_p) * (self.xu - self.xl) + self.xl
-        if self.h is not None:
-            v = self.h(x)
+        if h is not None:
+            v = h(x)
             self.n_eq = 1 if isinstance(v, (int, float)) else len(v)
-        if self.g is not None:
-            v = self.g(x)
+        if g is not None:
+            v = g(x)
             self.n_ieq = 1 if isinstance(v, (int, float)) else len(v)
-
         self.dim_d = self.n_eq + self.n_ieq
         self.dim = self.dim_p + self.dim_d
-        self._get_primal_dual = lambda X: (X[:, : self.dim_p], X[:, self.dim_p :])
 
-    def _initialize_logging(self):
+    def _initialize(self, X0: np.ndarray):
+        if X0 is not None:
+            X0 = np.asarray(X0)
+            # assert np.all(X0 - self.lower_bounds >= 0)
+            # assert np.all(X0 - self.upper_bounds <= 0)
+            X0 = np.clip(X0, self.xl, self.xu)
+            # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
+            X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
+            X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
+            self.N = len(X0)
+        else:
+            # sample `x` u.a.r. in `[lb, ub]`
+            assert self.N is not None
+            assert all(~np.isinf(self.xl)) & all(~np.isinf(self.xu))
+            X0 = np.random.rand(self.N, self.dim_p) * (self.xu - self.xl) + self.xl  # (mu, dim_primal)
+        # initialize the state variables
+        self.state.update(np.c_[X0, np.zeros((self.N, self.dim_d)) / self.N])  # (mu, dim)
+        self.iter_count: int = 0
+
+    def _set_indicator(
+        self, ref: Union[np.ndarray, Dict[int, np.ndarray]], func: Callable, jac: Callable, hessian: Callable
+    ):
+        self._gd = GenerationalDistance(ref, func, jac, hessian)
+        self._igd = InvertedGenerationalDistance(ref, func, jac, hessian, cluster_matching=True)
+
+    def _initialize_logging(self, verbose):
         """parameters for logging the history"""
+        self.verbose: bool = verbose
         self.GD_value: float = None
         self.IGD_value: float = None
         self.hist_Y: List[np.ndarray] = []
@@ -618,32 +703,6 @@ class DpN:
             logger_id=f"{self.__class__.__name__}",
             console=self.verbose,
         )
-
-    def _set_indicator(self, ref: Union[np.ndarray, Dict[int, np.ndarray]]):
-        self._gd = GenerationalDistance(ref=ref, func=self.func, jac=self.jac, hess=self.hessian)
-        self._igd = InvertedGenerationalDistance(
-            ref=ref, func=self.func, jac=self.jac, hess=self.hessian, cluster_matching=True
-        )
-
-    def _initialize_approximation_set(self, X0: np.ndarray):
-        if X0 is not None:
-            X0 = np.asarray(X0)
-            # assert np.all(X0 - self.lower_bounds >= 0)
-            # assert np.all(X0 - self.upper_bounds <= 0)
-            X0 = np.clip(X0, self.xl, self.xu)
-            # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
-            X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
-            X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
-            self.N = len(X0)
-        else:
-            # sample `x` u.a.r. in `[lb, ub]`
-            assert self.N is not None
-            assert all(~np.isinf(self.xl)) & all(~np.isinf(self.xu))
-            X0 = np.random.rand(self.N, self.dim_p) * (self.xu - self.xl) + self.xl  # (mu, dim_primal)
-
-        self._X0 = X0
-        self.Y = np.array([self.func(x) for x in self._X0])  # (mu, n_objective)
-        self.X = np.c_[self._X0, np.zeros((self.N, self.dim_d)) / self.N]  # (mu, dim)
 
     @property
     def xl(self):
@@ -676,37 +735,27 @@ class DpN:
         while not self.terminate():
             self.newton_iteration()
             self.log()
-        return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
+        return self.state.primal, self.state.Y, self.stop_dict
 
     def newton_iteration(self):
         # compute the initial indicator values. The first clustering and matching is executed here.
-        self._compute_indicator_value(self.Y)
+        self._compute_indicator_value(self.state.Y)
         # shift the reference set if needed
         self._shift_reference_set()
         # evaluate the objective Jacobian, which will be re-used
-        self.J = np.array([self.jac(x) for x in self._get_primal_dual(self.X)[0]])
         self.step, self.R = self._compute_netwon_step()
         # backtracking line search for the step size
-        self.step_size = self._line_search(self.X, self.step, self.R)
-        # Newton iteration
-        self.X += self.step_size.reshape(-1, 1) * self.step
-        # evaluation
-        primal_vars = self._get_primal_dual(self.X)[0]
-        self.Y = np.array([self.func(x) for x in primal_vars])
-        if self.h is not None:
-            self.H = self._evaluate_constraints(primal_vars, type="eq")[0]
-        if self.g is not None:
-            self.G = self._evaluate_constraints(primal_vars, type="ieq")[0]
+        self.step_size = self._line_search(self.step, self.R)
+        # Newton iteration and evaluation
+        self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
 
     def log(self):
         self.iter_count += 1
-        self.hist_Y += [self.Y.copy()]
-        self.hist_X += [self._get_primal_dual(self.X.copy())[0]]
+        self.hist_Y += [self.state.Y.copy()]
+        self.hist_X += [self.state.primal.copy()]
         # compute Hausdorff distance w.r.t. the Pareto front
-        gd_value = self._perf_gd.compute(Y=self.Y)
-        igd_value = self._perf_igd.compute(Y=self.Y)
-        # self.hist_GD += [self.GD_value]
-        # self.hist_IGD += [self.IGD_value]
+        gd_value = self._perf_gd.compute(Y=self.state.Y)
+        igd_value = self._perf_igd.compute(Y=self.state.Y)
         self.hist_GD += [gd_value]
         self.hist_IGD += [igd_value]
         self.hist_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
@@ -738,75 +787,50 @@ class DpN:
         self.GD_value = self._gd.compute(Y=Y)
         self.IGD_value = self._igd.compute(Y=Y, Y_label=self.Y_label)
 
-    def _evaluate_constraints(self, primal_vars: np.ndarray, type: str = "eq", compute_gradient: bool = True):
-        N = len(primal_vars)
-        func = self.h if type == "eq" else self.g
-        jac = self.h_jac if type == "eq" else self.g_jac
-        if func is None:
-            return None
-        value = np.array([func(x) for x in primal_vars]).reshape(self.N, -1)
-        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-10 for v in value]
-        active_indices = np.array(active_indices)
-        if compute_gradient:
-            H = [jac(x).reshape(-1, self.dim_p) for x in primal_vars]
-        return (value, active_indices, H) if compute_gradient else (value, active_indices)
-
     def _compute_R(
-        self, X: np.ndarray, Y: np.ndarray = None, grad: np.ndarray = None, jacobian=None
+        self, state: State, grad: np.ndarray = None
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
         """compute the root-finding problem R
-
-        Args:
-            X (np.ndarray): the primal-dual points of shape (N, dim).
-            Y (np.ndarray, optional): the corresponding objective points of shape (N, n_objective).
-              Defaults to None.
-            grad (np.ndarray, optional): the gradient of the incumbent indicator at `X` of shape (N, dim).
-              Defaults to None.
-
         Returns:
             Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
                 (R, H, idx) -> the rooting-finding problem,
                 the Jacobian of the equality constraints, and
                 the indices that are active among primal-dual variables
         """
-        primal_vars, dual_vars = self._get_primal_dual(X)
+        primal_vars, dual_vars = state.primal, state.dual
         if grad is None:
-            grad = self.active_indicator.compute_derivatives(primal_vars, Y, self.Y_label, False, jacobian)
-
+            grad = self.active_indicator.compute_derivatives(
+                primal_vars, state.Y, self.Y_label, compute_hessian=False, Jacobian=state.J
+            )
         R = grad  # the unconstrained case
         idx = None
         if self._constrained:
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
-            eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=True)
-            ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=True)
-            value, idx, H = merge_lists(eq, ieq)
-            # the Jacobian of the active constraints
-            H = [H[i][idx, :] for i, idx in enumerate(idx)]
-            # the root-finding problem
-            R = [np.r_[func(grad[i], dual_vars[i, k], H[i]), value[i, k]] for i, k in enumerate(idx)]
-        return R, H, idx
+            v, idx, dH = state.cstr_value, state.active_indices, state.dH
+            dH = [dH[i][idx, :] for i, idx in enumerate(idx)]
+            R = [np.r_[func(grad[i], dual_vars[i, k], dH[i]), v[i, k]] for i, k in enumerate(idx)]
+        return R, dH, idx
 
     def _compute_netwon_step(self) -> Tuple[np.ndarray, np.ndarray]:
-        primal_vars = self._get_primal_dual(self.X)[0]  # primal variables
+        primal_vars = self.state.primal
         newton_step = np.zeros((self.N, self.dim))  # Netwon steps
         R = np.zeros((self.N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
         grad, Hessian = self.active_indicator.compute_derivatives(
-            primal_vars, self.Y, self.Y_label, jacobian=self.J
+            primal_vars, self.state.Y, self.Y_label, Jacobian=self.state.J
         )
         # the root-finding problem and the gradient of the active constraints
-        R_list, H, active_indices = self._compute_R(self.X, self.Y, grad=grad)
+        R_list, dH, active_indices = self._compute_R(self.state, grad=grad)
         idx = np.array([[True] * self.dim_p] * self.N)
         if active_indices is not None:
             idx = np.c_[idx, active_indices]
-
         # compute the Newton step for each approximation point - lower computation costs
         for r in range(self.N):
-            c, h = idx[r], H[r]
+            c, dh = idx[r], dH[r]
             # TODO: check if preconditioning is needed automatically
             # Hessian = precondition_hessian(Hessian)
-            Z = np.zeros((len(h), len(h)))
-            DR = np.r_[np.c_[Hessian[r], h.T], np.c_[h, Z]] if self._constrained else Hessian[r]
+            Z = np.zeros((len(dh), len(dh)))
+            DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             with warnings.catch_warnings():
                 warnings.filterwarnings("error")
                 try:
@@ -825,9 +849,9 @@ class DpN:
         1. always shift the first reference set (`self.iter_count == 0`); Otherwise, weird matching can happen
         2. if at least one approximation point is close to its matched target and the Newton step is not zero.
         """
-        distance = np.linalg.norm(self.Y - self.active_indicator._medoids, axis=1)
+        distance = np.linalg.norm(self.state.Y - self.active_indicator._medoids, axis=1)
         masks = (
-            np.array([True] * len(self.Y))
+            np.array([True] * self.N)
             if self.iter_count == 0
             else np.bitwise_and(
                 np.isclose(distance, 0),
@@ -841,7 +865,7 @@ class DpN:
         if self._eta is None:
             self._eta = dict()
             for i in range(self.n_cluster):
-                Y = self.Y[self.Y_idx[i]]
+                Y = self.state.Y[self.Y_idx[i]]
                 idx = non_domin_sort(Y, only_front_indices=True)[0]
                 self._eta[i] = compute_chim(Y[idx])
 
@@ -859,22 +883,21 @@ class DpN:
                 self.history_medoids[k].append(self.active_indicator._medoids[indices][i])
         self.logger.info(f"{len(indices)} target points are shifted")
 
-    def _line_search(self, X: np.ndarray, step: np.ndarray, R: np.ndarray) -> float:
+    def _line_search(self, step: np.ndarray, R: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
         c = 1e-5
-        N = len(X)
         if np.all(np.isclose(step, 0)):
-            return np.ones(N)
+            return np.ones(self.N)
 
         self.active_indicator.re_match = False
-        J = self.J.copy()
-        step_size = np.ones(N)
-        for i in range(N):
+        step_size = np.ones(self.N)
+        for i in range(self.N):
             for _ in range(6):
-                X_ = X.copy()
-                X_[i] += step_size[i] * step[i]
-                J[i] = self.jac(self._get_primal_dual(X_)[0][i])
-                R_ = self._compute_R(X_, jacobian=J)[0][i]
+                state = deepcopy(self.state)
+                x = state.X[i]
+                x += step_size[i] * step[i]
+                state.update_one(x, i)
+                R_ = self._compute_R(state)[0][i]
                 # Armijo–Goldstein condition
                 cond = np.linalg.norm(R_) <= (1 - c * step_size[i]) * np.linalg.norm(R[i])
                 if cond:
