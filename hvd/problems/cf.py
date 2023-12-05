@@ -11,13 +11,13 @@ class CF1(ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10) -> None:
         self.n_obj = 2
         self.n_var = n_var
-        self.xl = jnp.zeros(self.n_var)
-        self.xu = jnp.ones(self.n_var)
+        self.xl = np.zeros(self.n_var)
+        self.xu = np.ones(self.n_var)
         self.n_ieq_constr = 1
         super().__init__()
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         x = jnp.atleast_2d(x)
         x = jnp.clip(x, self.xl, self.xu)
         N = x.shape[0]
@@ -34,9 +34,9 @@ class CF1(ConstrainedMOOAnalytical):
         F2 = 1 - x[:, 0] + 2 * jnp.mean((x[:, J2] - term2) ** 2, 1)
         return jnp.hstack([F1, F2])
 
-    def ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
-        # TODO: this function is calling the objective. Figure out a more efficient impplementation
-        y = jnp.atleast_2d(self.objective(x))
+    def _ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
+        # TODO: this function is calling the _objective. Figure out a more efficient impplementation
+        y = jnp.atleast_2d(self._objective(x))
         return 1 - y[:, 0] - y[:, 1] + jnp.abs(jnp.sin(10 * jnp.pi * (y[:, 0] - y[:, 1] + 1)))
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
@@ -56,13 +56,13 @@ class CF2(ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10) -> None:
         self.n_obj = 2
         self.n_var = n_var
-        self.xl = jnp.r_[0, jnp.zeros(self.n_var - 1) - 1]
-        self.xu = jnp.ones(self.n_var)
+        self.xl = np.r_[0, np.zeros(self.n_var - 1) - 1]
+        self.xu = np.ones(self.n_var)
         self.n_ieq_constr = 1
         super().__init__()
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         x = jnp.atleast_2d(x)
         x = jnp.clip(x, self.xl, self.xu)
         N = x.shape[0]
@@ -83,9 +83,9 @@ class CF2(ConstrainedMOOAnalytical):
         )
 
     @timeit
-    def ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
-        # TODO: this function is calling the objective. Figure out a more efficient impplementation
-        y = jnp.atleast_2d(self.objective(x))
+    def _ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
+        # TODO: this function is calling the _objective. Figure out a more efficient impplementation
+        y = jnp.atleast_2d(self._objective(x))
         t = y[:, 1] + jnp.sqrt(y[:, 0]) - jnp.sin(2 * jnp.pi * (jnp.sqrt(y[:, 0]) - y[:, 1] + 1)) - 1
         return -t / (1 + jnp.exp(4 * jnp.abs(t)))
 
@@ -100,13 +100,13 @@ class CF3(ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10) -> None:
         self.n_obj = 2
         self.n_var = n_var
-        self.xl = jnp.r_[0, jnp.zeros(self.n_var - 1) - 2]
-        self.xu = jnp.r_[1, jnp.zeros(self.n_var - 1) + 2]
+        self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
+        self.xu = np.r_[1, np.zeros(self.n_var - 1) + 2]
         self.n_ieq_constr = 1
         super().__init__()
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         x = jnp.atleast_2d(x)
         x = jnp.clip(x, self.xl, self.xu)
         N = x.shape[0]
@@ -116,14 +116,14 @@ class CF3(ConstrainedMOOAnalytical):
         Y = x - jnp.sin(6 * pi * jnp.tile(x[:, 0], (1, D)) + jnp.tile(jnp.arange(1, D + 1), (N, 1)) * pi / D)
         term1 = jnp.prod(jnp.cos(20 * Y[:, J1] * pi / jnp.sqrt(jnp.tile(J1 + 1, (N, 1)))), 1)
         term2 = jnp.prod(jnp.cos(20 * Y[:, J2] * pi / jnp.sqrt(jnp.tile(J2 + 1, (N, 1)))), 1)
-        F1 = x[:, 0] + 2 / len(J1) * (4 * sum(Y[:, J1] ** 2, 1) - 2 * term1 + 2)
-        F2 = 1 - x[:, 0] ** 2 + 2 / len(J2) * (4 * sum(Y[:, J2] ** 2, 1) - 2 * term2 + 2)
+        F1 = x[:, 0] + 2 / len(J1) * (4 * jnp.sum(Y[:, J1] ** 2, 1) - 2 * term1 + 2)
+        F2 = 1 - x[:, 0] ** 2 + 2 / len(J2) * (4 * jnp.sum(Y[:, J2] ** 2, 1) - 2 * term2 + 2)
         return jnp.hstack([F1, F2])
 
     @timeit
-    def ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
-        # TODO: this function is calling the objective. Figure out a more efficient impplementation
-        y = jnp.atleast_2d(self.objective(x))
+    def _ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
+        # TODO: this function is calling the _objective. Figure out a more efficient impplementation
+        y = jnp.atleast_2d(self._objective(x))
         return 1 - y[:, 1] - y[:, 0] ** 2 + jnp.sin(2 * pi * (y[:, 0] ** 2 - y[:, 1] + 1))
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
@@ -137,13 +137,13 @@ class CF4(ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10) -> None:
         self.n_obj = 2
         self.n_var = n_var
-        self.xl = jnp.r_[0, jnp.zeros(self.n_var - 1) - 2]
-        self.xu = jnp.r_[1, jnp.zeros(self.n_var - 1) + 2]
+        self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
+        self.xu = np.r_[1, np.zeros(self.n_var - 1) + 2]
         self.n_ieq_constr = 1
         super().__init__()
 
     @timeit
-    def objective(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         X = jnp.clip(X, self.xl, self.xu)
         N = X.shape[0]
@@ -162,7 +162,7 @@ class CF4(ConstrainedMOOAnalytical):
         return jnp.hstack([F1, F2])
 
     @timeit
-    def ieq_constraint(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _ieq_constraint(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         D = self.n_var
         t = X[:, 1] - jnp.sin(6 * jnp.pi * X[:, 0] + 2 * jnp.pi / D) - 0.5 * X[:, 0] + 0.25
@@ -182,13 +182,13 @@ class CF5(ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10) -> None:
         self.n_obj = 2
         self.n_var = n_var
-        self.xl = jnp.r_[0, jnp.zeros(self.n_var - 1) - 2]
-        self.xu = jnp.r_[1, jnp.zeros(self.n_var - 1) + 2]
+        self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
+        self.xu = np.r_[1, np.zeros(self.n_var - 1) + 2]
         self.n_ieq_constr = 1
         super().__init__()
 
     @timeit
-    def objective(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         N = X.shape[0]
         D = self.n_var
@@ -213,7 +213,7 @@ class CF5(ConstrainedMOOAnalytical):
         return jnp.hstack([F1, F2])
 
     @timeit
-    def ieq_constraint(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _ieq_constraint(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         D = self.n_var
         return -X[:, 1] + 0.8 * X[:, 0] * jnp.sin(6 * pi * X[:, 0] + 2 * pi / D) + 0.5 * X[:, 0] - 0.25
@@ -232,13 +232,13 @@ class CF6(ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10) -> None:
         self.n_obj = 2
         self.n_var = n_var
-        self.xl = jnp.r_[0, jnp.zeros(self.n_var - 1) - 2]
-        self.xu = jnp.r_[1, jnp.zeros(self.n_var - 1) + 2]
+        self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
+        self.xu = np.r_[1, np.zeros(self.n_var - 1) + 2]
         self.n_ieq_constr = 2
         super().__init__()
 
     @timeit
-    def objective(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         D = self.n_var
         J1 = jnp.arange(3, self.n_var, 2) - 1
@@ -249,10 +249,10 @@ class CF6(ConstrainedMOOAnalytical):
         Y2 = X[:, J2] - 0.8 * jnp.tile(X[:, 0], (1, len(J2))) * jnp.sin(
             6 * pi * jnp.tile(X[:, 0], (1, len(J2))) + (J2 + 1) * pi / D
         )
-        return jnp.hstack([X[:, 0] + sum(Y1**2, 1), (1 - X[:, 0]) ** 2 + sum(Y2**2, 1)])
+        return jnp.hstack([X[:, 0] + jnp.sum(Y1**2, 1), (1 - X[:, 0]) ** 2 + jnp.sum(Y2**2, 1)])
 
     @timeit
-    def ieq_constraint(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _ieq_constraint(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         D = self.n_var
         G1 = (
@@ -283,13 +283,13 @@ class CF7(ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10) -> None:
         self.n_obj = 2
         self.n_var = n_var
-        self.xl = jnp.r_[0, jnp.zeros(self.n_var - 1) - 2]
-        self.xu = jnp.r_[1, jnp.zeros(self.n_var - 1) + 2]
+        self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
+        self.xu = np.r_[1, np.zeros(self.n_var - 1) + 2]
         self.n_ieq_constr = 2
         super().__init__()
 
     @timeit
-    def objective(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         D = self.n_var
         J1 = jnp.arange(3, self.n_var, 2) - 1
@@ -299,10 +299,10 @@ class CF7(ConstrainedMOOAnalytical):
         h1 = 2 * Y1**2 - jnp.cos(4 * pi * Y1) + 1
         h2 = 2 * Y2[:, 2:] ** 2 - jnp.cos(4 * pi * Y2[:, 2:]) + 1
         h3 = Y2[:, :2] ** 2
-        return jnp.hstack([X[:, 0] + sum(h1, 1), (1 - X[:, 0]) ** 2 + sum(h2, 1) + sum(h3, 1)])
+        return jnp.hstack([X[:, 0] + jnp.sum(h1, 1), (1 - X[:, 0]) ** 2 + jnp.sum(h2, 1) + jnp.sum(h3, 1)])
 
     @timeit
-    def ieq_constraint(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _ieq_constraint(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         D = self.n_var
         G1 = (
@@ -334,20 +334,20 @@ class CF8(UF8, ConstrainedMOOAnalytical):
         self.n_ieq_constr = 1
         self.n_obj = 3
         self.n_var = n_var
-        self.xl = jnp.r_[0, 0, jnp.zeros(self.n_var - 2) - 4]
-        self.xu = jnp.r_[1, 1, jnp.zeros(self.n_var - 2) + 4]
         super().__init__(n_var)
+        self.xl = np.r_[0, 0, np.zeros(self.n_var - 2) - 4]
+        self.xu = np.r_[1, 1, np.zeros(self.n_var - 2) + 4]
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         x = jnp.atleast_2d(x)
         jnp.clip(x, self.xl, self.xu)
-        return super().objective(x)
+        return super()._objective(x)
 
     @timeit
-    def ieq_constraint(self, x: jnp.ndarray) -> float:
+    def _ieq_constraint(self, x: jnp.ndarray) -> float:
         # TODO: avoid calling the constraint fucntion two times
-        F = self.objective(x).reshape(1, -1)
+        F = self._objective(x).reshape(1, -1)
         return (
             1
             - (F[:, 0] ** 2 + F[:, 1] ** 2) / (1 - F[:, 2] ** 2)
@@ -367,17 +367,17 @@ class CF8(UF8, ConstrainedMOOAnalytical):
 class CF9(CF8, ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10) -> None:
         self.n_var = n_var
-        self.xl = jnp.r_[0, 0, jnp.zeros(self.n_var - 2) - 2]
-        self.xu = jnp.r_[1, 1, jnp.zeros(self.n_var - 2) + 2]
         super().__init__(n_var)
+        self.xl = np.r_[0, 0, np.zeros(self.n_var - 2) - 2]
+        self.xu = np.r_[1, 1, np.zeros(self.n_var - 2) + 2]
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        return super().objective(x)
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+        return super()._objective(x)
 
     @timeit
-    def ieq_constraint(self, x: jnp.ndarray) -> float:
-        F = self.objective(x).reshape(1, -1)
+    def _ieq_constraint(self, x: jnp.ndarray) -> float:
+        F = self._objective(x).reshape(1, -1)
         return (
             1
             - (F[:, 0] ** 2 + F[:, 1] ** 2) / (1 - F[:, 2] ** 2)
@@ -398,12 +398,12 @@ class CF10(ConstrainedMOOAnalytical):
         self.n_var = n_var
         self.n_ieq_constr = 1
         self.n_obj = 3
-        self.xl = jnp.r_[0, 0, jnp.zeros(self.n_var - 2) - 2]
-        self.xu = jnp.r_[1, 1, jnp.zeros(self.n_var - 2) + 2]
+        self.xl = np.r_[0, 0, np.zeros(self.n_var - 2) - 2]
+        self.xu = np.r_[1, 1, np.zeros(self.n_var - 2) + 2]
         super().__init__()
 
     @timeit
-    def objective(self, X: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, X: jnp.ndarray) -> jnp.ndarray:
         X = jnp.atleast_2d(X)
         N = X.shape[0]
         D = self.n_var
@@ -423,8 +423,8 @@ class CF10(ConstrainedMOOAnalytical):
         return jnp.hstack([F1, F2, F3])
 
     @timeit
-    def ieq_constraint(self, x: jnp.ndarray) -> float:
-        F = self.objective(x).reshape(1, -1)
+    def _ieq_constraint(self, x: jnp.ndarray) -> float:
+        F = self._objective(x).reshape(1, -1)
         return (
             1
             - (F[:, 0] ** 2 + F[:, 1] ** 2) / (1 - F[:, 2] ** 2)

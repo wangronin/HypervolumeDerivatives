@@ -1,4 +1,8 @@
+import os
 from functools import partial
+
+# enable double-precision
+os.environ["JAX_ENABLE_X64"] = "True"
 
 import jax.numpy as jnp
 import numpy as np
@@ -36,18 +40,21 @@ def _cumprod(x):
 
 class MOOAnalytical:
     def __init__(self):
-        obj_func = partial(self.__class__.objective, self)
+        obj_func = partial(self.__class__._objective, self)
         self._objective_jacobian = jit(jacrev(obj_func))
         self._objective_hessian = jit(hessian(obj_func))
         self.CPU_time: int = 0  # in nanoseconds
 
-    @timeit
-    def objective_jacobian(self, x):
-        return self._objective_jacobian(x)
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._objective(x))
 
     @timeit
-    def objective_hessian(self, x):
-        return self._objective_hessian(x)
+    def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._objective_jacobian(x))
+
+    @timeit
+    def objective_hessian(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._objective_hessian(x))
 
 
 class ConstrainedMOOAnalytical(MOOAnalytical):
@@ -57,29 +64,35 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
     def __init__(self):
         super().__init__()
         if self.n_eq_constr > 0:
-            eq_func = partial(self.__class__.eq_constraint, self)
+            eq_func = partial(self.__class__._eq_constraint, self)
         if self.n_ieq_constr > 0:
-            ieq_func = partial(self.__class__.ieq_constraint, self)
-        self._eq_constraint_jacobian = jacrev(eq_func) if hasattr(self, "eq_constraint") else None
-        self._eq_constraint_hessian = hessian(eq_func) if hasattr(self, "eq_constraint") else None
-        self._ieq_constraint_jacobian = jacrev(ieq_func) if hasattr(self, "ieq_constraint") else None
-        self._ieq_constraint_hessian = hessian(ieq_func) if hasattr(self, "ieq_constraint") else None
+            ieq_func = partial(self.__class__._ieq_constraint, self)
+        self._eq_constraint_jacobian = jacrev(eq_func) if hasattr(self, "_eq_constraint") else None
+        self._eq_constraint_hessian = hessian(eq_func) if hasattr(self, "_eq_constraint") else None
+        self._ieq_constraint_jacobian = jacrev(ieq_func) if hasattr(self, "_ieq_constraint") else None
+        self._ieq_constraint_hessian = hessian(ieq_func) if hasattr(self, "_ieq_constraint") else None
+
+    def eq_constraint(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._eq_constraint(x))
+
+    def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._ieq_constraint(x))
 
     @timeit
-    def eq_constraint_jacobian(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._eq_constraint_jacobian(x)
+    def eq_constraint_jacobian(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._eq_constraint_jacobian(x))
 
     @timeit
-    def eq_constraint_hessian(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._eq_constraint_hessian(x)
+    def eq_constraint_hessian(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._eq_constraint_hessian(x))
 
     @timeit
-    def ieq_constraint_jacobian(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._ieq_constraint_jacobian(x)
+    def ieq_constraint_jacobian(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._ieq_constraint_jacobian(x))
 
     @timeit
-    def ieq_constraint_hessian(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._ieq_constraint_hessian(x)
+    def ieq_constraint_hessian(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._ieq_constraint_hessian(x))
 
 
 class PymooProblemWithAD:
@@ -128,15 +141,15 @@ class CONV3(MOOAnalytical):
     def __init__(self):
         self.n_obj = 3
         self.n_var = 3
-        self.xl = -3 * jnp.ones(self.n_var)
-        self.xu = 3 * jnp.ones(self.n_var)
-        self.a1 = -1 * jnp.ones(self.n_var)
-        self.a2 = jnp.ones(self.n_var)
-        self.a3 = jnp.r_[-1 * jnp.ones(self.n_var - 1), 1]
+        self.xl = -3 * np.ones(self.n_var)
+        self.xu = 3 * np.ones(self.n_var)
+        self.a1 = -1 * np.ones(self.n_var)
+        self.a2 = np.ones(self.n_var)
+        self.a3 = np.r_[-1 * np.ones(self.n_var - 1), 1]
         super().__init__()
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         func = lambda x, a: jnp.sum((x - a) ** 2)
         return jnp.array([func(x, self.a1), func(x, self.a2), func(x, self.a3)])
 
@@ -144,19 +157,19 @@ class CONV3(MOOAnalytical):
         w = jnp.random.rand(N, 3)
         w /= w.sum(axis=1).reshape(-1, 1)
         X = w @ np.vstack([self.a1, self.a2, self.a3])
-        return np.array([self.objective(x) for x in X])
+        return np.array([self._objective(x) for x in X])
 
 
 class CONV4(MOOAnalytical):
     def __init__(self):
         self.n_obj = 4
         self.n_var = 4
-        self.xl = -10 * jnp.ones(self.n_var)
-        self.xu = 10 * jnp.ones(self.n_var)
+        self.xl = -10 * np.ones(self.n_var)
+        self.xu = 10 * np.ones(self.n_var)
         super().__init__()
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         a = jnp.eye(self.n_var)
         deltaa = jnp.ones(self.n_var)
         fa4 = jnp.array([2, 2, 2, 0])
@@ -175,13 +188,13 @@ class UF7(MOOAnalytical):
     def __init__(self, n_var: int = 30) -> None:
         self.n_obj = 2
         self.n_var = n_var
-        self.xl = jnp.r_[0, jnp.zeros(self.n_var - 1) - 1]
-        self.xu = jnp.ones(self.n_var)
-        self.encoding = jnp.ones(self.n_var)
+        self.xl = np.r_[0, np.zeros(self.n_var - 1) - 1]
+        self.xu = np.ones(self.n_var)
+        self.encoding = np.ones(self.n_var)
         super().__init__()
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         x = jnp.atleast_2d(x)
         N = x.shape[0]
         D = self.n_var
@@ -206,13 +219,13 @@ class UF8(MOOAnalytical):
     def __init__(self, n_var: int = 30) -> None:
         self.n_obj = 3
         self.n_var = n_var
-        self.xl = jnp.r_[0, 0, jnp.zeros(self.n_var - 2) - 2]
-        self.xu = jnp.r_[1, 1, jnp.zeros(self.n_var - 2) + 2]
-        self.encoding = jnp.ones(self.n_var)
+        self.xl = np.r_[0, 0, np.zeros(self.n_var - 2) - 2]
+        self.xu = np.r_[1, 1, np.zeros(self.n_var - 2) + 2]
+        self.encoding = np.ones(self.n_var)
         super().__init__()
 
     @timeit
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         x = jnp.atleast_2d(x)
         N = x.shape[0]
         D = self.n_var

@@ -45,9 +45,9 @@ class ProblemWrapper(PymooElementwiseProblem):
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
         x = np.atleast_2d(x)
         out["F"] = np.array([self._problem.objective(_) for _ in x])  # objective value
-        if hasattr(self._problem, "eq_constraint"):
+        if self._problem.n_eq_constr > 0:
             out["H"] = self._problem.eq_constraint(x)  # equality constraint value
-        if hasattr(self._problem, "ieq_constraint"):
+        if self._problem.n_ieq_constr > 0:
             out["G"] = self._problem.ieq_constraint(x)  # inequality constraint value
 
 
@@ -166,7 +166,7 @@ problems = [
     # CF6(),
     # CF7(),
     CF8(),
-    CF9(),
+    # CF9(),
     CF10(),
     # ZDT1(),
     # ZDT2(),
@@ -186,7 +186,7 @@ idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
 problem = problems[idx]
 problem_name = problem.__class__.__name__
 problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
-termination = get_termination("n_gen", 2000)
+termination = get_termination("n_gen", 500)
 constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
 # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
