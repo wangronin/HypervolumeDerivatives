@@ -35,7 +35,6 @@ class GenerationalDistance:
 
     def _compute_indices(self, Y: np.ndarray):
         # find for each approximation point, the index of its closest point in the reference set
-        # self.D = cdist(Y, self.ref, metric="minkowski", p=self.p)
         self.D = fastdist.matrix_to_matrix_distance(Y, self.ref, fastdist.euclidean, "euclidean")
         self.indices = np.argmin(self.D, axis=1)
 
@@ -172,7 +171,6 @@ class ReferenceSet:
         return X[km.medoid_indices_]
 
     def _match(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
-        # cost = cdist(Y, X, metric="minkowski", p=self.p)
         cost = fastdist.matrix_to_matrix_distance(Y, X, fastdist.euclidean, "euclidean")
         idx = linear_sum_assignment(cost)[1]  # min-weight assignment in a bipartite graph
         return X[idx]
