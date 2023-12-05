@@ -919,6 +919,6 @@ class DpN:
                     else:
                         s.append(s[-1] * 0.5)
             else:
-                self.logger.info("backtracking linear search failed")
+                self.logger.info("backtracking line search failed")
             step_size[i] = s[-1]
         return step_size
