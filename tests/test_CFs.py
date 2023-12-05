@@ -107,6 +107,3 @@ def test_CFs():
     p.ieq_constraint(x)
     assert np.all(np.isclose(F, [6.73744149, 3.40704349, 8.33025044]))
     assert np.all(np.isclose(C, [1.79565082]))
-
-
-test_CFs()

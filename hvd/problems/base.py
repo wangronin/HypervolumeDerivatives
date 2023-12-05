@@ -154,7 +154,7 @@ class CONV3(MOOAnalytical):
         return jnp.array([func(x, self.a1), func(x, self.a2), func(x, self.a3)])
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
-        w = jnp.random.rand(N, 3)
+        w = np.random.rand(N, 3)
         w /= w.sum(axis=1).reshape(-1, 1)
         X = w @ np.vstack([self.a1, self.a2, self.a3])
         return np.array([self._objective(x) for x in X])
