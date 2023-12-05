@@ -35,7 +35,6 @@ class CF1(ConstrainedMOOAnalytical):
         return jnp.hstack([F1, F2])
 
     def _ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
-        # TODO: this function is calling the _objective. Figure out a more efficient impplementation
         y = jnp.atleast_2d(self._objective(x))
         return 1 - y[:, 0] - y[:, 1] + jnp.abs(jnp.sin(10 * jnp.pi * (y[:, 0] - y[:, 1] + 1)))
 

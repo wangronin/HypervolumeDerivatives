@@ -45,10 +45,10 @@ for i in range(n_cluster):
 
 all_ref = np.concatenate([v for v in ref.values()], axis=0)
 # the load the final population from an EMOA
-x0 = pd.read_csv(path + f"DTLZ1_{alg}_run_{run}_lastpopu_x.csv", header=None).values[0:200]
-y0 = pd.read_csv(path + f"DTLZ1_{alg}_run_{run}_lastpopu_y.csv", header=None).values[0:200]
+x0 = pd.read_csv(path + f"DTLZ1_{alg}_run_{run}_lastpopu_x.csv", header=None).values[0:400]
+y0 = pd.read_csv(path + f"DTLZ1_{alg}_run_{run}_lastpopu_y.csv", header=None).values[0:400]
 Y_label = pd.read_csv(path + f"DTLZ1_{alg}_run_{run}_lastpopu_labels.csv", header=None).values.ravel()
-Y_label = Y_label[0:200] - 1
+Y_label = Y_label[0:400] - 1
 N = len(x0)
 
 opt = DpN(
@@ -66,7 +66,7 @@ opt = DpN(
     xu=problem.xu,
     max_iters=max_iters,
     type="igd",
-    verbose=False,
+    verbose=True,
     pareto_front=pareto_front,
     Y_label=Y_label,
 )

@@ -496,31 +496,34 @@ class State:
         self.h_jac = h_jac
         self.g = g
         self.g_jac = g_jac
+        self._constrained = self.g is not None or self.h is not None
 
     def update(self, X: np.ndarray, compute_gradient: bool = True):
         self.X = X
         primal_vars = self.primal
-        eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=compute_gradient)
-        ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=compute_gradient)
-        cstr_value, active_indices, dH = merge_lists(eq, ieq)
         self.Y = np.array([self.func(x) for x in primal_vars])
         self.J = np.array([self.jac(x) for x in primal_vars]) if compute_gradient else None
-        self.cstr_value = cstr_value
-        self.active_indices = active_indices
-        self.dH = dH
+        if self._constrained:
+            eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=compute_gradient)
+            ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=compute_gradient)
+            cstr_value, active_indices, dH = merge_lists(eq, ieq)
+            self.cstr_value = cstr_value
+            self.active_indices = active_indices
+            self.dH = dH
 
     def update_one(self, x: np.ndarray, k: int):
         self.X[k] = x
         x = np.atleast_2d(x)
         primal_vars = x[:, : self.dim_p]
-        eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=True)
-        ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=True)
-        cstr_value, active_indices, dH = merge_lists(eq, ieq)
         self.Y[k] = self.func(primal_vars[0])
         self.J[k] = self.jac(primal_vars[0])
-        self.cstr_value[k] = cstr_value
-        self.active_indices[k] = active_indices
-        self.dH[k] = dH
+        if self._constrained:
+            eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=True)
+            ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=True)
+            cstr_value, active_indices, dH = merge_lists(eq, ieq)
+            self.cstr_value[k] = cstr_value
+            self.active_indices[k] = active_indices
+            self.dH[k] = dH
 
     @property
     def primal(self):
@@ -801,7 +804,7 @@ class DpN:
                 primal_vars, state.Y, self.Y_label, compute_hessian=False, Jacobian=state.J
             )
         R = grad  # the unconstrained case
-        idx = None
+        dH, idx = None, None
         if self._constrained:
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
             v, idx, dH = state.cstr_value, state.active_indices, state.dH
@@ -824,7 +827,8 @@ class DpN:
             idx = np.c_[idx, active_indices]
         # compute the Newton step for each approximation point - lower computation costs
         for r in range(self.N):
-            c, dh = idx[r], dH[r]
+            c = idx[r]
+            dh = np.array([]) if dH is None else dH[r]
             # TODO: check if preconditioning is needed automatically
             # Hessian[r] = precondition_hessian(Hessian[r])
             Z = np.zeros((len(dh), len(dh)))

@@ -68,10 +68,8 @@ opt = DpN(
     pareto_front=pareto_front,
     Y_label=Y_label,
 )
-opt.run()
+X, Y, _ = opt.run()
 medoids0 = np.vstack([m[0] for m in opt.history_medoids])
-X = opt._get_primal_dual(opt.X)[0]
-Y = opt.Y
 
 fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
 plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
