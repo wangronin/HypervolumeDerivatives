@@ -18,26 +18,6 @@ def hessian(fun):
     return jit(jacfwd(jacrev(fun)))
 
 
-def _cumprod(x):
-    # collect products
-    cumprods = []
-    for i in range(x.size):
-        # get next number / column / row
-        current_num = x[i]
-
-        # deal with first case
-        if i == 0:
-            cumprods.append(current_num)
-        else:
-            # get previous number
-            prev_num = cumprods[i - 1]
-
-            # compute next number / column / row
-            next_num = prev_num * current_num
-            cumprods.append(next_num)
-    return jnp.array(cumprods)
-
-
 class MOOAnalytical:
     def __init__(self):
         obj_func = partial(self.__class__._objective, self)
@@ -72,7 +52,7 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
         self._ieq_constraint_jacobian = jacrev(ieq_func) if hasattr(self, "_ieq_constraint") else None
         self._ieq_constraint_hessian = hessian(ieq_func) if hasattr(self, "_ieq_constraint") else None
 
-    def eq_constraint(self, x: np.ndarray) -> np.ndarray:
+    def _eq_constraint(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._eq_constraint(x))
 
     def ieq_constraint(self, x: np.ndarray) -> np.ndarray:

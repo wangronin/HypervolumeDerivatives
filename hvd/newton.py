@@ -526,19 +526,23 @@ class State:
             self.dH[k] = dH
 
     @property
-    def primal(self):
+    def primal(self) -> np.ndarray:
+        """Primal variables"""
         return self.X[:, : self.dim_p]
 
     @property
-    def dual(self):
+    def dual(self) -> np.ndarray:
+        """Langranian dual variables"""
         return self.X[:, self.dim_p :]
 
     @property
-    def H(self):
+    def H(self) -> np.ndarray:
+        """Equality constraint values"""
         return self.cstr_value[:, : self.n_eq]
 
     @property
-    def G(self):
+    def G(self) -> np.ndarray:
+        """Inequality constraint values"""
         return self.cstr_value[:, self.n_eq :]
 
     def _evaluate_constraints(self, primal_vars: np.ndarray, type: str = "eq", compute_gradient: bool = True):
@@ -804,7 +808,7 @@ class DpN:
                 primal_vars, state.Y, self.Y_label, compute_hessian=False, Jacobian=state.J
             )
         R = grad  # the unconstrained case
-        dH, idx = None, None
+        dH, idx = np.array([]), None
         if self._constrained:
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
             v, idx, dH = state.cstr_value, state.active_indices, state.dH
@@ -827,8 +831,7 @@ class DpN:
             idx = np.c_[idx, active_indices]
         # compute the Newton step for each approximation point - lower computation costs
         for r in range(self.N):
-            c = idx[r]
-            dh = np.array([]) if dH is None else dH[r]
+            c, dh = idx[r], dH[r]
             # TODO: check if preconditioning is needed automatically
             # Hessian[r] = precondition_hessian(Hessian[r])
             Z = np.zeros((len(dh), len(dh)))

@@ -102,9 +102,9 @@ class ZDT3(ZDT):
 class ZDT4(ZDT):
     def __init__(self, n_var=10):
         super().__init__(n_var)
-        self.xl = -5 * jnp.ones(self.n_var)
+        self.xl = -5 * np.ones(self.n_var)
         self.xl[0] = 0.0
-        self.xu = 5 * jnp.ones(self.n_var)
+        self.xu = 5 * np.ones(self.n_var)
         self.xu[0] = 1.0
         self.func = self._evaluate
 
