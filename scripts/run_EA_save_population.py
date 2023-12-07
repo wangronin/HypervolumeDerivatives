@@ -23,8 +23,8 @@ from scipy.io import savemat
 from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from hvd.problems.base import MOOAnalytical
 
-# pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
-pop_to_numpy = lambda pop: np.array([np.r_[ind.F, ind.H, ind.G] for ind in pop])
+pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
+# pop_to_numpy = lambda pop: np.array([np.r_[ind.F, ind.H, ind.G] for ind in pop])
 data_path = "/data1/wangh5"
 
 
@@ -158,15 +158,15 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 N = 30
 problems = [
-    # CF1(),
-    # CF2(),
-    # CF3(),
-    # CF4(),
-    # CF5(),
-    # CF6(),
-    # CF7(),
+    CF1(),
+    CF2(),
+    CF3(),
+    CF4(),
+    CF5(),
+    CF6(),
+    CF7(),
     CF8(),
-    # CF9(),
+    CF9(),
     CF10(),
     # ZDT1(),
     # ZDT2(),
