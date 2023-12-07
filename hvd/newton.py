@@ -916,7 +916,7 @@ class DpN:
                 if success:
                     break
                 else:
-                    if 1 < 2:
+                    if 11 < 2:
                         # cubic interpolation to compute the next step length
                         d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
                         d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
@@ -926,6 +926,7 @@ class DpN:
                     else:
                         s.append(s[-1] * 0.5)
             else:
-                self.logger.info("backtracking line search failed")
+                pass
+                # self.logger.info("backtracking line search failed")
             step_size[i] = s[-1]
         return step_size
