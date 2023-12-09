@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
+from pymoo.util.ref_dirs import get_reference_directions
 
 from hvd.newton import DpN
 from hvd.problems import DTLZ1, PymooProblemWithAD
@@ -27,12 +28,13 @@ np.random.seed(66)
 
 max_iters = 10
 run = 1
-alg = "NSGA-II"
+alg = "NSGA-III"
 path = "./DTLZ/DTLZ1/"
 
 f = DTLZ1()
+ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=45)
 problem = PymooProblemWithAD(f)
-pareto_front = problem.get_pareto_front()
+pareto_front = problem.get_pareto_front(ref_dirs)
 
 # load the reference set
 ref_label = pd.read_csv(path + f"DTLZ1_{alg}_run_{run}_component_id.csv", header=None).values[0]

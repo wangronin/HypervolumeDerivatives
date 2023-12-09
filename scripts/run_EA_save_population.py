@@ -10,7 +10,6 @@ from pymoo.algorithms.base.genetic import GeneticAlgorithm
 from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
-from pymoo.algorithms.moo.sms import SMSEMOA
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
 from pymoo.core.problem import ElementwiseProblem as PymooElementwiseProblem
 from pymoo.core.problem import Problem as PymooProblem
@@ -22,6 +21,9 @@ from scipy.io import savemat
 
 from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from hvd.problems.base import MOOAnalytical
+
+# from pymoo.algorithms.moo.sms import SMSEMOA
+from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 # pop_to_numpy = lambda pop: np.array([np.r_[ind.F, ind.H, ind.G] for ind in pop])
@@ -88,8 +90,8 @@ def minimize(
 ):
     data = []
     columns = (
-        # [f"x{i}" for i in range(1, problem.n_var + 1)]
-        [f"f{i}" for i in range(1, problem.n_obj + 1)]
+        [f"x{i}" for i in range(1, problem.n_var + 1)]
+        + [f"f{i}" for i in range(1, problem.n_obj + 1)]
         + [f"h{i}" for i in range(1, problem.n_eq_constr + 1)]
         + [f"g{i}" for i in range(1, problem.n_ieq_constr + 1)]
     )
@@ -186,7 +188,7 @@ idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
 problem = problems[idx]
 problem_name = problem.__class__.__name__
 problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
-termination = get_termination("n_gen", 500)
+termination = get_termination("n_gen", 2000)
 constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
 # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
