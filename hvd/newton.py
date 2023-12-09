@@ -877,7 +877,7 @@ class DpN:
         # shift the medoids
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
-            v = 0.05 * n if self.iter_count > 0 else 0.06 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.03 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
@@ -916,7 +916,7 @@ class DpN:
                 if success:
                     break
                 else:
-                    if 11 < 2:
+                    if 1 < 2:
                         # cubic interpolation to compute the next step length
                         d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
                         d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])

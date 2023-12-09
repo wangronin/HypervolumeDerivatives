@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from matplotlib import rcParams
-from scipy.io import loadmat
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
@@ -37,13 +36,9 @@ f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(500)
 
-data = loadmat(f"./data/ZDT/{problem_name}_NSGA-II.mat")
-columns = (
-    ["run", "iteration"]
-    + [f"x{i}" for i in range(1, problem.n_var + 1)]
-    + [f"f{i}" for i in range(1, problem.n_obj + 1)]
-)
-data = pd.DataFrame(data["data"], columns=columns)
+path = "./Gen1510/"
+emoa = "NSGA-II"
+gen = 110
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -121,15 +116,30 @@ def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
 
 
 def execute(run: int):
+    ref_label = pd.read_csv(
+        f"{path}/{problem_name}_{emoa}_run_{run}_component_id_gen{gen}.csv", header=None
+    ).values[0]
+    n_cluster = len(np.unique(ref_label))
+    ref = dict()
+    eta = dict()
     # load the reference set
-    ref = pd.read_csv(
-        f"./data-reference-set/ZDT/{problem_name}_NSGA-II_run_{run}_ref.csv", header=None
-    ).values
-    # the load the final population from an EMOA
-    df = data[(data.run == run) & (data.iteration == 999)]
-    x0 = df.loc[:, "x1":f"x{problem.n_var}"].iloc[:50, :].values
-    y0 = df.loc[:, "f1":f"f{problem.n_obj}"].iloc[:50, :].values
+    for i in range(n_cluster):
+        ref[i] = pd.read_csv(
+            f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
+        ).values
+        eta[i] = pd.read_csv(
+            f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
+        ).values.ravel()
+    all_ref = np.concatenate([v for v in ref.values()], axis=0)
 
+    # the load the final population from an EMOA
+    x0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_x_gen{gen}.csv", header=None).values
+    y0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_y_gen{gen}.csv", header=None).values
+    Y_label = pd.read_csv(
+        f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_labels_gen{gen}.csv", header=None
+    ).values.ravel()
+    Y_label = Y_label - 1
+    # create the algorithm
     opt = DpN(
         dim=problem.n_var,
         n_obj=problem.n_obj,
@@ -147,18 +157,19 @@ def execute(run: int):
         type="igd",
         verbose=True,
         pareto_front=pareto_front,
+        eta=eta,
+        Y_label=Y_label,
     )
     X, Y, _ = opt.run()
-    fig_name = f"./figure/{problem_name}-run{run}.pdf"
-    plot(y0, Y, ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    fig_name = f"./figure/{problem_name}_{emoa}_run{run}.pdf"
+    plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_func = GenerationalDistance(pareto_front)
     igd_func = InvertedGenerationalDistance(pareto_front)
     return np.array([igd_func.compute(Y=Y), gd_func.compute(Y=Y), hypervolume(Y, ref_point)])
 
 
-execute(run=2)
+# execute(run=1)
 
-breakpoint()
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
 df.to_csv(f"{problem_name}-DpN.csv", index=False)

@@ -7,6 +7,7 @@ from pymoo.indicators.hv import hvc_looped
 path = "/Users/wangronin/code_base/HypervolumeDerivatives/hv"
 
 
+# TODO: use C-Python interface to call the HV C code directly
 def hv_exact(ref_point, F):
     np.savetxt(f"{path}/tmp", F, fmt="%.8f")
     np.savetxt(f"{path}/ref", ref_point, fmt="%.8f")
