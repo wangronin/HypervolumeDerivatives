@@ -6,12 +6,15 @@ sys.path.insert(0, "./")
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
+from pymoo.algorithms.base.genetic import GeneticAlgorithm
 from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.sms import SMSEMOA
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
 from pymoo.core.problem import ElementwiseProblem, Problem
+from pymoo.indicators.gd import GD
+from pymoo.indicators.igd import IGD
 from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
@@ -22,7 +25,6 @@ from hvd.hypervolume import hypervolume
 from hvd.problems import CF9, CONV3, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3
 from hvd.problems.base import MOOAnalytical
 
-pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 ref_point = np.array([11, 11])
 
 
@@ -79,14 +81,6 @@ class ModifiedObjective(Problem):
 def minimize(
     problem, algorithm, termination=None, copy_algorithm=True, copy_termination=True, run_id=None, **kwargs
 ):
-    data = []
-    columns = (
-        [f"x{i}" for i in range(1, problem.n_var + 1)]
-        + [f"f{i}" for i in range(1, problem.n_obj + 1)]
-        + [f"h{i}" for i in range(1, problem.n_eq_constr + 1)]
-        + [f"g{i}" for i in range(1, problem.n_ieq_constr + 1)]
-    )
-
     # create a copy of the algorithm object to ensure no side-effects
     if copy_algorithm:
         algorithm = copy.deepcopy(algorithm)
@@ -105,29 +99,21 @@ def minimize(
     k = 1
     while algorithm.has_next():
         algorithm.next()
-        pop = copy.deepcopy(algorithm.pop)
-        if algorithm.n_gen == k + 1:
-            df = pd.DataFrame(pop_to_numpy(pop), columns=columns)
-            df.insert(0, "iteration", k)
-            data.append(df)
-            k += 1
     res = algorithm.result()
 
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
-    data = pd.concat(data, axis=0)
-    if run_id is not None:
-        data.insert(0, "run", run_id)
-
     pareto_front = problem.pareto_front(500)
-    gd_func = GenerationalDistance(pareto_front)
-    igd_func = InvertedGenerationalDistance(pareto_front)
-    return np.array([igd_func.compute(Y=res.F), gd_func.compute(Y=res.F), hypervolume(res.F, ref_point)])
+    gd_value = GD(pareto_front)(res.F)
+    igd_value = IGD(pareto_front)(res.F)
+    return np.array([igd_value, gd_value, hypervolume(res.F, ref_point)])
 
 
-def get_algorithm(n_objective: int, algorithm_name: str):
+def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:
+    pop_size = 100 if n_objective == 2 else 300
+
     if algorithm_name == "NSGA-II":
-        algorithm = NSGA2(pop_size=100)
+        algorithm = NSGA2(pop_size=pop_size)
     elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
         if n_objective == 2:
@@ -136,23 +122,20 @@ def get_algorithm(n_objective: int, algorithm_name: str):
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=20)
         elif n_objective == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
-        algorithm = NSGA3(pop_size=400, ref_dirs=ref_dirs)
-
+        algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
         if n_objective == 2:
             ref_dirs = get_reference_directions("uniform", 2, n_partitions=99)
         elif n_objective == 3:
-            ref_dirs = get_reference_directions("uniform", 3, n_partitions=13)
-        algorithm = MOEAD(
-            ref_dirs,
-            n_neighbors=15,
-            prob_neighbor_mating=0.7,
-        )
+            ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
+        algorithm = MOEAD(ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7)
     elif algorithm_name == "SMS-EMOA":
-        algorithm = SMSEMOA(pop_size=100)
-    if 11 < 2:
-        algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
+        algorithm = SMSEMOA(pop_size=pop_size)
+
+    if constrained:
+        if algorithm_name != "MOEAD":
+            algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
     return algorithm
 
 
@@ -163,10 +146,11 @@ for problem_name in [
 ]:
     print(problem_name)
     problem = get_problem(problem_name)
-    termination = get_termination("n_gen", 3000)
+    constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
+    termination = get_termination("n_gen", 3500)
+
     for algorithm_name in ("NSGA-II",):
-        algorithm = get_algorithm(problem.n_obj, algorithm_name)
-        # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
