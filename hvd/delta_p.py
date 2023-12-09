@@ -167,7 +167,8 @@ class ReferenceSet:
         return idx
 
     def _cluster(self, X: np.ndarray, N: int) -> np.ndarray:
-        km = KMedoids(n_clusters=N, random_state=0, init="k-medoids++").fit(X)
+        method = "pam" if len(X) <= 3000 else "alternate"
+        km = KMedoids(n_clusters=N, method=method, random_state=0, init="k-medoids++").fit(X)
         return X[km.medoid_indices_]
 
     def _match(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:

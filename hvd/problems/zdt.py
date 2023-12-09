@@ -171,6 +171,6 @@ class ZDT6(ZDT):
     def _evaluate(self, x):
         x = jnp.array([x])
         f1 = 1 - jnp.exp(-4 * x[:, 0]) * jnp.power(jnp.sin(6 * jnp.pi * x[:, 0]), 6)
-        g = 1 + 9.0 * jnp.power(max(0, jnp.sum(x[:, 1:], axis=1) / (self.n_var - 1.0)), 0.25)
+        g = 1 + 9.0 * jnp.power(jnp.max(jnp.r_[0, jnp.sum(x[:, 1:], axis=1) / (self.n_var - 1.0)]), 0.25)
         f2 = g * (1 - jnp.power(f1 / g, 2))
         return jnp.column_stack([f1, f2])[0]
