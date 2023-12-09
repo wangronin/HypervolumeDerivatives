@@ -47,10 +47,10 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
             eq_func = partial(self.__class__._eq_constraint, self)
         if self.n_ieq_constr > 0:
             ieq_func = partial(self.__class__._ieq_constraint, self)
-        self._eq_constraint_jacobian = jacrev(eq_func) if hasattr(self, "_eq_constraint") else None
-        self._eq_constraint_hessian = hessian(eq_func) if hasattr(self, "_eq_constraint") else None
-        self._ieq_constraint_jacobian = jacrev(ieq_func) if hasattr(self, "_ieq_constraint") else None
-        self._ieq_constraint_hessian = hessian(ieq_func) if hasattr(self, "_ieq_constraint") else None
+        self._eq_constraint_jacobian = jacrev(eq_func) if self.n_eq_constr > 0 else None
+        self._eq_constraint_hessian = hessian(eq_func) if self.n_eq_constr > 0 else None
+        self._ieq_constraint_jacobian = jacrev(ieq_func) if self.n_ieq_constr > 0 else None
+        self._ieq_constraint_hessian = hessian(ieq_func) if self.n_ieq_constr > 0 else None
 
     def _eq_constraint(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._eq_constraint(x))

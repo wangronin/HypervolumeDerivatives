@@ -12,6 +12,7 @@
 *.mat
 data/
 model/
+hv/
 
 **/*.pyc
 **/**/*.pyc
