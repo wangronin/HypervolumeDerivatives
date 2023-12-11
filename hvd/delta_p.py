@@ -153,15 +153,14 @@ class ReferenceSet:
 
     def _match_components(self, Y: Dict[int, np.ndarray]) -> np.ndarray:
         n, m = self.n_components, len(Y)
-        assert n >= m  # TODO: find a solution here
+        # assert n >= m  # TODO: find a solution here
         if n == 1 and m == 1:
             idx = [0]
         else:
             # match the clusters of `X` and `Y`
-            iu = np.triu_indices(n=n, m=m)
-            cost = np.zeros((n, m))
-            cost[iu] = [directed_hausdorff(self._ref[i], Y[j])[0] for (i, j) in zip(*iu)]
-            cost = cost + cost.T
+            idx = np.zeros(m)
+            cost = np.array([directed_hausdorff(self._ref[i], Y[j])[0] for i in range(n) for j in range(m)])
+            cost = cost.reshape(n, m)
             idx = linear_sum_assignment(cost)[1]
         return idx
 
