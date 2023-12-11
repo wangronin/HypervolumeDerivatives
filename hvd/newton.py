@@ -552,7 +552,7 @@ class State:
         if func is None:
             return None
         value = np.array([func(x) for x in primal_vars]).reshape(N, -1)
-        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-7 for v in value]
+        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-8 for v in value]
         active_indices = np.array(active_indices)
         if compute_gradient:
             H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
