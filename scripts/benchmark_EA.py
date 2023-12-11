@@ -145,7 +145,7 @@ for problem_name in [
     print(problem_name)
     problem = get_problem(problem_name)
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
-    termination = get_termination("n_gen", 3500)
+    termination = get_termination("n_gen", 2000)
 
     for algorithm_name in ("NSGA-II",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
