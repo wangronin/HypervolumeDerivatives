@@ -12,8 +12,7 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import (compute_chim, get_logger, merge_lists, non_domin_sort,
-                    precondition_hessian, set_bounds)
+from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, precondition_hessian, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -553,7 +552,7 @@ class State:
         if func is None:
             return None
         value = np.array([func(x) for x in primal_vars]).reshape(N, -1)
-        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-10 for v in value]
+        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-2 for v in value]
         active_indices = np.array(active_indices)
         if compute_gradient:
             H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
@@ -751,6 +750,7 @@ class DpN:
         # shift the reference set if needed
         self._shift_reference_set()
         self.step, self.R = self._compute_netwon_step()
+        # self.logger.info(np.sum(self.R[:, 10:], axis=1))
         # backtracking line search for the step size
         self.step_size = self._backtracking_line_search(self.step, self.R)
         # Newton iteration and evaluation
@@ -773,6 +773,7 @@ class DpN:
             self._delta_IGD = np.abs(self.hist_IGD[-1] - self.hist_IGD[-2])
 
         if self.verbose:
+            # self.logger.info(np.sum(self.state, axis=1))
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"GD/IGD: {self.GD_value, self.IGD_value}")
             self.logger.info(f"step size: {self.step_size.ravel()}")
