@@ -137,6 +137,9 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
     return algorithm
 
 
+gen = 100
+n_gen = 1700 + gen
+
 N = 30
 problem = sys.argv[1]
 for problem_name in [
@@ -145,7 +148,7 @@ for problem_name in [
     print(problem_name)
     problem = get_problem(problem_name)
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
-    termination = get_termination("n_gen", 2000)
+    termination = get_termination("n_gen", n_gen)
 
     for algorithm_name in ("NSGA-II",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
@@ -154,7 +157,7 @@ for problem_name in [
             for i in range(N)
         )
         df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-        df.to_csv(f"{problem_name}-{algorithm_name}.csv", index=False)
+        df.to_csv(f"{problem_name}-{algorithm_name}-{gen}.csv", index=False)
         # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)

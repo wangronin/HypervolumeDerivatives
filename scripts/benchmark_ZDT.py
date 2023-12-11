@@ -191,4 +191,4 @@ run_id = [
 
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-df.to_csv(f"{problem_name}-DpN-{emoa}.csv", index=False)
+df.to_csv(f"{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
