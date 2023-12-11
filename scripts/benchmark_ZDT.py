@@ -16,7 +16,7 @@ plt.style.use("ggplot")
 rcParams["font.size"] = 17
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
-rcParams["text.usetex"] = True
+# rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
 rcParams["xtick.labelsize"] = 17
 rcParams["ytick.labelsize"] = 17
@@ -34,7 +34,7 @@ problem_name = sys.argv[1]
 print(problem_name)
 f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
-pareto_front = problem.get_pareto_front(500)
+pareto_front = problem.get_pareto_front(1000)
 
 path = "./Gen1510/"
 emoa = "NSGA-II"
@@ -48,9 +48,11 @@ def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
     ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
     ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
     ax0.set_title("Objective space (Initialization)")
-    ax0.set_xlabel(r"$f_1$")
-    ax0.set_ylabel(r"$f_2$")
-    lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
+    # ax0.set_xlabel(r"$f_1$")
+    # ax0.set_ylabel(r"$f_2$")
+    ax0.set_xlabel("f1")
+    ax0.set_ylabel("f2")
+    lgnd = ax0.legend(["Pareto front", "Y0", "reference set", "matched points"])
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
 
@@ -91,21 +93,24 @@ def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
     counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
     lgnd = ax1.legend(
         lines,
-        ["Pareto front"]
-        + [f"{i + 1} shift(s): {k} points" for i, k in enumerate(counts)]
-        + [r"$Y_{\mathrm{final}}$"],
+        ["Pareto front"] + [f"{i + 1} shift(s): {k} points" for i, k in enumerate(counts)]
+        # + [r"$Y_{\mathrm{final}}$"],
+        + ["Y final"],
     )
     for handle in lgnd.legend_handles:
         handle.set_markersize(12)
 
     ax1.set_title("Objective space")
-    ax1.set_xlabel(r"$f_1$")
-    ax1.set_ylabel(r"$f_2$")
+    ax1.set_xlabel("f1")
+    ax1.set_ylabel("f2")
+    # ax1.set_xlabel(r"$f_1$")
+    # ax1.set_ylabel(r"$f_2$")
 
     ax22 = ax2.twinx()
     ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
     ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
-    ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
+    # ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
+    ax22.set_ylabel(r"R norm", color="g")
     ax2.set_title("Performance")
     ax2.set_xlabel("iteration")
     ax2.set_xticks(range(1, max_iters + 1))

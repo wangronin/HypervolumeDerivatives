@@ -101,7 +101,7 @@ def minimize(
 
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
-    pareto_front = problem.pareto_front(500)
+    pareto_front = problem.pareto_front(1000)
     gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
     return np.array([igd_value, gd_value, hypervolume(res.F, ref_point)])
@@ -154,7 +154,7 @@ for problem_name in [
             for i in range(N)
         )
         df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-        df.to_csv(f"{problem_name}-NSGA-II.csv", index=False)
+        df.to_csv(f"{problem_name}-{algorithm_name}.csv", index=False)
         # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)

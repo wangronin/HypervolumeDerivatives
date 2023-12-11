@@ -12,7 +12,8 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, precondition_hessian, set_bounds
+from .utils import (compute_chim, get_logger, merge_lists, non_domin_sort,
+                    precondition_hessian, set_bounds)
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -877,7 +878,7 @@ class DpN:
         # shift the medoids
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
-            v = 0.05 * n if self.iter_count > 0 else 0.03 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.02 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
