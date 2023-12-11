@@ -1,6 +1,9 @@
 import sys
 
 sys.path.insert(0, "./")
+import re
+from glob import glob
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -38,7 +41,7 @@ pareto_front = problem.get_pareto_front(1000)
 
 path = "./Gen1510/"
 emoa = "NSGA-II"
-gen = 110
+gen = 100
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -160,7 +163,7 @@ def execute(run: int):
         xu=problem.xu,
         max_iters=max_iters,
         type="igd",
-        verbose=True,
+        verbose=False,
         pareto_front=pareto_front,
         eta=eta,
         Y_label=Y_label,
@@ -173,6 +176,14 @@ def execute(run: int):
     return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
 
 
-data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))
+# get all run IDs
+run_id = [
+    int(re.findall(r"run_(\d+)_", s)[0])
+    for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
+]
+# for i in run_id:
+# execute(i)
+
+data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
 df.to_csv(f"{problem_name}-DpN-{emoa}.csv", index=False)
