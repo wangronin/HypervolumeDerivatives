@@ -173,8 +173,6 @@ def execute(run: int):
     return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
 
 
-# execute(run=1)
-
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-df.to_csv(f"{problem_name}-DpN.csv", index=False)
+df.to_csv(f"{problem_name}-DpN-{emoa}.csv", index=False)
