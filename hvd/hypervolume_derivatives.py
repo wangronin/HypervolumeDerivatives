@@ -1,5 +1,6 @@
 from typing import Dict, List, Tuple, Union
 
+# TODO: remove dependencies on `autograd`
 import autograd.numpy as np
 import numpy as np
 from autograd import hessian, jacobian
