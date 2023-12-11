@@ -151,6 +151,12 @@ def execute(run: int):
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
+
+    if len(np.unique(Y_label)) > len(ref):
+        ref = np.vstack([r for r in ref.values()])
+        Y_label = np.zeros(len(y0))
+        eta = None
+
     # create the algorithm
     opt = DpN(
         dim=problem.n_var,
@@ -167,7 +173,7 @@ def execute(run: int):
         xu=problem.xu,
         max_iters=max_iters,
         type="igd",
-        verbose=False,
+        verbose=True,
         pareto_front=pareto_front,
         eta=eta,
         Y_label=Y_label,
