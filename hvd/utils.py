@@ -12,11 +12,11 @@ from sklearn.neighbors import LocalOutlierFactor
 
 __author__ = "Hao Wang"
 
-# def _handle_box_constraint(self, X: np.ndarray, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+# def handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 #     if 1 < 2:
-#         return step, np.ones(len(X))
+#         return step, np.ones(len(step))
 
-#     primal_vars = self._get_primal_dual(X)[0]
+#     primal_vars = self.state.primal
 #     step_primal = step[:, : self.dim_p]
 #     normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
 #     # calculate the maximal step-size
@@ -27,7 +27,6 @@ __author__ = "Hao Wang"
 #     v = step_primal @ normal_vectors
 #     s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
 #     max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
-#     # max_step_size[max_step_size == 0] = 1
 #     # project Newton's direction onto the box boundary
 #     idx = max_step_size == 0
 #     if np.any(idx) > 0:
@@ -39,7 +38,8 @@ __author__ = "Hao Wang"
 #         v = step[:, : self.dim_p] @ normal_vectors
 #         s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
 #         max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
-# return step, max_step_size
+#     return step, max_step_size
+
 
 # if 11 < 2:
 #     import matplotlib.pyplot as plt

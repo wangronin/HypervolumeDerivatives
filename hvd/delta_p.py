@@ -1,9 +1,8 @@
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from fastdist import fastdist
 from scipy.optimize import linear_sum_assignment
-from scipy.spatial.distance import directed_hausdorff
+from scipy.spatial.distance import cdist, directed_hausdorff
 from sklearn_extra.cluster import KMedoids
 
 __authors__ = ["Hao Wang"]
@@ -35,7 +34,7 @@ class GenerationalDistance:
 
     def _compute_indices(self, Y: np.ndarray):
         # find for each approximation point, the index of its closest point in the reference set
-        self.D = fastdist.matrix_to_matrix_distance(Y, self.ref, fastdist.euclidean, "euclidean")
+        self.D = cdist(Y, self.ref, metric="minkowski")
         self.indices = np.argmin(self.D, axis=1)
 
     def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
@@ -172,7 +171,7 @@ class ReferenceSet:
         return X[km.medoid_indices_]
 
     def _match(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
-        cost = fastdist.matrix_to_matrix_distance(Y, X, fastdist.euclidean, "euclidean")
+        cost = cdist(Y, X, metric="minkowski", p=self.p)
         idx = linear_sum_assignment(cost)[1]  # min-weight assignment in a bipartite graph
         return X[idx]
 
@@ -185,7 +184,6 @@ class InvertedGenerationalDistance:
         jac: Callable = None,
         hess: Callable = None,
         p: float = 2,
-        recursive: bool = False,  # TODO: remove the `recursive` option
         cluster_matching: bool = False,
     ):
         """Generational Distance
@@ -196,9 +194,6 @@ class InvertedGenerationalDistance:
             jac (Callable): the Jacobian function, which returns an array of shape (n_objective, dim)
             hess (Callable): the Hessian function, which returns an array of shape (n_objective, dim, dim)
             p (float, optional): parameter in the p-norm. Defaults to 2.
-            recursive (bool, optional): if true, it computes non-zero derivatives/gradiants for all the
-                the points in the approximation set by recursively removing the points which has nonzero
-                gradient (the nearest point to some reference point). Defaults to False.
         """
         self.ref = ReferenceSet(ref, p)
         self.p = p
@@ -206,7 +201,6 @@ class InvertedGenerationalDistance:
         self.jac = jac
         self.hess = hess
         self.M = self.ref.N
-        self.recursive = recursive
         self.cluster_matching = cluster_matching
         self.re_match = True
 
@@ -217,28 +211,29 @@ class InvertedGenerationalDistance:
             Y (np.ndarray): the objective points of shape (N, n_objective).
         """
         N = len(Y)
-        self.D = fastdist.matrix_to_matrix_distance(
-            Y, self.ref.reference_set, fastdist.euclidean, "euclidean"
-        )
-        # self.D = cdist(Y, self.ref.reference_set, metric="minkowski", p=self.p)
+        self.D = cdist(self.ref.reference_set, Y, metric="minkowski")
         # for each reference point, the index of its closest point in the approximation set `Y`
-        self._indices = np.argmin(self.D, axis=0)
+        self._indices = np.argmin(self.D, axis=1)
         # for each point `p`` in `Y`, the indices of points in the reference set
         # which have `p` as the closest point.
-        self.indices = [np.array([])] * N
+        self.indices = [np.nonzero(self._indices == i)[0] for i in range(N)]
         # for each point `p` in `Y`, the total number of points in the reference set
         # which have `p` as the closest point
         self.m = np.zeros((N, 1))
-        D = self.D.copy()
-        while True:
-            _indices = np.argmin(D, axis=0)
-            pos = np.nonzero(self.m == 0)[0]
-            for p in pos:
-                self.indices[p] = np.nonzero(_indices == p)[0]
-                self.m[p] = len(self.indices[p])
-            if len(pos) == 0 or not self.recursive:
-                break
-            D[_indices, np.arange(self.M)] = np.inf
+        idx, counts = np.unique(self._indices, return_counts=True)
+        self.m[idx, 0] = counts
+        # TODO: decide whether to remove the following code for the recursive method
+        # D = self.D.copy()
+        # while True:
+        #     _indices = np.argmin(D, axis=0)
+
+        #     pos = np.nonzero(self.m == 0)[0]
+        #     for p in pos:
+        #         self.indices[p] = np.nonzero(_indices == p)[0]
+        #         self.m[p] = len(self.indices[p])
+        #     if len(pos) == 0 or not self.recursive:
+        #         break
+        #     D[_indices, np.arange(self.M)] = np.inf
 
     def _match(self, Y: np.ndarray, Y_label: np.ndarray = None):
         if not self.re_match and hasattr(self, "_medoids"):
@@ -276,7 +271,7 @@ class InvertedGenerationalDistance:
             return np.mean(np.sum((Y - self._medoids) ** 2, axis=1))
         else:
             self._compute_indices(Y)
-            return np.mean(self.D[self._indices, np.arange(self.M)] ** self.p) ** (1 / self.p)
+            return np.mean(self.D[np.arange(self.M), self._indices] ** self.p) ** (1 / self.p)
 
     def compute_derivatives(
         self,
@@ -308,20 +303,20 @@ class InvertedGenerationalDistance:
             Y = np.array([self.func(x) for x in X])
         # Jacobian of the objective function
         if Jacobian is None:
-            J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
+            J = np.array([self.jac(x) for x in X])  # (N, n_obj, dim)
         else:
             J = Jacobian
         if self.cluster_matching:
             self._match(Y, Y_label)
-            diff = Y - self._medoids  # (N, n_objective)
+            diff = Y - self._medoids  # (N, n_obj)
         else:
             self._compute_indices(Y)
-            centroid = np.array([np.sum(self.ref[idx], axis=0) for idx in self.indices])
-            diff = self.m * Y - centroid  # (N, n_objective)
+            Z = np.array([np.sum(self.ref.reference_set[idx], axis=0) for idx in self.indices])  # (N, n_obj)
+            diff = self.m * Y - Z
 
         grad = c * np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
         if compute_hessian:
-            H = np.array([self.hess(x) for x in X])  # (N, n_objective, dim, dim)
+            H = np.array([self.hess(x) for x in X])  # (N, n_obj, dim, dim)
             m = np.tile(self.m[..., np.newaxis], (1, dim, dim)) if not self.cluster_matching else 1
             hessian = c * (
                 m * np.einsum("ijk,ijl->ikl", J, J) + np.einsum("ijkl,ij->ikl", H, diff)

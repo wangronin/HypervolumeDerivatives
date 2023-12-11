@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from matplotlib import rcParams
-from pymoo.indicators.gd import GD
-from pymoo.indicators.igd import IGD
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
@@ -157,7 +155,7 @@ def execute(run: int):
         xu=problem.xu,
         max_iters=max_iters,
         type="igd",
-        verbose=False,
+        verbose=True,
         pareto_front=pareto_front,
         eta=eta,
         Y_label=Y_label,
@@ -165,14 +163,12 @@ def execute(run: int):
     X, Y, _ = opt.run()
     fig_name = f"./figure/{problem_name}_{emoa}_run{run}.pdf"
     plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
-    gd_value = GD(pareto_front)(Y)
-    igd_value = IGD(pareto_front)(Y)
-    # gd_func = GenerationalDistance(pareto_front).compute(Y=Y)
-    # igd_func = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
+    gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
+    igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
     return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
 
 
-execute(run=1)
+# execute(run=1)
 
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in range(1, 31))
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])

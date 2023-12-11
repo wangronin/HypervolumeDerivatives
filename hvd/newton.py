@@ -832,8 +832,8 @@ class DpN:
         # compute the Newton step for each approximation point - lower computation costs
         for r in range(self.N):
             c, dh = idx[r], dH[r]
+            # w, V = np.linalg.eigh(Hessian[r])
             # TODO: check if preconditioning is needed automatically
-            # Hessian[r] = precondition_hessian(Hessian[r])
             Z = np.zeros((len(dh), len(dh)))
             DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             with warnings.catch_warnings():
@@ -888,7 +888,9 @@ class DpN:
                 self.history_medoids[k].append(self.active_indicator._medoids[indices][i])
         self.logger.info(f"{len(indices)} target points are shifted")
 
-    def _backtracking_line_search(self, step: np.ndarray, R: np.ndarray) -> float:
+    def _backtracking_line_search(
+        self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
+    ) -> float:
         """backtracking line search with Armijo's condition"""
         c1 = 1e-4
         if np.all(np.isclose(step, 0)):
@@ -904,7 +906,10 @@ class DpN:
             self.active_indicator.re_match = True
             return np.linalg.norm(R_)
 
-        step_size = np.ones((self.N, 1))
+        if max_step_size is not None:
+            step_size = max_step_size.reshape(-1, 1)
+        else:
+            step_size = np.ones((self.N, 1))
         for i in range(self.N):
             phi = [np.linalg.norm(R[i])]
             s = [0, 1]

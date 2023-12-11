@@ -13,8 +13,6 @@ from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.sms import SMSEMOA
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
 from pymoo.core.problem import ElementwiseProblem, Problem
-from pymoo.indicators.gd import GD
-from pymoo.indicators.igd import IGD
 from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
@@ -104,8 +102,8 @@ def minimize(
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
     pareto_front = problem.pareto_front(500)
-    gd_value = GD(pareto_front)(res.F)
-    igd_value = IGD(pareto_front)(res.F)
+    gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
+    igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
     return np.array([igd_value, gd_value, hypervolume(res.F, ref_point)])
 
 
