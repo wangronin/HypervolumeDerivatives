@@ -147,6 +147,10 @@ def execute(run: int):
         f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_labels_gen{gen}.csv", header=None
     ).values.ravel()
     Y_label = Y_label - 1
+    idx = Y_label != -2  # outliers
+    x0 = x0[idx]
+    y0 = y0[idx]
+    Y_label = Y_label[idx]
     # create the algorithm
     opt = DpN(
         dim=problem.n_var,
@@ -182,7 +186,8 @@ run_id = [
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
 # for i in run_id:
-# execute(i)
+#     print(i)
+#     execute(i)
 
 data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
