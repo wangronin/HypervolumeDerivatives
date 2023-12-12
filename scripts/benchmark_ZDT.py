@@ -179,7 +179,7 @@ def execute(run: int):
         Y_label=Y_label,
     )
     X, Y, _ = opt.run()
-    fig_name = f"./figure/{problem_name}_{emoa}_run{run}.pdf"
+    fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
     plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
