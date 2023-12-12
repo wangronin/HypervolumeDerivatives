@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cholesky, solve
+from scipy.linalg import block_diag, cholesky, pinvh, solve
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
@@ -552,7 +552,7 @@ class State:
         if func is None:
             return None
         value = np.array([func(x) for x in primal_vars]).reshape(N, -1)
-        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-8 for v in value]
+        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-3 for v in value]
         active_indices = np.array(active_indices)
         if compute_gradient:
             H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
@@ -671,10 +671,10 @@ class DpN:
             X0 = np.asarray(X0)
             # assert np.all(X0 - self.lower_bounds >= 0)
             # assert np.all(X0 - self.upper_bounds <= 0)
-            X0 = np.clip(X0, self.xl, self.xu)
+            # X0 = np.clip(X0, self.xl, self.xu)
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
-            X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
-            X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
+            # X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
+            # X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -749,10 +749,11 @@ class DpN:
         self._compute_indicator_value(self.state.Y)
         # shift the reference set if needed
         self._shift_reference_set()
+        # compute the Newton step
         self.step, self.R = self._compute_netwon_step()
-        # self.logger.info(np.sum(self.R[:, 10:], axis=1))
+        self.step, max_step_size = self.handle_box_constraint(self.step)
         # backtracking line search for the step size
-        self.step_size = self._backtracking_line_search(self.step, self.R)
+        self.step_size = self._backtracking_line_search(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size * self.step)
 
@@ -763,7 +764,7 @@ class DpN:
         gd_value = self._perf_gd.compute(Y=self.state.Y)
         igd_value = self._perf_igd.compute(Y=self.state.Y)
         self.hist_GD += [gd_value]
-        self.hist_IGD += [igd_value]
+        self.hist_IGD += [self.IGD_value]
         self.hist_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
 
         if self.iter_count >= 2:
@@ -773,7 +774,6 @@ class DpN:
             self._delta_IGD = np.abs(self.hist_IGD[-1] - self.hist_IGD[-2])
 
         if self.verbose:
-            # self.logger.info(np.sum(self.state, axis=1))
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"GD/IGD: {self.GD_value, self.IGD_value}")
             self.logger.info(f"step size: {self.step_size.ravel()}")
@@ -834,21 +834,19 @@ class DpN:
         # compute the Newton step for each approximation point - lower computation costs
         for r in range(self.N):
             c, dh = idx[r], dH[r]
-            # w, V = np.linalg.eigh(Hessian[r])
-            # TODO: check if preconditioning is needed automatically
             Z = np.zeros((len(dh), len(dh)))
             DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
+            R[r, c] = R_list[r]
             with warnings.catch_warnings():
                 warnings.filterwarnings("error")
                 try:
                     newton_step[r, c] = -1 * solve(DR, R_list[r].reshape(-1, 1)).ravel()
-                    R[r, c] = R_list[r]
                 except Exception:  # in case of singluar Hessian, shouldn't really happen
-                    w, V = np.linalg.eigh(DR)
-                    w[np.isclose(w, 0)] = 1e-10
-                    D = np.diag(1 / w)
-                    newton_step[r, c] = -1 * (V @ D @ V.T @ R_list[r].reshape(-1, 1)).ravel()
-                    R[r, c] = R_list[r]
+                    newton_step[r, c] = (
+                        -1 * np.linalg.lstsq(DR, R_list[r].reshape(-1, 1), rcond=None)[0].ravel()
+                    )
+                    # A = pinvh(DR)
+                    # newton_step[r, c] = -1 * (A @ R_list[r].reshape(-1, 1)).ravel()
         return newton_step, R
 
     def _shift_reference_set(self):
@@ -919,11 +917,12 @@ class DpN:
                 phi.append(phi_func(s[-1], i))
                 # Armijo–Goldstein condition
                 # when R norm is close to machine precision, it makes no sense to perform the line search
-                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0]
+                # or np.isclose(phi[0], np.finfo(float).eps)
                 if success:
                     break
                 else:
-                    if 1 < 2:
+                    if 11 < 2:
                         # cubic interpolation to compute the next step length
                         d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
                         d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
@@ -937,3 +936,31 @@ class DpN:
                 # self.logger.info("backtracking line search failed")
             step_size[i] = s[-1]
         return step_size
+
+    def handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        if 1 < 2:
+            return step, np.ones(len(step))
+
+        primal_vars = self.state.primal
+        step_primal = step[:, : self.dim_p]
+        normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
+        # calculate the maximal step-size
+        dist = np.c_[
+            np.abs(primal_vars - self.xl),
+            np.abs(self.xu - primal_vars),
+        ]
+        v = step_primal @ normal_vectors
+        s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
+        max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
+        # project Newton's direction onto the box boundary
+        idx = max_step_size == 0
+        if np.any(idx) > 0:
+            proj_dim = [np.argmin(_) for _ in s[idx]]
+            proj_axis = normal_vectors[:, proj_dim]
+            step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
+            step[:, : self.dim_p] = step_primal
+            # re-calculate the `max_step_size` for projected directions
+            v = step[:, : self.dim_p] @ normal_vectors
+            s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
+            max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
+        return step, max_step_size

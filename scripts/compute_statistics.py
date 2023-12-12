@@ -4,7 +4,7 @@ import pandas as pd
 gen = 100
 emoa = "NSGA-II"
 out = []
-for problem in ["ZDT1", "ZDT2", "ZDT3"]:
+for problem in ["ZDT1", "ZDT2", "ZDT3", "ZDT4"]:
     data1 = pd.read_csv(f"./results/{problem}-DpN-{emoa}-{gen}.csv")
     data2 = pd.read_csv(f"./results/{problem}-{emoa}-{gen}.csv")
     df1 = data1.apply(lambda x: f"{np.median(x):.4e} +/- {np.std(x) / np.sqrt(len(x)):.4e}", axis=0)

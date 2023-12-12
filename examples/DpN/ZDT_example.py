@@ -21,7 +21,7 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-np.random.seed(42)
+np.random.seed(77)
 
 # NOTE: issues found so far on ZDTs
 # ZDT2: some points converges to the wrong decision boundary; the convergence rate is quadratic still.
@@ -29,7 +29,7 @@ np.random.seed(42)
 # ZDT6: indefinite DpN Hessians; Hessian modification method is needed
 
 N = 5
-max_iters = 1
+max_iters = 10
 problem = PymooProblemWithAD(ZDT6(n_var=2))
 pareto_front = problem.get_pareto_front(500)
 pareto_set = problem.get_pareto_set(500)
@@ -48,7 +48,8 @@ ref -= 0.05
 # ref_x = np.c_[x1, x2]
 # the initial approximation set
 x0 = problem.get_pareto_set(N, kind="uniform")
-x0[:, 1:] += 0.0 * np.random.rand(N, problem.n_var - 1)
+# x0[:, 1:] += 0.0 * np.random.rand(N, problem.n_var - 1)
+x0[:, 1:] += 1e-10
 y0 = np.array([problem.objective(x) for x in x0])
 
 fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 6.5))
@@ -60,10 +61,8 @@ ax1.plot(ref[:, 0], ref[:, 1], "b.", ms=4, mec="none", alpha=0.35)
 ax2.plot(x0[:, 0], x0[:, 1], "r.", ms=9, alpha=0.8, clip_on=False)
 # ax2.plot(pareto_set[:, 0], pareto_set[:, 1], "g.", mec="none", ms=5, alpha=0.4)
 # ax2.plot(ref_x[:, 0], ref_x[:, 1], "b.", ms=4, mec="none", alpha=0.3)
-
 ax3.plot(x0[:, 0], x0[:, 1], "r.", ms=9, alpha=0.8, clip_on=False)
 # ax3.plot(pareto_set[:, 0], pareto_set[:, 1], "g.", mec="none", ms=5, alpha=0.4)
-
 
 opt = DpN(
     dim=problem.n_var,
@@ -72,8 +71,8 @@ opt = DpN(
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
-    # g=problem.ieq_constraint,
-    # g_jac=problem.ieq_jacobian,
+    g=problem.ieq_constraint,
+    g_jac=problem.ieq_jacobian,
     N=N,
     x0=x0,
     xl=problem.xl,
@@ -85,9 +84,9 @@ opt = DpN(
 )
 
 X, Y, _ = opt.run()
-grad = opt.grad
-grad /= np.linalg.norm(grad, axis=1).reshape(-1, 1)
-grad *= -1
+# grad = opt.grad
+# grad /= np.linalg.norm(grad, axis=1).reshape(-1, 1)
+# grad *= -1
 
 yl = -1e-5
 yu = 1e-4
@@ -106,25 +105,25 @@ fig.colorbar(CS1, ax=ax2)
 CS2 = ax3.contourf(X1, X2, Z2, 20, cmap=plt.cm.gray, linestyles="--", alpha=0.6)
 fig.colorbar(CS2, ax=ax3)
 
-grad[:, 1] *= scale * 0.2
-grad[:, 0] *= 0.2
+# grad[:, 1] *= scale * 0.2
+# grad[:, 0] *= 0.2
 
 for i in range(N):
-    ax3.quiver(
-        x0[i, 0],
-        x0[i, 1],
-        grad[i, 0],
-        grad[i, 1],
-        scale_units="xy",
-        angles="xy",
-        scale=1,
-        color="c",
-        width=0.004,
-        alpha=0.8,
-        headlength=4.7,
-        headwidth=2.7,
-        clip_on=False,
-    )
+    # ax3.quiver(
+    #     x0[i, 0],
+    #     x0[i, 1],
+    #     grad[i, 0],
+    #     grad[i, 1],
+    #     scale_units="xy",
+    #     angles="xy",
+    #     scale=1,
+    #     color="c",
+    #     width=0.004,
+    #     alpha=0.8,
+    #     headlength=4.7,
+    #     headwidth=2.7,
+    #     clip_on=False,
+    # )
     ax3.quiver(
         x0[i, 0],
         x0[i, 1],
@@ -141,41 +140,41 @@ for i in range(N):
         clip_on=False,
     )
 
-    diff = opt.V[i]
-    diff[1, :] *= scale * 0.5
-    diff[0, :] *= 0.5
-    color = "r" if opt.w[i][0] > 0 else "b"
-    ax2.quiver(
-        x0[i, 0],
-        x0[i, 1],
-        diff[0, 0],
-        diff[1, 0],
-        scale_units="xy",
-        angles="xy",
-        scale=1,
-        color=color,
-        width=0.004,
-        alpha=0.8,
-        headlength=4.7,
-        headwidth=2.7,
-        clip_on=False,
-    )
-    color = "r" if opt.w[i][1] > 0 else "b"
-    ax2.quiver(
-        x0[i, 0],
-        x0[i, 1],
-        diff[0, 1],
-        diff[1, 1],
-        scale_units="xy",
-        angles="xy",
-        scale=1,
-        color=color,
-        width=0.004,
-        alpha=0.8,
-        headlength=4.7,
-        headwidth=2.7,
-        clip_on=False,
-    )
+    # diff = opt.V[i]
+    # diff[1, :] *= scale * 0.5
+    # diff[0, :] *= 0.5
+    # color = "r" if opt.w[i][0] > 0 else "b"
+    # ax2.quiver(
+    #     x0[i, 0],
+    #     x0[i, 1],
+    #     diff[0, 0],
+    #     diff[1, 0],
+    #     scale_units="xy",
+    #     angles="xy",
+    #     scale=1,
+    #     color=color,
+    #     width=0.004,
+    #     alpha=0.8,
+    #     headlength=4.7,
+    #     headwidth=2.7,
+    #     clip_on=False,
+    # )
+    # color = "r" if opt.w[i][1] > 0 else "b"
+    # ax2.quiver(
+    #     x0[i, 0],
+    #     x0[i, 1],
+    #     diff[0, 1],
+    #     diff[1, 1],
+    #     scale_units="xy",
+    #     angles="xy",
+    #     scale=1,
+    #     color=color,
+    #     width=0.004,
+    #     alpha=0.8,
+    #     headlength=4.7,
+    #     headwidth=2.7,
+    #     clip_on=False,
+    # )
 
 ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
@@ -188,8 +187,8 @@ ax3.set_title("Decision space")
 ax3.set_xlabel(r"$x_1$")
 ax3.set_ylabel(r"$x_2$")
 
-ax2.set_ylim([-1e-5, 1e-4])
-ax3.set_ylim([-1e-5, 1e-4])
+# ax2.set_ylim([-1e-5, 1e-4])
+# ax3.set_ylim([-1e-5, 1e-4])
 
 
 M = np.vstack([m[-1] for m in opt.history_medoids])
