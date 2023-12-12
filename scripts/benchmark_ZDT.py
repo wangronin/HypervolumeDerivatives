@@ -41,7 +41,7 @@ pareto_front = problem.get_pareto_front(1000)
 
 path = "./Gen1510/"
 emoa = "NSGA-II"
-gen = 100
+gen = 110
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -191,10 +191,10 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-# for i in run_id:
-#     print(i)
-#     execute(i)
-
-data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
-df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-df.to_csv(f"{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
+if 11 < 2:
+    for i in run_id:
+        execute(i)
+else:
+    data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
+    df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
+    df.to_csv(f"{problem_name}-DpN-{emoa}-{gen}.csv", index=False)

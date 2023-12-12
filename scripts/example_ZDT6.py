@@ -24,8 +24,8 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 8
-run = 1
+max_iters = 5
+run = 2
 f = ZDT6()
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(500)
