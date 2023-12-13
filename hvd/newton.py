@@ -669,9 +669,6 @@ class DpN:
     def _initialize(self, X0: np.ndarray):
         if X0 is not None:
             X0 = np.asarray(X0)
-            # assert np.all(X0 - self.lower_bounds >= 0)
-            # assert np.all(X0 - self.upper_bounds <= 0)
-            # X0 = np.clip(X0, self.xl, self.xu)
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
             # X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
             # X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
@@ -751,9 +748,8 @@ class DpN:
         self._shift_reference_set()
         # compute the Newton step
         self.step, self.R = self._compute_netwon_step()
-        self.step, max_step_size = self.handle_box_constraint(self.step)
         # backtracking line search for the step size
-        self.step_size = self._backtracking_line_search(self.step, self.R, max_step_size)
+        self.step_size = self._backtracking_line_search(self.step, self.R)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size * self.step)
 
@@ -841,12 +837,10 @@ class DpN:
                 warnings.filterwarnings("error")
                 try:
                     newton_step[r, c] = -1 * solve(DR, R_list[r].reshape(-1, 1)).ravel()
-                except Exception:  # in case of singluar Hessian, shouldn't really happen
+                except Exception:
                     newton_step[r, c] = (
                         -1 * np.linalg.lstsq(DR, R_list[r].reshape(-1, 1), rcond=None)[0].ravel()
                     )
-                    # A = pinvh(DR)
-                    # newton_step[r, c] = -1 * (A @ R_list[r].reshape(-1, 1)).ravel()
         return newton_step, R
 
     def _shift_reference_set(self):
@@ -917,12 +911,11 @@ class DpN:
                 phi.append(phi_func(s[-1], i))
                 # Armijo–Goldstein condition
                 # when R norm is close to machine precision, it makes no sense to perform the line search
-                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0]
-                # or np.isclose(phi[0], np.finfo(float).eps)
+                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
                 if success:
                     break
                 else:
-                    if 11 < 2:
+                    if 1 < 2:
                         # cubic interpolation to compute the next step length
                         d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
                         d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
