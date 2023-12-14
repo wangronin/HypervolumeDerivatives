@@ -907,7 +907,7 @@ class DpN:
         for i in range(self.N):
             phi = [np.linalg.norm(R[i])]
             s = [0, 1]
-            for _ in range(10):
+            for _ in range(8):
                 phi.append(phi_func(s[-1], i))
                 # Armijo–Goldstein condition
                 # when R norm is close to machine precision, it makes no sense to perform the line search

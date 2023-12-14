@@ -143,8 +143,8 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 
 gen = 110
-# n_gen = 1700 + gen
-n_gen = 1510 + 1700
+n_gen = 1510 if gen == 110 else 100
+gen_func = lambda n_var, n_obj: 36 * n_obj + 10 * n_obj * n_var
 
 N = 30
 problem = sys.argv[1]
@@ -154,7 +154,7 @@ for problem_name in [
     print(problem_name)
     problem = get_problem(problem_name)
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
-    termination = get_termination("n_gen", n_gen)
+    termination = get_termination("n_gen", n_gen + 6 * gen_func(problem.n_var, problem.n_obj))
 
     for algorithm_name in ("NSGA-II",):
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)

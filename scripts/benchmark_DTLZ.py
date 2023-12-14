@@ -31,7 +31,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 8
+max_iters = 6
 n_jobs = 30
 ref_point = np.array([11, 11])
 problem_name = sys.argv[1]
