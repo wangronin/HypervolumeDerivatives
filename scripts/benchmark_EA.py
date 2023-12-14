@@ -142,8 +142,9 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
     return algorithm
 
 
-gen = 100
-n_gen = 1700 + gen
+gen = 110
+# n_gen = 1700 + gen
+n_gen = 1510 + 1700
 
 N = 30
 problem = sys.argv[1]
