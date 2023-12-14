@@ -1,7 +1,24 @@
 import jax.numpy as jnp
+import numpy as np
 from pymoo.core.problem import Problem
-from pymoo.problems.many.dtlz import get_ref_dirs
+from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 from pymoo.util.remote import Remote
+
+# TODO: implement `_calc_pareto_set` for all problem here.
+
+
+def get_ref_dirs(n_obj):
+    if n_obj == 2:
+        ref_dirs = UniformReferenceDirectionFactory(2, n_points=100).do()
+    elif n_obj == 3:
+        ref_dirs = UniformReferenceDirectionFactory(3, n_partitions=30).do()
+    else:
+        raise Exception("Please provide reference directions for more than 3 objectives!")
+    return ref_dirs
+
+
+def generic_sphere(ref_dirs):
+    return ref_dirs / np.tile(np.linalg.norm(ref_dirs, axis=1)[:, None], (1, ref_dirs.shape[1]))
 
 
 class DTLZ(Problem):
@@ -63,6 +80,94 @@ class DTLZ1(DTLZ):
         X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
         g = self.g1(X_M)
         return self.obj_func(X_, g)[0]
+
+
+class DTLZ2(DTLZ):
+    def __init__(self, n_var=10, n_obj=3, **kwargs):
+        super().__init__(n_var=n_var, n_obj=n_obj, **kwargs)
+
+    def _calc_pareto_front(self, ref_dirs=None):
+        if ref_dirs is None:
+            ref_dirs = get_ref_dirs(self.n_obj)
+        return generic_sphere(ref_dirs)
+
+    def _evaluate(self, x):
+        x = jnp.array([x])
+        X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
+        g = self.g2(X_M)
+        return self.obj_func(X_, g)[0]
+
+
+class DTLZ3(DTLZ):
+    def __init__(self, n_var=10, n_obj=3, **kwargs):
+        super().__init__(n_var=n_var, n_obj=n_obj, **kwargs)
+
+    def _calc_pareto_front(self, ref_dirs=None):
+        if ref_dirs is None:
+            ref_dirs = get_ref_dirs(self.n_obj)
+        return generic_sphere(ref_dirs)
+
+    def _evaluate(self, x):
+        x = jnp.array([x])
+        X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
+        g = self.g1(X_M)
+        return self.obj_func(X_, g)
+
+
+class DTLZ4(DTLZ):
+    def __init__(self, n_var=10, n_obj=3, alpha=100, d=100, **kwargs):
+        super().__init__(n_var=n_var, n_obj=n_obj, **kwargs)
+        self.alpha = alpha
+        self.d = d
+
+    def _calc_pareto_front(self, ref_dirs=None):
+        if ref_dirs is None:
+            ref_dirs = get_ref_dirs(self.n_obj)
+        return generic_sphere(ref_dirs)
+
+    def _evaluate(self, x):
+        x = jnp.array([x])
+        X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
+        g = self.g2(X_M)
+        return self.obj_func(X_, g, alpha=self.alpha)
+
+
+class DTLZ5(DTLZ):
+    def __init__(self, n_var=10, n_obj=3, **kwargs):
+        super().__init__(n_var=n_var, n_obj=n_obj, **kwargs)
+
+    def _calc_pareto_front(self):
+        if self.n_obj == 3:
+            return Remote.get_instance().load("pymoo", "pf", "dtlz5-3d.pf")
+        else:
+            raise Exception("Not implemented yet.")
+
+    def _evaluate(self, x):
+        x = jnp.array([x])
+        X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
+        g = self.g2(X_M)
+        theta = 1 / (2 * (1 + g[:, None])) * (1 + 2 * g[:, None] * X_)
+        theta = jnp.column_stack([x[:, 0], theta[:, 1:]])
+        return self.obj_func(theta, g)
+
+
+class DTLZ6(DTLZ):
+    def __init__(self, n_var=10, n_obj=3, **kwargs):
+        super().__init__(n_var=n_var, n_obj=n_obj, **kwargs)
+
+    def _calc_pareto_front(self):
+        if self.n_obj == 3:
+            return Remote.get_instance().load("pymoo", "pf", "dtlz6-3d.pf")
+        else:
+            raise Exception("Not implemented yet.")
+
+    def _evaluate(self, x):
+        x = jnp.array([x])
+        X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
+        g = jnp.sum(jnp.power(X_M, 0.1), axis=1)
+        theta = 1 / (2 * (1 + g[:, None])) * (1 + 2 * g[:, None] * X_)
+        theta = jnp.column_stack([x[:, 0], theta[:, 1:]])
+        return self.obj_func(theta, g)
 
 
 class DTLZ7(DTLZ):

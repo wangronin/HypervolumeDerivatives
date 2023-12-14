@@ -6,6 +6,9 @@ from pymoo.util.normalization import normalize
 
 # NOTE: `jnp.abs` is taken on `f1 / g` for ZDT1, 3, and 4 to avoid numerical issues
 # when the decision var. are out of bound
+# TODO: remove the dependency of pymoo here
+
+eps = 1e-6
 
 
 class ZDT(Problem):
@@ -33,7 +36,7 @@ class ZDT1(ZDT):
         f1 = x[:, 0]
         sign = select(jnp.sign(f1) == 0, jnp.array([1.0]), jnp.sign(f1))
         # need to cap `f1` from below; otherwise, the Jacobian does not exist at `f1 = 0`
-        f1_ = sign * jnp.max(jnp.r_[jnp.abs(f1), 1e-10])
+        f1_ = sign * jnp.max(jnp.r_[jnp.abs(f1), eps])
         g = 1 + 9.0 / (self.n_var - 1) * jnp.sum(x[:, 1:], axis=1)
         f2 = g * (1 - jnp.power((jnp.abs(f1_ / g)), 0.5))
         return jnp.column_stack([f1, f2])[0]
@@ -99,7 +102,7 @@ class ZDT3(ZDT):
         f1 = x[:, 0]
         sign = select(jnp.sign(f1) == 0, jnp.array([1.0]), jnp.sign(f1))
         # need to cap `f1` from below; otherwise, the Jacobian does not exist at `f1 = 0`
-        f1_ = sign * jnp.max(jnp.r_[jnp.abs(f1), 1e-10])
+        f1_ = sign * jnp.max(jnp.r_[jnp.abs(f1), eps])
         c = jnp.sum(x[:, 1:], axis=1)
         g = 1.0 + 9.0 * c / (self.n_var - 1)
         f2 = g * (1 - jnp.power(jnp.abs(f1_ * 1.0 / g), 0.5) - (f1 * 1.0 / g) * jnp.sin(10 * jnp.pi * f1))
@@ -124,7 +127,7 @@ class ZDT4(ZDT):
         f1 = x[:, 0]
         sign = select(jnp.sign(f1) == 0, jnp.array([1.0]), jnp.sign(f1))
         # need to cap `f1` from below; otherwise, the Jacobian does not exist at `f1 = 0`
-        f1_ = sign * jnp.max(jnp.r_[jnp.abs(f1), 1e-10])
+        f1_ = sign * jnp.max(jnp.r_[jnp.abs(f1), eps])
         g = 1.0
         g += 10 * (self.n_var - 1)
         for i in range(1, self.n_var):

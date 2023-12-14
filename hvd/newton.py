@@ -930,7 +930,7 @@ class DpN:
             step_size[i] = s[-1]
         return step_size
 
-    def handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         if 1 < 2:
             return step, np.ones(len(step))
 
