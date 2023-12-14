@@ -146,6 +146,10 @@ def execute(run: int):
             f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
         ).values.ravel()
 
+    # sometimes the precomputed `eta` value can be nan
+    if np.any([np.any(np.isnan(_eta)) for _eta in eta.values()]):
+        eta = None
+
     # the load the final population from an EMOA
     x0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_x_gen{gen}.csv", header=None).values
     y0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_y_gen{gen}.csv", header=None).values
