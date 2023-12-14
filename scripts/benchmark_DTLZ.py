@@ -197,10 +197,11 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 1 < 2:
+if 11 < 2:
     for i in run_id:
         execute(i)
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
-    df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
+    # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
+    df = pd.DataFrame(np.array(data), columns=["IGD", "GD"])
     df.to_csv(f"{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
