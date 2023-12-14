@@ -133,20 +133,22 @@ def execute(run: int):
     eta = dict()
     # load the reference set
     for i in range(n_cluster):
-        r = pd.read_csv(
-            f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
-        ).values
-        if len(r) >= 1000:
-            # downsample the reference; otherwise, initial clustering take too long
-            ref[i] = np.array(random.sample(r.tolist(), 1000))
+        if problem_name == "DTLZ7":
+            # for DTLZ7 we need to load the dense fillings of the reference set
+            r = pd.read_csv(
+                f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
+            ).values
         else:
-            ref[i] = r
-
+            r = pd.read_csv(
+                f"{path}/{problem_name}_{emoa}_run_{run}_ref_{i+1}_gen{gen}.csv", header=None
+            ).values
+        # downsample the reference; otherwise, initial clustering take too long
+        ref[i] = np.array(random.sample(r.tolist(), 1000)) if len(r) >= 1000 else r
         eta[i] = pd.read_csv(
             f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
         ).values.ravel()
 
-    # sometimes the precomputed `eta` value can be nan
+    # sometimes the precomputed `eta` value can be `nan`
     if np.any([np.any(np.isnan(_eta)) for _eta in eta.values()]):
         eta = None
 
@@ -157,17 +159,17 @@ def execute(run: int):
         f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_labels_gen{gen}.csv", header=None
     ).values.ravel()
     Y_label = Y_label - 1
-    idx = Y_label != -2  # outliers
+    # removing the outliers in `Y`
+    idx = Y_label != -2
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
-
+    # if the number of clusters of `Y` is more than that of the reference set
     if len(np.unique(Y_label)) > len(ref):
         ref = np.vstack([r for r in ref.values()])
         Y_label = np.zeros(len(y0))
         eta = None
 
-    # create the algorithm
     opt = DpN(
         dim=problem.n_var,
         n_obj=problem.n_obj,
@@ -201,7 +203,9 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 11 < 2:
+if gen == 110 and problem_name == "DTLZ4":
+    run_id = list(set(run_id) - set([14]))
+if 1 < 2:
     for i in run_id:
         execute(i)
 else:
