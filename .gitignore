@@ -10,6 +10,7 @@
 *.tex
 *.csv
 *.mat
+*.png
 data/
 model/
 hv/

@@ -165,7 +165,9 @@ class ReferenceSet:
         return idx
 
     def _cluster(self, X: np.ndarray, N: int) -> np.ndarray:
-        method = "pam" if len(X) <= 3000 else "alternate"
+        # TODO: figure out why pam is really slow; it seems to be quite okay in Matlab
+        # method = "pam" if len(X) <= 3000 else "alternate"
+        method = "alternate"
         km = KMedoids(n_clusters=N, method=method, random_state=0, init="k-medoids++").fit(X)
         return X[km.medoid_indices_]
 
