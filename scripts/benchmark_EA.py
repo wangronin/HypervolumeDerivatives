@@ -16,11 +16,11 @@ from pymoo.core.problem import ElementwiseProblem, Problem
 from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
+from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 from scipy.io import savemat
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
-from hvd.problems import CF9, CONV3, CONV4, UF7, UF8, Eq1DTLZ2, Eq1DTLZ3
 from hvd.problems.base import MOOAnalytical
 
 ref_point = np.array([11, 11])
@@ -101,10 +101,15 @@ def minimize(
 
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
-    pareto_front = problem.pareto_front(1000)
+    if problem_name not in ["DTLZ5", "DTLZ6", "DTLZ7"]:
+        ref_dirs = UniformReferenceDirectionFactory(3, n_partitions=30).do()
+        pareto_front = problem.pareto_front(ref_dirs)
+    else:
+        pareto_front = problem.pareto_front()
     gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
-    return np.array([igd_value, gd_value, hypervolume(res.F, ref_point)])
+    # return np.array([igd_value, gd_value, hypervolume(res.F, ref_point)])
+    return np.array([igd_value, gd_value])
 
 
 def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:
