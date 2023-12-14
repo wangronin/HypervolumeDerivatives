@@ -40,7 +40,7 @@ f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front()
 
-gen = 100
+gen = 110
 path = f"./DTLZ-gen{gen}/"
 emoa = "NSGA-II"
 
