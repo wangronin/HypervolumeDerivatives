@@ -133,7 +133,7 @@ def execute(run: int):
     eta = dict()
     # load the reference set
     for i in range(n_cluster):
-        if problem_name == "DTLZ7":
+        if problem_name in ["DTLZ6", "DTLZ7"]:
             # for DTLZ7 we need to load the dense fillings of the reference set
             r = pd.read_csv(
                 f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
@@ -143,7 +143,7 @@ def execute(run: int):
                 f"{path}/{problem_name}_{emoa}_run_{run}_ref_{i+1}_gen{gen}.csv", header=None
             ).values
         # downsample the reference; otherwise, initial clustering take too long
-        ref[i] = np.array(random.sample(r.tolist(), 1000)) if len(r) >= 1000 else r
+        ref[i] = np.array(random.sample(r.tolist(), 500)) if len(r) >= 500 else r
         eta[i] = pd.read_csv(
             f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
         ).values.ravel()
