@@ -189,7 +189,7 @@ def execute(run: int):
     # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
-    return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
+    return np.array([igd_value, gd_value])
 
 
 # get all run IDs
@@ -197,7 +197,7 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 11 < 2:
+if 1 < 2:
     for i in run_id:
         execute(i)
 else:
