@@ -4,9 +4,9 @@ import pandas as pd
 gen = 110
 emoa = "NSGA-II"
 out = []
-# for problem in ["ZDT1", "ZDT2", "ZDT3", "ZDT4",
+# for problem in ["ZDT1", "ZDT2", "ZDT3", "ZDT4", "ZDT6"]
 dfs = []
-for problem in ["ZDT6"]:
+for problem in ["DTLZ1", "DTLZ2", "DTLZ3", "DTLZ5", "DTLZ7"]:
     data1 = pd.read_csv(f"./results/{problem}-DpN-{emoa}-{gen}.csv")
     data2 = pd.read_csv(f"./results/{problem}-{emoa}-{gen}.csv")
     df1 = data1.loc[:, ["IGD"]]
