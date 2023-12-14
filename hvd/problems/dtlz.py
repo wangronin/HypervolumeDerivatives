@@ -111,7 +111,7 @@ class DTLZ3(DTLZ):
         x = jnp.array([x])
         X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
         g = self.g1(X_M)
-        return self.obj_func(X_, g)
+        return self.obj_func(X_, g)[0]
 
 
 class DTLZ4(DTLZ):
@@ -129,7 +129,7 @@ class DTLZ4(DTLZ):
         x = jnp.array([x])
         X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
         g = self.g2(X_M)
-        return self.obj_func(X_, g, alpha=self.alpha)
+        return self.obj_func(X_, g, alpha=self.alpha)[0]
 
 
 class DTLZ5(DTLZ):
@@ -148,7 +148,7 @@ class DTLZ5(DTLZ):
         g = self.g2(X_M)
         theta = 1 / (2 * (1 + g[:, None])) * (1 + 2 * g[:, None] * X_)
         theta = jnp.column_stack([x[:, 0], theta[:, 1:]])
-        return self.obj_func(theta, g)
+        return self.obj_func(theta, g)[0]
 
 
 class DTLZ6(DTLZ):
@@ -167,7 +167,7 @@ class DTLZ6(DTLZ):
         g = jnp.sum(jnp.power(X_M, 0.1), axis=1)
         theta = 1 / (2 * (1 + g[:, None])) * (1 + 2 * g[:, None] * X_)
         theta = jnp.column_stack([x[:, 0], theta[:, 1:]])
-        return self.obj_func(theta, g)
+        return self.obj_func(theta, g)[0]
 
 
 class DTLZ7(DTLZ):
