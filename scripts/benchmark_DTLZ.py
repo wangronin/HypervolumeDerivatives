@@ -205,7 +205,8 @@ run_id = [
 ]
 if gen == 110 and problem_name == "DTLZ4":
     run_id = list(set(run_id) - set([14]))
-if 1 < 2:
+
+if 11 < 2:
     for i in run_id:
         execute(i)
 else:
