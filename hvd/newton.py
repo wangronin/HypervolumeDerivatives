@@ -4,7 +4,7 @@ from copy import deepcopy
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cholesky, pinvh, solve
+from scipy.linalg import block_diag, cholesky, solve
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
@@ -12,11 +12,13 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, precondition_hessian, set_bounds
+from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
 
 __authors__ = ["Hao Wang"]
+
+# TODO: rewrite the code of `HVN`
 
 
 class HVN:
@@ -838,6 +840,7 @@ class DpN:
                 try:
                     newton_step[r, c] = -1 * solve(DR, R_list[r].reshape(-1, 1)).ravel()
                 except Exception:
+                    # if DR is singular, then use the pseudoinverse.
                     newton_step[r, c] = (
                         -1 * np.linalg.lstsq(DR, R_list[r].reshape(-1, 1), rcond=None)[0].ravel()
                     )
@@ -863,6 +866,7 @@ class DpN:
 
         if self._eta is None:
             self._eta = dict()
+            # compute the shift direction
             for i in range(self.n_cluster):
                 Y = self.state.Y[self.Y_idx[i]]
                 idx = non_domin_sort(Y, only_front_indices=True)[0]
@@ -929,31 +933,3 @@ class DpN:
                 # self.logger.info("backtracking line search failed")
             step_size[i] = s[-1]
         return step_size
-
-    def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        if 1 < 2:
-            return step, np.ones(len(step))
-
-        primal_vars = self.state.primal
-        step_primal = step[:, : self.dim_p]
-        normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
-        # calculate the maximal step-size
-        dist = np.c_[
-            np.abs(primal_vars - self.xl),
-            np.abs(self.xu - primal_vars),
-        ]
-        v = step_primal @ normal_vectors
-        s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-        max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
-        # project Newton's direction onto the box boundary
-        idx = max_step_size == 0
-        if np.any(idx) > 0:
-            proj_dim = [np.argmin(_) for _ in s[idx]]
-            proj_axis = normal_vectors[:, proj_dim]
-            step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
-            step[:, : self.dim_p] = step_primal
-            # re-calculate the `max_step_size` for projected directions
-            v = step[:, : self.dim_p] @ normal_vectors
-            s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-            max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
-        return step, max_step_size

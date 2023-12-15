@@ -12,7 +12,8 @@ from sklearn.neighbors import LocalOutlierFactor
 
 __author__ = "Hao Wang"
 
-# def handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+
+# def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
 #     if 1 < 2:
 #         return step, np.ones(len(step))
 
@@ -39,20 +40,6 @@ __author__ = "Hao Wang"
 #         s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
 #         max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
 #     return step, max_step_size
-
-
-# if 11 < 2:
-#     import matplotlib.pyplot as plt
-
-#     Y = self.Y
-#     M = self.active_indicator._medoids
-#     fig, ax = plt.subplots(1, 1, figsize=(8, 6.5))
-#     ax.plot(M[:, 0], M[:, 1], "k^", mfc="none")
-#     ax.plot(Y[:, 0], Y[:, 1], "g+")
-#     for i in range(len(Y)):
-#         ax.plot([Y[i, 0], M[i, 0]], [Y[i, 1], M[i, 1]], "r-")
-#     plt.tight_layout()
-#     plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
 
 
 def merge_lists(x, y):

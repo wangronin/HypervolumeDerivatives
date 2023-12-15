@@ -42,7 +42,7 @@ pareto_front = problem.get_pareto_front()
 
 gen = 110
 path = f"./DTLZ-gen{gen}/"
-emoa = "NSGA-II"
+emoa = "NSGA-III"
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
