@@ -775,8 +775,7 @@ class DpN:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"GD/IGD: {self.GD_value, self.IGD_value}")
             self.logger.info(f"step size: {self.step_size.ravel()}")
-            if self._constrained:
-                self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
+            self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
 
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:
@@ -808,7 +807,7 @@ class DpN:
                 primal_vars, state.Y, self.Y_label, compute_hessian=False, Jacobian=state.J
             )
         R = grad  # the unconstrained case
-        dH, idx = np.array([]), None
+        dH, idx = None, None
         if self._constrained:
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
             v, idx, dH = state.cstr_value, state.active_indices, state.dH
@@ -831,7 +830,8 @@ class DpN:
             idx = np.c_[idx, active_indices]
         # compute the Newton step for each approximation point - lower computation costs
         for r in range(self.N):
-            c, dh = idx[r], dH[r]
+            c = idx[r]
+            dh = np.array([]) if dH is None else dH[r]
             Z = np.zeros((len(dh), len(dh)))
             DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             R[r, c] = R_list[r]
@@ -875,7 +875,7 @@ class DpN:
         # shift the medoids
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
-            v = 0.05 * n if self.iter_count > 0 else 0.03 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.01 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
