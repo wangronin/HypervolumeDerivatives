@@ -166,8 +166,8 @@ class DTLZ6(DTLZ):
     def _evaluate(self, x):
         x = jnp.array([x])
         X_, X_M = x[:, : self.n_obj - 1], x[:, self.n_obj - 1 :]
-        sign = jax.lax.select(X_M == 0, jnp.ones(X_M.shape), jnp.sign(X_M))
-        X_M_ = sign * jnp.clip(jnp.abs(X_M), eps)
+        # sign = jax.lax.select(X_M == 0, jnp.ones(X_M.shape), jnp.sign(X_M))
+        X_M_ = jnp.clip(jnp.abs(X_M), eps)
         g = jnp.sum(jnp.power(X_M_, 0.1), axis=1)
         theta = 1 / (2 * (1 + g[:, None])) * (1 + 2 * g[:, None] * X_)
         theta = jnp.column_stack([x[:, 0], theta[:, 1:]])
