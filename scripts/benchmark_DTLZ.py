@@ -170,6 +170,7 @@ def execute(run: int):
         Y_label = np.zeros(len(y0))
         eta = None
 
+    N = len(x0)
     opt = DpN(
         dim=problem.n_var,
         n_obj=problem.n_obj,
@@ -191,6 +192,9 @@ def execute(run: int):
         Y_label=Y_label,
     )
     X, Y, _ = opt.run()
+    data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
+    df = pd.DataFrame(data, columns=["iteration", "f1", "f2", "f3"])
+    df.to_csv(f"./tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
     # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
     # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
@@ -206,7 +210,7 @@ run_id = [
 if gen == 110 and problem_name == "DTLZ4":
     run_id = list(set(run_id) - set([14]))
 
-if 11 < 2:
+if 1 < 2:
     for i in run_id:
         execute(i)
 else:
