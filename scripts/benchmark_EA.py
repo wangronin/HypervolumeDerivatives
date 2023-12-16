@@ -20,10 +20,11 @@ from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 from scipy.io import savemat
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.hypervolume import hypervolume
+
+# from hvd.hypervolume import hypervolume
 from hvd.problems.base import MOOAnalytical
 
-ref_point = np.array([11, 11])
+# ref_point = np.array([11, 11])
 
 
 class ProblemWrapper(ElementwiseProblem):
@@ -101,11 +102,14 @@ def minimize(
 
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
-    if problem_name not in ["DTLZ5", "DTLZ6", "DTLZ7"]:
-        ref_dirs = UniformReferenceDirectionFactory(3, n_partitions=30).do()
-        pareto_front = problem.pareto_front(ref_dirs)
+    if problem.n_obj == 3:
+        if problem_name not in ["DTLZ4", "DTLZ6", "DTLZ7"]:
+            ref_dirs = UniformReferenceDirectionFactory(3, n_partitions=30).do()
+            pareto_front = problem.pareto_front(ref_dirs)
+        else:
+            pareto_front = problem.pareto_front()
     else:
-        pareto_front = problem.pareto_front()
+        pareto_front = problem.pareto_front(1000)
     gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
     # return np.array([igd_value, gd_value, hypervolume(res.F, ref_point)])
