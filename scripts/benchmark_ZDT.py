@@ -11,7 +11,8 @@ from joblib import Parallel, delayed
 from matplotlib import rcParams
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.hypervolume import hypervolume
+
+# from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
 from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
@@ -32,7 +33,7 @@ np.random.seed(66)
 
 max_iters = 8
 n_jobs = 30
-ref_point = np.array([11, 11])
+# ref_point = np.array([11, 11])
 problem_name = sys.argv[1]
 print(problem_name)
 f = locals()[problem_name]()
@@ -183,7 +184,8 @@ def execute(run: int):
     plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
-    return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
+    # return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
+    return np.array([igd_value, gd_value])
 
 
 # get all run IDs
@@ -196,5 +198,6 @@ if 11 < 2:
         execute(i)
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
-    df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
+    df = pd.DataFrame(np.array(data), columns=["IGD", "GD"])
+    # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
     df.to_csv(f"{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
