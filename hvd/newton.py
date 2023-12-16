@@ -673,7 +673,6 @@ class DpN:
             X0 = np.asarray(X0)
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
             X0 = np.clip(X0, self.xl, self.xu)
-            breakpoint()
             X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
             X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
             self.N = len(X0)
