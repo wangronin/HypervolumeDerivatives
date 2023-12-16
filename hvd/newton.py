@@ -554,7 +554,7 @@ class State:
         if func is None:
             return None
         value = np.array([func(x) for x in primal_vars]).reshape(N, -1)
-        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-3 for v in value]
+        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-6 for v in value]
         active_indices = np.array(active_indices)
         if compute_gradient:
             H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
@@ -672,8 +672,10 @@ class DpN:
         if X0 is not None:
             X0 = np.asarray(X0)
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
-            # X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
-            # X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
+            X0 = np.clip(X0, self.xl, self.xu)
+            breakpoint()
+            X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
+            X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
