@@ -31,7 +31,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 8
+max_iters = 5
 n_jobs = 30
 # ref_point = np.array([11, 11])
 problem_name = sys.argv[1]
@@ -42,7 +42,7 @@ pareto_front = problem.get_pareto_front(1000)
 
 path = "./Gen1510/"
 emoa = "NSGA-II"
-gen = 110
+gen = 100
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -139,7 +139,11 @@ def execute(run: int):
         eta[i] = pd.read_csv(
             f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
         ).values.ravel()
+
     all_ref = np.concatenate([v for v in ref.values()], axis=0)
+    # sometimes the precomputed `eta` value can be `nan`
+    if np.any([np.any(np.isnan(_eta)) for _eta in eta.values()]):
+        eta = None
 
     # the load the final population from an EMOA
     x0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_x_gen{gen}.csv", header=None).values
@@ -152,7 +156,7 @@ def execute(run: int):
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
-
+    # if the number of clusters of `Y` is more than that of the reference set
     if len(np.unique(Y_label)) > len(ref):
         ref = np.vstack([r for r in ref.values()])
         Y_label = np.zeros(len(y0))
@@ -180,8 +184,9 @@ def execute(run: int):
         Y_label=Y_label,
     )
     X, Y, _ = opt.run()
-    fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
+    fig_name = f"{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
+    # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
     # return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])

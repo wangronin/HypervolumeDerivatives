@@ -93,6 +93,7 @@ def precondition_hessian(H: np.ndarray) -> np.ndarray:
                 tau = max(2 * tau, beta)
         else:
             print("Pre-conditioning the HV Hessian failed")
+            return H + tau * I
     return L @ (L.T)
 
 
