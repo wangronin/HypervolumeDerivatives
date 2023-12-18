@@ -12,7 +12,7 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, set_bounds
+from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, precondition_hessian, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -554,7 +554,7 @@ class State:
         if func is None:
             return None
         value = np.array([func(x) for x in primal_vars]).reshape(N, -1)
-        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-6 for v in value]
+        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-3 for v in value]
         active_indices = np.array(active_indices)
         if compute_gradient:
             H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
@@ -672,9 +672,10 @@ class DpN:
         if X0 is not None:
             X0 = np.asarray(X0)
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
-            X0 = np.clip(X0, self.xl, self.xu)
-            X0 += 1e-5 * (X0 - self.xl == 0).astype(int)
-            X0 -= 1e-5 * (X0 - self.xu == 0).astype(int)
+            # NOTE: this part won't work on ZDT6
+            # X0 = np.clip(X0, self.xl, self.xu)
+            # X0 += 1e-10 * (X0 - self.xl == 0).astype(int)
+            # X0 -= 1e-10 * (X0 - self.xu == 0).astype(int)
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -763,7 +764,7 @@ class DpN:
         gd_value = self._perf_gd.compute(Y=self.state.Y)
         igd_value = self._perf_igd.compute(Y=self.state.Y)
         self.hist_GD += [gd_value]
-        self.hist_IGD += [self.IGD_value]
+        self.hist_IGD += [igd_value]
         self.hist_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
 
         if self.iter_count >= 2:
@@ -774,7 +775,7 @@ class DpN:
 
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
-            self.logger.info(f"GD/IGD: {self.GD_value, self.IGD_value}")
+            self.logger.info(f"GD/IGD: {self.GD_value, igd_value}")
             self.logger.info(f"step size: {self.step_size.ravel()}")
             self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
 
@@ -834,6 +835,9 @@ class DpN:
             c = idx[r]
             dh = np.array([]) if dH is None else dH[r]
             Z = np.zeros((len(dh), len(dh)))
+            # pre-condition indicator's Hessian if needed, e.g., on ZDT6
+            # Hessian[r] = precondition_hessian(Hessian[r])
+            # derivative of the root-finding problem
             DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             R[r, c] = R_list[r]
             with warnings.catch_warnings():
@@ -845,6 +849,12 @@ class DpN:
                     newton_step[r, c] = (
                         -1 * np.linalg.lstsq(DR, R_list[r].reshape(-1, 1), rcond=None)[0].ravel()
                     )
+        # heuristic: prevent the step-length to be too large
+        X = newton_step[:, : self.dim_p]
+        t = np.max(self.xu - self.xl) / 4
+        idx = np.linalg.norm(X, axis=1) >= t
+        X[idx] /= np.linalg.norm(X[idx], axis=1).reshape(-1, 1) / t
+        newton_step[:, : self.dim_p] = X
         return newton_step, R
 
     def _shift_reference_set(self):
@@ -876,7 +886,8 @@ class DpN:
         # shift the medoids
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
-            v = 0.05 * n if self.iter_count > 0 else 0.01 * n  # the initial shift is a bit larger
+            # NOTE: a larger initial shift is needed for ZDT6
+            v = 0.05 * n if self.iter_count > 0 else 0.06 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
