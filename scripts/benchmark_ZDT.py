@@ -40,9 +40,10 @@ f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
 
-path = "./Gen1510/"
+# path = "./Gen1510/"
+path = "ZDT_gen_300"
 emoa = "NSGA-II"
-gen = 100
+gen = 300
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -61,23 +62,24 @@ def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
         handle.set_markersize(10)
 
     N = len(y0)
-    trajectory = np.array([y0] + hist_Y)
-    for i in range(N):
-        x, y = trajectory[:, i, 0], trajectory[:, i, 1]
-        ax1.quiver(
-            x[:-1],
-            y[:-1],
-            x[1:] - x[:-1],
-            y[1:] - y[:-1],
-            scale_units="xy",
-            angles="xy",
-            scale=1,
-            color="k",
-            width=0.003,
-            alpha=0.5,
-            headlength=4.5,
-            headwidth=2.5,
-        )
+    if 1 < 2:
+        trajectory = np.array([y0] + hist_Y)
+        for i in range(N):
+            x, y = trajectory[:, i, 0], trajectory[:, i, 1]
+            ax1.quiver(
+                x[:-1],
+                y[:-1],
+                x[1:] - x[:-1],
+                y[1:] - y[:-1],
+                scale_units="xy",
+                angles="xy",
+                scale=1,
+                color="k",
+                width=0.003,
+                alpha=0.5,
+                headlength=4.5,
+                headwidth=2.5,
+            )
 
     lines = []
     lines += ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.3)
@@ -156,6 +158,7 @@ def execute(run: int):
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
+    y0 = np.array([problem.objective(_) for _ in x0])
     # if the number of clusters of `Y` is more than that of the reference set
     if len(np.unique(Y_label)) > len(ref):
         ref = np.vstack([r for r in ref.values()])
@@ -186,11 +189,14 @@ def execute(run: int):
     X, Y, _ = opt.run()
     # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
     fig_name = f"{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
+    data = np.concatenate([np.c_[[0] * len(x0), y0], np.c_[[max_iters] * len(x0), opt.hist_Y[-1]]], axis=0)
+    df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
+    df.to_csv(f"tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
     # return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
-    return np.array([igd_value, gd_value])
+    return np.array([igd_value, gd_value, opt.state.n_jac_evals])
 
 
 # get all run IDs
@@ -203,6 +209,6 @@ if 11 < 2:
         execute(i)
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
-    df = pd.DataFrame(np.array(data), columns=["IGD", "GD"])
+    df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "Jac_calls"])
     # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
     df.to_csv(f"{problem_name}-DpN-{emoa}-{gen}.csv", index=False)

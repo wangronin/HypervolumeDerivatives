@@ -493,12 +493,18 @@ class State:
         self.n_eq = n_eq
         self.n_ieq = n_ieq
         self.func = func
-        self.jac = jac
+        self._jac = jac
         self.h = h
         self.h_jac = h_jac
         self.g = g
         self.g_jac = g_jac
         self._constrained = self.g is not None or self.h is not None
+        self.n_jac_evals = 0
+
+    def jac(self, x: np.ndarray) -> np.ndarray:
+        """Jacobian of the objective function"""
+        self.n_jac_evals += 1
+        return self._jac(x)
 
     def update(self, X: np.ndarray, compute_gradient: bool = True):
         self.X = X
@@ -850,11 +856,11 @@ class DpN:
                         -1 * np.linalg.lstsq(DR, R_list[r].reshape(-1, 1), rcond=None)[0].ravel()
                     )
         # heuristic: prevent the step-length to be too large
-        X = newton_step[:, : self.dim_p]
-        t = np.max(self.xu - self.xl) / 4
-        idx = np.linalg.norm(X, axis=1) >= t
-        X[idx] /= np.linalg.norm(X[idx], axis=1).reshape(-1, 1) / t
-        newton_step[:, : self.dim_p] = X
+        # X = newton_step[:, : self.dim_p]
+        # t = np.max(self.xu - self.xl) / 4
+        # idx = np.linalg.norm(X, axis=1) >= t
+        # X[idx] /= np.linalg.norm(X[idx], axis=1).reshape(-1, 1) / t
+        # newton_step[:, : self.dim_p] = X
         return newton_step, R
 
     def _shift_reference_set(self):
@@ -887,7 +893,21 @@ class DpN:
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
             # NOTE: a larger initial shift is needed for ZDT6
-            v = 0.05 * n if self.iter_count > 0 else 0.06 * n  # the initial shift is a bit larger
+            if 11 < 2:
+                if self.iter_count == 0:
+                    m = self.active_indicator._medoids[k]
+                    a = n[1] / n[0]
+                    b = -1
+                    c = m[1] - (n[1] * m[0]) / n[0]
+                    idx = np.argmin(
+                        [abs(a * p[0] + b * p[1] + c) / np.sqrt(a**2 + b**2) for p in self._pareto_front]
+                    )
+                    eps = np.inner(self._pareto_front[idx] - m, n) * 1.03
+                    v = eps * n
+                else:
+                    v = 0.05 * n
+            else:
+                v = 0.05 * n if self.iter_count > 0 else 0.01 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids

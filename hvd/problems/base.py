@@ -75,6 +75,7 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
         return np.array(self._ieq_constraint_hessian(x))
 
 
+# TODO: unify this class with the `ConstrainedMOOAnalytical`
 class PymooProblemWithAD:
     def __init__(self, problem: Problem) -> None:
         self._problem = problem
@@ -84,15 +85,15 @@ class PymooProblemWithAD:
         self.n_ieq_constr = self._problem.n_ieq_constr + 2 * self.n_var
         self.xl = self._problem.xl
         self.xu = self._problem.xu
-        obj_func = partial(problem.__class__._evaluate, problem)
-        ieq_func = partial(PymooProblemWithAD.ieq_constraint, self)
-        self._objective_jacobian = jit(jacrev(obj_func))
-        self._objective_hessian = jit(hessian(obj_func))
+        self._obj_func = jit(partial(problem.__class__._evaluate, problem))
+        ieq_func = jit(partial(PymooProblemWithAD.ieq_constraint, self))
+        self._objective_jacobian = jit(jacrev(self._obj_func))
+        self._objective_hessian = jit(hessian(self._obj_func))
         self._ieq_jacobian = jit(jacfwd(ieq_func))
         self.CPU_time: int = 0  # measured in nanoseconds
 
     def objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._problem._evaluate(x)
+        return self._obj_func(x)
 
     def ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
         # box constraints are converted to inequality constraints

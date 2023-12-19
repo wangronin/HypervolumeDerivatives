@@ -6,38 +6,30 @@ sys.path.insert(0, "./")
 import numpy as np
 import pandas as pd
 
-from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3
+from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
 np.random.seed(42)
 
 N = 1e5
 res = []
-# for f in [Eq1DTLZ1(), Eq1DTLZ2(), Eq1DTLZ3()]:
-# for f in [DTLZ1(), DTLZ2(), DTLZ3(), DTLZ4()]:
-for f in [DTLZ1(n_objectives=6)]:
+for f in [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]:
+    f = PymooProblemWithAD(f)
     FE_time = []
     for i in range(int(N)):
         x = np.random.rand(11)
         t0 = time.process_time_ns()
         Y = f.objective(x)
-        # h = f.constraint(x)
         t1 = time.process_time_ns()
         FE_time.append((t1 - t0) / 1e9)
     res.append(["FE", type(f).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
-# print(res)
 
 N = 100
-# for f in [Eq1DTLZ1(), Eq1DTLZ2(), Eq1DTLZ3()]:
-# for f in [DTLZ1(), DTLZ2(), DTLZ3(), DTLZ4()]:
-for f in [DTLZ1(n_objectives=6)]:
+for f in [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]:
+    f = PymooProblemWithAD(f)
     FE_time = []
     func = f.objective
     jac = f.objective_jacobian
-    h = f.constraint
     hessian = f.objective_hessian
-    h_jac = f.constraint_jacobian
-    # h_hessian = f.constraint_hessian
-
     for i in range(int(N)):
         x = np.random.rand(11)
         # record the CPU time of function evaluations
@@ -55,7 +47,7 @@ for f in [DTLZ1(n_objectives=6)]:
     res.append(["AD", type(f).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
 
 df = pd.DataFrame(res, columns=["type", "problem", "mean_CPU", "median_CPU", "std_CPU"])
-df.to_csv("DTLZ_CPU_time.csv", index=False)
+df.to_csv("ZDT_CPU_time.csv", index=False)
 print(df)
 #  type   problem  mean_CPU  median_CPU   std_CPU
 # 0   FE  Eq1DTLZ1  0.000056    0.000054  0.000010

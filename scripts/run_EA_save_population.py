@@ -27,7 +27,8 @@ from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 # pop_to_numpy = lambda pop: np.array([np.r_[ind.F, ind.H, ind.G] for ind in pop])
-data_path = "/data1/wangh5"
+# data_path = "/data1/wangh5"
+data_path = "./"
 
 
 class ProblemWrapper(PymooElementwiseProblem):
@@ -113,13 +114,13 @@ def minimize(
     while algorithm.has_next():
         algorithm.next()
         pop = copy.deepcopy(algorithm.pop)
-        if algorithm.n_gen == k + 1 and (k <= 100 or k >= 1500):
+        if algorithm.n_gen == k + 1:
+            # and (k <= 100 or k >= 1500):
             df = pd.DataFrame(pop_to_numpy(pop), columns=columns)
             df.insert(0, "iteration", k)
             data.append(df)
             k += 1
     res = algorithm.result()
-
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
     data = pd.concat(data, axis=0)
@@ -160,39 +161,43 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 N = 30
 problems = [
-    CF1(),
-    CF2(),
-    CF3(),
-    CF4(),
-    CF5(),
-    CF6(),
-    CF7(),
-    CF8(),
-    CF9(),
-    CF10(),
+    # CF1(),
+    # CF2(),
+    # CF3(),
+    # CF4(),
+    # CF5(),
+    # CF6(),
+    # CF7(),
+    # CF8(),
+    # CF9(),
+    # CF10(),
     # ZDT1(),
     # ZDT2(),
     # ZDT3(),
+    ZDT1(),
+    ZDT2(),
+    ZDT3(),
     # ZDT4(),
+    ZDT6(),
     # ZDT6(),
-    DTLZ1(),
-    DTLZ2(),
-    DTLZ3(),
-    DTLZ4(),
-    DTLZ5(),
-    DTLZ6(),
-    DTLZ7(),
+    # DTLZ1(),
+    # DTLZ2(),
+    # DTLZ3(),
+    # DTLZ4(),
+    # DTLZ5(),
+    # DTLZ6(),
+    # DTLZ7(),
 ]
 
 idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
 problem = problems[idx]
 problem_name = problem.__class__.__name__
 problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
-termination = get_termination("n_gen", 2000)
+termination = get_termination("n_gen", 700)
 constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
 # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
-for algorithm_name in ["SMS-EMOA"]:
+for algorithm_name in ["NSGA-II"]:
     algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
     # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
     data = Parallel(n_jobs=N)(
