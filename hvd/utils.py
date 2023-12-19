@@ -86,7 +86,7 @@ def precondition_hessian(H: np.ndarray) -> np.ndarray:
         v = np.min(np.diag(H))
         tau = 0 if v > 0 else -v + beta
         I = np.eye(H.shape[0])
-        for _ in range(35):
+        for _ in range(45):
             try:
                 L = cholesky(H + tau * I, lower=True)
                 break

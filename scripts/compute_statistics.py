@@ -12,11 +12,11 @@ MOEAs = [
     # "NSGA-III",
 ]
 problems = [
-    # "ZDT1",
-    # "ZDT2",
-    # "ZDT3",
+    "ZDT1",
+    "ZDT2",
+    "ZDT3",
     "ZDT4",
-    # "ZDT6",
+    "ZDT6",
     # "DTLZ1",
     # "DTLZ2",
     # "DTLZ3",
@@ -35,7 +35,7 @@ for moea in MOEAs:
         pvalues.append(pvalue)
         stats.append([stats_func(x), stats_func(y)])
 
-reject, pvals_corrected, _, _ = multipletests(pvalues, alpha=0.05)
+reject, pvals_corrected, _, _ = multipletests(pvalues, alpha=0.05, method="fdr_bh")
 win, tie, loose = 0, 0, 0
 for k, (n, m) in enumerate(stats):
     x, y = n[0], m[0]
@@ -55,7 +55,8 @@ Method = np.repeat(MOEAs, len(problems)).reshape(-1, 1)
 Problem = np.tile(problems, len(MOEAs)).reshape(-1, 1)
 summary = ["+/$\\approx$/-", "", f"{win}/{tie}/{loose}", ""]
 data = pd.DataFrame(
-    np.vstack([np.hstack([Method, Problem, stats]), summary]), columns=["Method", "Problem", "Newton", "MOEA"]
+    np.vstack([np.hstack([Method, Problem, stats]), summary]),
+    columns=["Method", "Problem", "Newton (iter = 5)", "MOEA (iter = 300 + 5 \\times (4 + 10n)"],
 )
 print(data)
 caption = """Warmstarting the Newton method after 1\,510 iterations of the MOEA, we show the IGD values 

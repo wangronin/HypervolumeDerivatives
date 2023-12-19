@@ -855,12 +855,6 @@ class DpN:
                     newton_step[r, c] = (
                         -1 * np.linalg.lstsq(DR, R_list[r].reshape(-1, 1), rcond=None)[0].ravel()
                     )
-        # heuristic: prevent the step-length to be too large
-        # X = newton_step[:, : self.dim_p]
-        # t = np.max(self.xu - self.xl) / 4
-        # idx = np.linalg.norm(X, axis=1) >= t
-        # X[idx] /= np.linalg.norm(X[idx], axis=1).reshape(-1, 1) / t
-        # newton_step[:, : self.dim_p] = X
         return newton_step, R
 
     def _shift_reference_set(self):
@@ -892,22 +886,7 @@ class DpN:
         # shift the medoids
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
-            # NOTE: a larger initial shift is needed for ZDT6
-            if 11 < 2:
-                if self.iter_count == 0:
-                    m = self.active_indicator._medoids[k]
-                    a = n[1] / n[0]
-                    b = -1
-                    c = m[1] - (n[1] * m[0]) / n[0]
-                    idx = np.argmin(
-                        [abs(a * p[0] + b * p[1] + c) / np.sqrt(a**2 + b**2) for p in self._pareto_front]
-                    )
-                    eps = np.inner(self._pareto_front[idx] - m, n) * 1.03
-                    v = eps * n
-                else:
-                    v = 0.05 * n
-            else:
-                v = 0.05 * n if self.iter_count > 0 else 0.01 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.01 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
@@ -934,6 +913,7 @@ class DpN:
             self.active_indicator.re_match = False
             R_ = self._compute_R(state)[0][i]
             self.active_indicator.re_match = True
+            self.state.n_jac_evals = state.n_jac_evals
             return np.linalg.norm(R_)
 
         if max_step_size is not None:
