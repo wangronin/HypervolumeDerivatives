@@ -10,7 +10,7 @@ from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
 np.random.seed(42)
 
-N = 1e4
+N = 1e5
 res = []
 problems = [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]
 for problem in problems:
@@ -24,7 +24,7 @@ for problem in problems:
         FE_time.append((t1 - t0) / 1e9)
     res.append(["FE", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
 
-N = 1e4
+N = 1e5
 for problem in problems:
     f = PymooProblemWithAD(problem)
     FE_time = []
@@ -38,9 +38,9 @@ for problem in problems:
         # Y = func(x)  # `(N, dim_m)`
         # H = h(x)
         # Jacobians
-        YdX = jac(x)  # `(N, dim_m, dim_d)`
+        # YdX = jac(x)  # `(N, dim_m, dim_d)`
         # Hessians
-        # YdX2 = hessian(x)  # `(N, dim_m, dim_d, dim_d)`
+        YdX2 = hessian(x)  # `(N, dim_m, dim_d, dim_d)`
         # HdX = h_jac(x)
         # HdX2 = h_hessian(x)
         t1 = time.process_time_ns()
