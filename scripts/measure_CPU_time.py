@@ -10,10 +10,11 @@ from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
 np.random.seed(42)
 
-N = 1e5
+N = 1e4
 res = []
-for f in [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]:
-    f = PymooProblemWithAD(f)
+problems = [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]
+for problem in problems:
+    f = PymooProblemWithAD(problem)
     FE_time = []
     for i in range(int(N)):
         x = np.random.rand(11)
@@ -21,11 +22,11 @@ for f in [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]:
         Y = f.objective(x)
         t1 = time.process_time_ns()
         FE_time.append((t1 - t0) / 1e9)
-    res.append(["FE", type(f).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
+    res.append(["FE", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
 
-N = 100
-for f in [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]:
-    f = PymooProblemWithAD(f)
+N = 1e4
+for problem in problems:
+    f = PymooProblemWithAD(problem)
     FE_time = []
     func = f.objective
     jac = f.objective_jacobian
@@ -44,7 +45,7 @@ for f in [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]:
         # HdX2 = h_hessian(x)
         t1 = time.process_time_ns()
         FE_time.append((t1 - t0) / 1e9)
-    res.append(["AD", type(f).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
+    res.append(["AD", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
 
 df = pd.DataFrame(res, columns=["type", "problem", "mean_CPU", "median_CPU", "std_CPU"])
 df.to_csv("ZDT_CPU_time.csv", index=False)
