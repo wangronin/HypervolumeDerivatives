@@ -17,11 +17,8 @@ from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
-from scipy.io import savemat
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-
-# from hvd.hypervolume import hypervolume
 from hvd.problems.base import MOOAnalytical
 
 # ref_point = np.array([11, 11])
@@ -113,12 +110,13 @@ def minimize(
     gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
     # return np.array([igd_value, gd_value, hypervolume(res.F, ref_point)])
+    # return np.array([igd_value, gd_value, np.sum(np.bitwise_or(res.X < 0, res.X > 1))])
     return np.array([igd_value, gd_value])
 
 
-def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:
-    pop_size = 100 if n_objective == 2 else 300
-
+def get_algorithm(
+    n_objective: int, algorithm_name: str, pop_size: int, constrained: bool
+) -> GeneticAlgorithm:
     if algorithm_name == "NSGA-II":
         algorithm = NSGA2(pop_size=pop_size)
     elif algorithm_name == "NSGA-III":
@@ -146,22 +144,28 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
     return algorithm
 
 
-gen = 110
-n_gen = 1510 if gen == 110 else 100
-gen_func = lambda n_var, n_obj: 36 * n_obj + 10 * n_obj * n_var
+def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
+    return int(np.median(pd.read_csv(f"{path}/{problem_name}-DpN-{algorithm_name}-{gen}.csv").Jac_calls))
 
+
+n_iter_newton = 5
+gen = 300
+gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
 N = 30
 problem = sys.argv[1]
-for problem_name in [
-    problem,
-]:
+
+for problem_name in [problem]:
     print(problem_name)
     problem = get_problem(problem_name)
+    pop_size = 100 if problem.n_obj == 2 else 300
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
-    termination = get_termination("n_gen", n_gen + 3 * gen_func(problem.n_var, problem.n_obj))
 
     for algorithm_name in ("NSGA-II",):
-        algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
+        scale = int(
+            get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
+        )
+        termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
+        algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)

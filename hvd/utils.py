@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import numpy as np
+from jax import jit
 from scipy.linalg import cholesky, qr
 from sklearn.neighbors import LocalOutlierFactor
 
@@ -192,7 +193,7 @@ def timeit(func):
 
 
 # TODO: this is too slow, improve the algorithm
-# @jit(nopython=True, error_model="numpy", cache=True)
+@jit
 def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False, weakly_dominated: bool = True):
     """Find pareto front (undominated part) of the input performance data.
     Minimization is assumed

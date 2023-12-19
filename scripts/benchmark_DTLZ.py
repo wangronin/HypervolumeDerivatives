@@ -42,7 +42,7 @@ pareto_front = problem.get_pareto_front()
 
 gen = 100
 path = f"./DTLZ-gen{gen}/"
-emoa = "NSGA-II"
+emoa = "NSGA-III"
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -210,7 +210,7 @@ run_id = [
 if gen == 110 and problem_name == "DTLZ4":
     run_id = list(set(run_id) - set([14]))
 
-if 11 < 2:
+if 1 < 2:
     for i in run_id:
         execute(i)
 else:

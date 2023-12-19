@@ -68,10 +68,8 @@ opt = DpN(
     eta=eta,
     Y_label=Y_label,
 )
-opt.run()
+X, Y, _ = opt.run()
 medoids0 = np.vstack([m[0] for m in opt.history_medoids])
-X = opt._get_primal_dual(opt.X)[0]
-Y = opt.Y
 
 fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
 plt.subplots_adjust(right=0.93, left=0.05)
@@ -145,6 +143,6 @@ ax2.legend()
 plt.tight_layout()
 plt.savefig(f"{f.__class__.__name__}.pdf", dpi=1000)
 
-# data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
-# df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
-# df.to_csv("ZDT3_example.csv")
+data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
+df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
+df.to_csv("ZDT3_example.csv")
