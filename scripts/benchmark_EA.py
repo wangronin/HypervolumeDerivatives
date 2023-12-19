@@ -150,7 +150,7 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
 
 n_iter_newton = 5
 gen = 300
-gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
+gen_func = lambda n_var, scale: 4 * scale + 10
 N = 30
 problem = sys.argv[1]
 
