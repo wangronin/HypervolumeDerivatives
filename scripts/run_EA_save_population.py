@@ -137,7 +137,7 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
     elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
         if n_objective == 2:
-            ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
+            ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=pop_size - 1)
         elif n_objective == 3:
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=20)
         elif n_objective == 4:
