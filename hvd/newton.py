@@ -560,7 +560,7 @@ class State:
         if func is None:
             return None
         value = np.array([func(x) for x in primal_vars]).reshape(N, -1)
-        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-3 for v in value]
+        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-4 for v in value]
         active_indices = np.array(active_indices)
         if compute_gradient:
             H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
@@ -592,6 +592,7 @@ class DpN:
         g: Callable = None,
         g_jac: Callable = None,
         x0: np.ndarray = None,
+        y0: np.ndarray = None,
         max_iters: Union[int, str] = np.inf,
         xtol: float = 0,
         verbose: bool = True,
@@ -641,6 +642,7 @@ class DpN:
         self._initialize(x0)
         self._set_indicator(ref, func, jac, hessian)
         self._set_logging(verbose)
+        self.y0 = y0
         # parameters controlling stop criteria
         self.xtol = xtol
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
@@ -679,9 +681,9 @@ class DpN:
             X0 = np.asarray(X0)
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
             # NOTE: this part won't work on ZDT6
-            # X0 = np.clip(X0, self.xl, self.xu)
-            # X0 += 1e-10 * (X0 - self.xl == 0).astype(int)
-            # X0 -= 1e-10 * (X0 - self.xu == 0).astype(int)
+            X0 = np.clip(X0, self.xl, self.xu)
+            X0 = np.clip(X0 - self.xl, 1e-3, 1) + self.xl
+            X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -753,7 +755,10 @@ class DpN:
 
     def newton_iteration(self):
         # compute the initial indicator values. The first clustering and matching is executed here.
-        self._compute_indicator_value(self.state.Y)
+        if self.iter_count == 0:
+            self._compute_indicator_value(self.y0)
+        else:
+            self._compute_indicator_value(self.state.Y)
         # shift the reference set if needed
         self._shift_reference_set()
         # compute the Newton step
@@ -886,7 +891,7 @@ class DpN:
         # shift the medoids
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
-            v = 0.05 * n if self.iter_count > 0 else 0.01 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.02 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
