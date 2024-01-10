@@ -31,7 +31,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 5
+max_iters = 8
 n_jobs = 30
 # ref_point = np.array([11, 11])
 problem_name = sys.argv[1]
@@ -42,7 +42,7 @@ pareto_front = problem.get_pareto_front(1000)
 
 # path = "./Gen1510/"
 path = "ZDT_gen_300"
-emoa = "NSGA-II"
+emoa = "SMS-EMOA"
 gen = 300
 
 
@@ -177,6 +177,7 @@ def execute(run: int):
         g_jac=problem.ieq_jacobian,
         N=len(x0),
         x0=x0,
+        y0=y0,
         xl=problem.xl,
         xu=problem.xu,
         max_iters=max_iters,
@@ -204,6 +205,9 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
+if problem_name == "ZDT2" and emoa == "NSGA-III":
+    run_id = list(set(run_id) - set([24]))
+
 if 11 < 2:
     for i in run_id:
         execute(i)
@@ -211,4 +215,4 @@ else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
     df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "Jac_calls"])
     # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-    df.to_csv(f"{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
+    df.to_csv(f"results/{problem_name}-DpN-{emoa}-{gen}.csv", index=False)

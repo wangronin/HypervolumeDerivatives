@@ -161,24 +161,24 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 N = 30
 problems = [
-    # CF1(),
-    # CF2(),
-    # CF3(),
-    # CF4(),
-    # CF5(),
-    # CF6(),
-    # CF7(),
-    # CF8(),
-    # CF9(),
-    # CF10(),
+    CF1(),
+    CF2(),
+    CF3(),
+    CF4(),
+    CF5(),
+    CF6(),
+    CF7(),
+    CF8(),
+    CF9(),
+    CF10(),
     # ZDT1(),
     # ZDT2(),
     # ZDT3(),
-    ZDT1(),
-    ZDT2(),
-    ZDT3(),
-    ZDT4(),
-    ZDT6(),
+    # ZDT1(),
+    # ZDT2(),
+    # ZDT3(),
+    # ZDT4(),
+    # ZDT6(),
     # ZDT6(),
     # DTLZ1(),
     # DTLZ2(),
@@ -197,7 +197,7 @@ termination = get_termination("n_gen", 700)
 constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
 # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
-for algorithm_name in ["NSGA-III"]:
+for algorithm_name in ["NSGA-II"]:
     algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
     # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
     data = Parallel(n_jobs=N)(
