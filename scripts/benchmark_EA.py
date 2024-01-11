@@ -10,7 +10,6 @@ from pymoo.algorithms.base.genetic import GeneticAlgorithm
 from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
-from pymoo.algorithms.moo.sms import SMSEMOA
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
 from pymoo.core.problem import ElementwiseProblem, Problem
 from pymoo.problems import get_problem
@@ -20,6 +19,9 @@ from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.problems.base import MOOAnalytical
+
+# from pymoo.algorithms.moo.sms import SMSEMOA
+from hvd.sms_emoa import SMSEMOA
 
 # ref_point = np.array([11, 11])
 
@@ -122,9 +124,9 @@ def get_algorithm(
     elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
         if n_objective == 2:
-            ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=12)
+            ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=pop_size - 1)
         elif n_objective == 3:
-            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=20)
+            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=23)
         elif n_objective == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
         algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
@@ -150,7 +152,8 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
 
 n_iter_newton = 5
 gen = 300
-gen_func = lambda n_var, scale: 4 * scale + 10
+# gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
+gen_func = lambda n_var, scale: int(1.836 * scale + 3)
 N = 30
 problem = sys.argv[1]
 
@@ -160,19 +163,20 @@ for problem_name in [problem]:
     pop_size = 100 if problem.n_obj == 2 else 300
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
-    for algorithm_name in ("NSGA-II",):
+    for algorithm_name in ("SMS-EMOA",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
         termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
+        minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=False)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
         )
         # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
         df = pd.DataFrame(np.array(data), columns=["IGD", "GD"])
-        df.to_csv(f"{problem_name}-{algorithm_name}-{gen}.csv", index=False)
+        df.to_csv(f"results/{problem_name}-{algorithm_name}-{gen}.csv", index=False)
         # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
         # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)

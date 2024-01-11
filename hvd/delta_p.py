@@ -133,7 +133,7 @@ class ReferenceSet:
                 medoids = self._medoids[k]
                 assert len(medoids) == len(Y_)
             except:
-                medoids = self._cluster(X=self._ref[k], N=len(Y_))
+                medoids = self._cluster(X=self._ref[k], N=len(Y_), Y=Y_)
             medoids = self._match(medoids, Y_)
             self._medoids[k] = medoids
             out[Y_idx[k]] = medoids
@@ -164,12 +164,19 @@ class ReferenceSet:
             idx = linear_sum_assignment(cost)[1]
         return idx
 
-    def _cluster(self, X: np.ndarray, N: int) -> np.ndarray:
+    def _cluster(self, X: np.ndarray, N: int, Y) -> np.ndarray:
         # TODO: figure out why pam is really slow; it seems to be quite okay in Matlab
         # method = "pam" if len(X) <= 3000 else "alternate"
+        # always keep the extreme points in 2D cases
+        flag = Y.shape[1] == 2 and N > 2
+        if flag:
+            Y_ = Y[Y[:, 0].argsort()]
+            m0, m1 = Y_[0], Y_[-1]
+            N -= 2
         method = "alternate"
         km = KMedoids(n_clusters=N, method=method, random_state=0, init="k-medoids++").fit(X)
-        return X[km.medoid_indices_]
+        return np.vstack([m0, m1, X[km.medoid_indices_]]) if flag else X[km.medoid_indices_]
+        # return X[km.medoid_indices_]
 
     def _match(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
         cost = cdist(Y, X, metric="minkowski", p=self.p)
