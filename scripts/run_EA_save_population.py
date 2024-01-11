@@ -139,7 +139,7 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
         if n_objective == 2:
             ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=pop_size - 1)
         elif n_objective == 3:
-            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=20)
+            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=23)
         elif n_objective == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
         algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
@@ -197,7 +197,7 @@ termination = get_termination("n_gen", 700)
 constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
 # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
-for algorithm_name in ["NSGA-II"]:
+for algorithm_name in ["NSGA-III", "SMS-EMOA"]:
     algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
     # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
     data = Parallel(n_jobs=N)(
