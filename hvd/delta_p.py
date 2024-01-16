@@ -126,8 +126,8 @@ class ReferenceSet:
         idx = self._match_components(Y)
         out = np.zeros((N, self.dim))
         self._medoids_idx = np.empty(N, dtype=object)
-        for k in range(self.n_components):
-            Y_ = Y[idx[k]]
+        for k, v in enumerate(idx):
+            Y_ = Y[v]
             assert len(self._ref[k]) >= len(Y_)
             try:
                 medoids = self._medoids[k]
@@ -136,7 +136,7 @@ class ReferenceSet:
                 medoids = self._cluster(X=self._ref[k], N=len(Y_), Y=Y_)
             medoids = self._match(medoids, Y_)
             self._medoids[k] = medoids
-            out[Y_idx[k]] = medoids
+            out[Y_idx[v]] = medoids
             for i, j in enumerate(Y_idx[k]):
                 self._medoids_idx[j] = (k, i)
         return out

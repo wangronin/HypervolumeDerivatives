@@ -21,12 +21,13 @@ def hessian(fun):
 class MOOAnalytical:
     def __init__(self):
         obj_func = partial(self.__class__._objective, self)
+        self._obj_func = jit(obj_func)
         self._objective_jacobian = jit(jacrev(obj_func))
         self._objective_hessian = jit(hessian(obj_func))
         self.CPU_time: int = 0  # in nanoseconds
 
     def objective(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective(x))
+        return np.array(self._obj_func(x))
 
     @timeit
     def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
@@ -59,19 +60,19 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
         return np.array(self._ieq_constraint(x))
 
     @timeit
-    def eq_constraint_jacobian(self, x: np.ndarray) -> np.ndarray:
+    def eq_jacobian(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._eq_constraint_jacobian(x))
 
     @timeit
-    def eq_constraint_hessian(self, x: np.ndarray) -> np.ndarray:
+    def eq_hessian(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._eq_constraint_hessian(x))
 
     @timeit
-    def ieq_constraint_jacobian(self, x: np.ndarray) -> np.ndarray:
+    def ieq_jacobian(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._ieq_constraint_jacobian(x))
 
     @timeit
-    def ieq_constraint_hessian(self, x: np.ndarray) -> np.ndarray:
+    def ieq_hessian(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._ieq_constraint_hessian(x))
 
 
