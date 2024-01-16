@@ -18,6 +18,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
+from hvd.problems import CF1
 from hvd.problems.base import MOOAnalytical
 
 # from pymoo.algorithms.moo.sms import SMSEMOA
@@ -30,18 +31,23 @@ class ProblemWrapper(ElementwiseProblem):
     def __init__(self, problem: MOOAnalytical) -> None:
         self._problem = problem
         super().__init__(
-            n_var=problem.n_decision_vars,
-            n_obj=problem.n_objectives,
-            xl=problem.lower_bounds,
-            xu=problem.upper_bounds,
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
             n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
             n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
         )
 
+    def pareto_front(self, N: int) -> np.ndarray:
+        return self._problem.get_pareto_front(N)
+
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
         out["F"] = self._problem.objective(x)  # objective value
-        if hasattr(self._problem, "constraint"):
-            out["H"] = self._problem.constraint(x)  # equality constraint value
+        if self.n_eq_constr > 0:
+            out["H"] = self._problem.eq_constraint(x)  # equality constraint value
+        if self.n_ieq_constr > 0:
+            out["G"] = self._problem.ieq_constraint(x)  # inequality constraint value
 
 
 class ModifiedObjective(Problem):
@@ -150,26 +156,28 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
     return int(np.median(pd.read_csv(f"{path}/{problem_name}-DpN-{algorithm_name}-{gen}.csv").Jac_calls))
 
 
-n_iter_newton = 5
+n_iter_newton = 8
 gen = 300
-# gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
-gen_func = lambda n_var, scale: int(1.836 * scale + 3)
+gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
+# NOTE: 1.836 is obtained on ZDTs
+# gen_func = lambda n_var, scale: int(1.836 * scale + 3)
 N = 30
 problem = sys.argv[1]
 
 for problem_name in [problem]:
     print(problem_name)
-    problem = get_problem(problem_name)
+    # problem = get_problem(problem_name)
+    problem = ProblemWrapper(locals()[problem_name]())
     pop_size = 100 if problem.n_obj == 2 else 300
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
-    for algorithm_name in ("SMS-EMOA",):
+    for algorithm_name in ("NSGA-II",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
         termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
-        minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=False)
+        # minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
