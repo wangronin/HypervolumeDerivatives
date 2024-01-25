@@ -137,7 +137,7 @@ class ReferenceSet:
             medoids = self._match(medoids, Y_)
             self._medoids[k] = medoids
             out[Y_idx[v]] = medoids
-            for i, j in enumerate(Y_idx[k]):
+            for i, j in enumerate(Y_idx[v]):
                 self._medoids_idx[j] = (k, i)
         return out
 
