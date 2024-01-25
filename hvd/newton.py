@@ -12,7 +12,15 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import compute_chim, get_logger, merge_lists, non_domin_sort, precondition_hessian, set_bounds
+from .utils import (
+    compute_chim,
+    get_logger,
+    get_non_dominated,
+    merge_lists,
+    non_domin_sort,
+    precondition_hessian,
+    set_bounds,
+)
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -680,10 +688,10 @@ class DpN:
         if X0 is not None:
             X0 = np.asarray(X0)
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
-            # NOTE: this part won't work on ZDT6
+            # NOTE: this part won't work on ZDT6 and other CFs
             X0 = np.clip(X0, self.xl, self.xu)
-            X0 = np.clip(X0 - self.xl, 1e-3, 1) + self.xl
-            X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
+            # X0 = np.clip(X0 - self.xl, 1e-3, 1) + self.xl
+            # X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -756,6 +764,7 @@ class DpN:
     def newton_iteration(self):
         # compute the initial indicator values. The first clustering and matching is executed here.
         if self.iter_count == 0:
+            # TODO: use `self.state.Y` instead
             self._compute_indicator_value(self.y0)
         else:
             self._compute_indicator_value(self.state.Y)
@@ -846,8 +855,8 @@ class DpN:
             c = idx[r]
             dh = np.array([]) if dH is None else dH[r]
             Z = np.zeros((len(dh), len(dh)))
-            # pre-condition indicator's Hessian if needed, e.g., on ZDT6
-            # Hessian[r] = precondition_hessian(Hessian[r])
+            # pre-condition indicator's Hessian if needed, e.g., on ZDT6, CF1, CF7
+            Hessian[r] = precondition_hessian(Hessian[r])
             # derivative of the root-finding problem
             DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             R[r, c] = R_list[r]
@@ -876,6 +885,19 @@ class DpN:
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_p], axis=1), 0),
             )
         )
+        if 11 < 2:
+            import matplotlib.pyplot as plt
+
+            fig, ax = plt.subplots(1, 1, figsize=(10, 6.5))
+            x = self.active_indicator._medoids
+            y = self.state.Y
+            ax.plot(x[:, 0], x[:, 1], "r+")
+            ax.plot(y[:, 0], y[:, 1], "k+")
+            for i in range(len(x)):
+                ax.plot((x[i, 0], y[i, 0]), (x[i, 1], y[i, 1]), "k--")
+            plt.savefig(f"{self.iter_count}.pdf")
+            plt.close(fig)
+
         indices = np.nonzero(masks)[0]
         if len(indices) == 0:
             return
@@ -891,7 +913,8 @@ class DpN:
         # shift the medoids
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
-            v = 0.05 * n if self.iter_count > 0 else 0.02 * n  # the initial shift is a bit larger
+            # NOTE: initial shift CF1: 0.6, CF2/3: 0.2
+            v = 0.05 * n if self.iter_count > 0 else 0.6 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids

@@ -46,18 +46,20 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
         super().__init__()
         if self.n_eq_constr > 0:
             eq_func = partial(self.__class__._eq_constraint, self)
+            self._eq_func = jit(eq_func)
         if self.n_ieq_constr > 0:
             ieq_func = partial(self.__class__._ieq_constraint, self)
+            self._ieq_func = jit(ieq_func)
         self._eq_constraint_jacobian = jit(jacrev(eq_func)) if self.n_eq_constr > 0 else None
         self._eq_constraint_hessian = hessian(eq_func) if self.n_eq_constr > 0 else None
         self._ieq_constraint_jacobian = jit(jacrev(ieq_func)) if self.n_ieq_constr > 0 else None
         self._ieq_constraint_hessian = hessian(ieq_func) if self.n_ieq_constr > 0 else None
 
     def eq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq_constraint(x))
+        return np.array(self._eq_func(x))
 
     def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq_constraint(x))
+        return np.array(self._ieq_func(x))
 
     @timeit
     def eq_jacobian(self, x: np.ndarray) -> np.ndarray:

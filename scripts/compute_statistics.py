@@ -10,13 +10,21 @@ stats_func = lambda x: [np.median(x), np.quantile(x, 0.9) - np.quantile(x, 0.1)]
 MOEAs = [
     "NSGA-II",
     # "NSGA-III",
+    # "SMS-EMOA",
 ]
 problems = [
-    "ZDT1",
-    "ZDT2",
-    "ZDT3",
-    "ZDT4",
-    "ZDT6",
+    "CF1",
+    "CF2",
+    "CF3",
+    "CF4",
+    "CF5",
+    "CF6",
+    "CF7",
+    # "ZDT1",
+    # "ZDT2",
+    # "ZDT3",
+    # "ZDT4",
+    # "ZDT6",
     # "DTLZ1",
     # "DTLZ2",
     # "DTLZ3",
@@ -30,7 +38,11 @@ for moea in MOEAs:
     for problem in problems:
         data1 = pd.read_csv(f"./results/{problem}-DpN-{moea}-{gen}.csv")
         data2 = pd.read_csv(f"./results/{problem}-{moea}-{gen}.csv")
-        x, y = data1.IGD.values, data2.IGD.values
+        x, y = np.maximum(data1.GD.values, data1.IGD.values), np.maximum(data2.GD.values, data2.IGD.values)
+        # filtering out the outliers in DpN
+        q = np.quantile(x, q=(0.25, 0.75))
+        iqr = q[1] - q[0]
+        x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
         pvalue = mannwhitneyu(x=x, y=y, alternative="two-sided").pvalue
         pvalues.append(pvalue)
         stats.append([stats_func(x), stats_func(y)])
@@ -59,7 +71,7 @@ data = pd.DataFrame(
     columns=["Method", "Problem", "Newton (iter = 5)", "MOEA (iter = 300 + 5 \\times (4 + 10n)"],
 )
 print(data)
-caption = """Warmstarting the Newton method after 1\,510 iterations of the MOEA, we show the IGD values 
+caption = """Warmstarting the Newton method after 300 iterations of the MOEA, we show the IGD values 
 (median and 10\\% - 90\\% quantile range) of the final Pareto fronts, averaged over
 30 independent runs. The Newton method is executed for five iterations, and the corresponding MOEA terminates
 with 4\,870 iterations on ZDTs and 3\,700 on DTLZs. Mann–Whitney U test (with 5\\% significance level) is 

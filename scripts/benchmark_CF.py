@@ -12,7 +12,8 @@ from matplotlib import rcParams
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
-from hvd.problems import CF1, CF2, PymooProblemWithAD
+from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, PymooProblemWithAD
+from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -185,13 +186,15 @@ def execute(run: int):
         Y_label=Y_label,
     )
     X, Y, _ = opt.run()
+    # remove the dominated solution in Y
+    Y = get_non_dominated(Y)
     # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
     fig_name = f"{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
     plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
     data = np.concatenate([np.c_[[0] * len(x0), y0], np.c_[[max_iters] * len(x0), opt.hist_Y[-1]]], axis=0)
-    df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
+    df = pd.DataFrame(data, columns=["iteration"] + [f"f{i+1}" for i in range(problem.n_obj)])
     df.to_csv(f"tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
     # return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
@@ -202,13 +205,26 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
+if problem_name == "CF2" and emoa == "NSGA-II":
+    run_id = list(set(run_id) - set([15, 16]))
+if problem_name == "CF3" and emoa == "NSGA-II":
+    run_id = list(set(run_id) - set([8]))
+if problem_name == "CF5" and emoa == "NSGA-II":
+    run_id = list(set(run_id) - set([26, 8, 18]))
+if problem_name == "CF6" and emoa == "NSGA-II":
+    run_id = list(set(run_id) - set([30, 1, 11, 16, 20, 24, 27, 29]))
+if problem_name == "CF7" and emoa == "NSGA-II":
+    run_id = list(set(run_id) - set([18, 17, 24, 26, 27]))
 
-if 11 < 2:
+print(run_id)
+if 1 < 2:
+    data = []
     for i in run_id:
-        print(run_id)
-        execute(i)
+        print(i)
+        data.append(execute(i))
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
-    df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "Jac_calls"])
-    # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-    df.to_csv(f"results/{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
+
+df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "Jac_calls"])
+# df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
+df.to_csv(f"results/{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
