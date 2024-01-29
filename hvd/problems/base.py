@@ -38,6 +38,13 @@ class MOOAnalytical:
         return np.array(self._objective_hessian(x))
 
 
+def add_box_constraints(ieq_func, xl, xu):
+    def func(x):
+        return jnp.concatenate([ieq_func(x), xl - x, x - xu])
+
+    return func
+
+
 class ConstrainedMOOAnalytical(MOOAnalytical):
     n_eq_constr = 0
     n_ieq_constr = 0
@@ -48,7 +55,8 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
             eq_func = partial(self.__class__._eq_constraint, self)
             self._eq_func = jit(eq_func)
         if self.n_ieq_constr > 0:
-            ieq_func = partial(self.__class__._ieq_constraint, self)
+            ieq_func = add_box_constraints(partial(self.__class__._ieq_constraint, self), self.xl, self.xu)
+            self.n_ieq_constr += 2 * self.n_var
             self._ieq_func = jit(ieq_func)
         self._eq_constraint_jacobian = jit(jacrev(eq_func)) if self.n_eq_constr > 0 else None
         self._eq_constraint_hessian = hessian(eq_func) if self.n_eq_constr > 0 else None
