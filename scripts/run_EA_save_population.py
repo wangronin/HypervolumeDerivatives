@@ -49,9 +49,9 @@ class ProblemWrapper(PymooElementwiseProblem):
         x = np.atleast_2d(x)
         out["F"] = np.array([self._problem.objective(_) for _ in x])  # objective value
         if self._problem.n_eq_constr > 0:
-            out["H"] = self._problem.eq_constraint(x)  # equality constraint value
+            out["H"] = np.array([self._problem.eq_constraint(_) for _ in x])  # equality constraint value
         if self._problem.n_ieq_constr > 0:
-            out["G"] = self._problem.ieq_constraint(x)  # inequality constraint value
+            out["G"] = np.array([self._problem.ieq_constraint(_) for _ in x])  # inequality constraint value
 
 
 class ModifiedObjective(PymooProblem):
@@ -161,15 +161,15 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 N = 30
 problems = [
-    CF1(),
-    CF2(),
-    CF3(),
-    CF4(),
-    CF5(),
-    CF6(),
-    CF7(),
-    CF8(),
-    CF9(),
+    # CF1(),
+    # CF2(),
+    # CF3(),
+    # CF4(),
+    # CF5(),
+    # CF6(),
+    # CF7(),
+    # CF8(),
+    # CF9(),
     CF10(),
     # ZDT1(),
     # ZDT2(),
@@ -197,7 +197,7 @@ termination = get_termination("n_gen", 700)
 constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
 # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
-for algorithm_name in ["NSGA-III", "SMS-EMOA"]:
+for algorithm_name in ["NSGA-III"]:
     algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
     # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
     data = Parallel(n_jobs=N)(

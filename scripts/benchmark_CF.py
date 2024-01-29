@@ -1,6 +1,7 @@
 import sys
 
 sys.path.insert(0, "./")
+import random
 import re
 from glob import glob
 
@@ -35,7 +36,6 @@ n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
 f = locals()[problem_name]()
-# problem = PymooProblemWithAD(f)
 problem = f
 pareto_front = problem.get_pareto_front(1000)
 
@@ -133,9 +133,11 @@ def execute(run: int):
     eta = dict()
     # load the reference set
     for i in range(n_cluster):
-        ref[i] = pd.read_csv(
+        r = pd.read_csv(
             f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
         ).values
+        # downsample the reference; otherwise, the initial clustering takes forever
+        ref[i] = np.array(random.sample(r.tolist(), 500)) if len(r) >= 500 else r
         eta[i] = pd.read_csv(
             f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
         ).values.ravel()
@@ -157,8 +159,14 @@ def execute(run: int):
     y0 = y0[idx]
     Y_label = Y_label[idx]
     y0 = np.array([problem.objective(_) for _ in x0])
+
+    # TODO: this is an ad-hoc solution. Maybe fix this special case in the `ReferenceSet` class
+    # if the minimal number of points in the `ref` clusters is smaller than
+    # the maximal number of points in `y0` clusters, then we merge all clusters
+    min_point_ref_cluster = np.min([len(r) for r in ref.values()])
+    max_point_y_cluster = np.max(np.unique(Y_label, return_counts=True)[1])
     # if the number of clusters of `Y` is more than that of the reference set
-    if len(np.unique(Y_label)) > len(ref):
+    if (len(np.unique(Y_label)) > len(ref)) or (max_point_y_cluster > min_point_ref_cluster):
         ref = np.vstack([r for r in ref.values()])
         Y_label = np.zeros(len(y0))
         eta = None
@@ -215,9 +223,11 @@ if problem_name == "CF6" and emoa == "NSGA-II":
     run_id = list(set(run_id) - set([30, 1, 11, 16, 20, 24, 27, 29]))
 if problem_name == "CF7" and emoa == "NSGA-II":
     run_id = list(set(run_id) - set([18, 17, 24, 26, 27]))
+if problem_name == "CF5" and emoa == "NSGA-III":
+    run_id = list(set(run_id) - set([4]))
 
 print(run_id)
-if 1 < 2:
+if 11 < 2:
     data = []
     for i in run_id:
         print(i)

@@ -9,7 +9,7 @@ stats = []
 stats_func = lambda x: [np.median(x), np.quantile(x, 0.9) - np.quantile(x, 0.1)]
 MOEAs = [
     "NSGA-II",
-    # "NSGA-III",
+    "NSGA-III",
     # "SMS-EMOA",
 ]
 problems = [
@@ -20,6 +20,9 @@ problems = [
     "CF5",
     "CF6",
     "CF7",
+    "CF8",
+    "CF9",
+    # "CF10",
     # "ZDT1",
     # "ZDT2",
     # "ZDT3",
@@ -40,9 +43,9 @@ for moea in MOEAs:
         data2 = pd.read_csv(f"./results/{problem}-{moea}-{gen}.csv")
         x, y = np.maximum(data1.GD.values, data1.IGD.values), np.maximum(data2.GD.values, data2.IGD.values)
         # filtering out the outliers in DpN
-        q = np.quantile(x, q=(0.25, 0.75))
-        iqr = q[1] - q[0]
-        x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
+        # q = np.quantile(x, q=(0.25, 0.75))
+        # iqr = q[1] - q[0]
+        # x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
         pvalue = mannwhitneyu(x=x, y=y, alternative="two-sided").pvalue
         pvalues.append(pvalue)
         stats.append([stats_func(x), stats_func(y)])
