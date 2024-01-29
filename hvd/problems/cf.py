@@ -354,12 +354,14 @@ class CF8(UF8, ConstrainedMOOAnalytical):
         )
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
-        N = np.ceil(N / 5) * 5
+        N = int(np.ceil(N / 5) * 5)
         R = np.zeros((N, 3))
-        R[:, 2] = np.tile(np.sin(np.linspace(0, 1, num=N / 5 - 1) * pi / 2).reshape(-1, 1), (5, 1))
+        R[:, 2] = np.tile(np.sin(np.linspace(0, 1, num=int(N / 5)) * pi / 2), (5,))
         for i in range(0, 5):
-            R[i * N / 5 : (i + 1) * N / 5, 0] = np.sqrt(i / 4 * (1 - R[i * N / 5 : (i + 1) * N / 5, 2] ** 2))
-        R[:, 1] = np.sqrt(max(1 - R[:, 0] ** 2 - R[:, 2] ** 2, 0))
+            R[int(i * N / 5) : int((i + 1) * N / 5), 0] = np.sqrt(
+                i / 4 * (1 - R[int(i * N / 5) : int((i + 1) * N / 5), 2] ** 2)
+            )
+        R[:, 1] = np.sqrt(np.max(1 - R[:, 0] ** 2 - R[:, 2] ** 2, 0))
         return R
 
 
@@ -385,7 +387,7 @@ class CF9(CF8, ConstrainedMOOAnalytical):
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
         R = np.random.rand(N, 3)
-        R = R / np.tile(np.sqrt(np.sum(R**2, axis=1)), (1, 3))
+        R = R / np.sqrt(np.sum(R**2, axis=1)).reshape(-1, 1)
         idx = (1e-5 < R[:, 0]) & (R[:, 0] < np.sqrt((1 - R[:, 2] ** 2) / 4)) | (
             np.sqrt((1 - R[:, 2] ** 2) / 2) < R[:, 0]
         ) & (R[:, 0] < np.sqrt(3 * (1 - R[:, 2] ** 2) / 4))
@@ -432,7 +434,7 @@ class CF10(ConstrainedMOOAnalytical):
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
         R = np.random.rand(N, 3)
-        R = R / np.tile(np.sqrt(np.sum(R**2, axis=1)), (1, 3))
+        R = R / np.sqrt(np.sum(R**2, axis=1)).reshape(-1, 1)
         idx = (1e-5 < R[:, 0]) & (R[:, 0] < np.sqrt((1 - R[:, 2] ** 2) / 4)) | (
             np.sqrt((1 - R[:, 2] ** 2) / 2) < R[:, 0]
         ) & (R[:, 0] < np.sqrt(3 * (1 - R[:, 2] ** 2) / 4))

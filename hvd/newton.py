@@ -690,8 +690,8 @@ class DpN:
             # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
             # NOTE: this part won't work on ZDT6 and other CFs
             X0 = np.clip(X0, self.xl, self.xu)
-            # X0 = np.clip(X0 - self.xl, 1e-3, 1) + self.xl
-            # X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
+            # X0 = np.clip(X0 - self.xl, 1e-4, 1) + self.xl
+            # X0 = np.clip(X0 - self.xu, -1, -1e-4) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -772,8 +772,10 @@ class DpN:
         self._shift_reference_set()
         # compute the Newton step
         self.step, self.R = self._compute_netwon_step()
+        # prevent the decision points from moving out of the decision space. Needed for CF7 with NSGA-III
+        self.step, max_step_size = self._handle_box_constraint(self.step)
         # backtracking line search for the step size
-        self.step_size = self._backtracking_line_search(self.step, self.R)
+        self.step_size = self._backtracking_line_search(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size * self.step)
 
@@ -914,7 +916,7 @@ class DpN:
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
             # NOTE: initial shift CF1: 0.6, CF2/3: 0.2
-            v = 0.05 * n if self.iter_count > 0 else 0.6 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.2 * n  # the initial shift is a bit larger
             self.active_indicator.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
@@ -950,7 +952,7 @@ class DpN:
             step_size = np.ones((self.N, 1))
         for i in range(self.N):
             phi = [np.linalg.norm(R[i])]
-            s = [0, 1]
+            s = [0, step_size[i]]
             for _ in range(8):
                 phi.append(phi_func(s[-1], i))
                 # Armijo–Goldstein condition
@@ -973,3 +975,31 @@ class DpN:
                 # self.logger.info("backtracking line search failed")
             step_size[i] = s[-1]
         return step_size
+
+    def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        if 11 < 2:
+            return step, np.ones(len(step))
+
+        primal_vars = self.state.primal
+        step_primal = step[:, : self.dim_p]
+        normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
+        # calculate the maximal step-size
+        dist = np.c_[
+            np.abs(primal_vars - self.xl),
+            np.abs(self.xu - primal_vars),
+        ]
+        v = step_primal @ normal_vectors
+        s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
+        max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
+        # project Newton's direction onto the box boundary
+        idx = max_step_size == 0
+        if np.any(idx) > 0:
+            proj_dim = [np.argmin(_) for _ in s[idx]]
+            proj_axis = normal_vectors[:, proj_dim]
+            step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
+            step[:, : self.dim_p] = step_primal
+            # re-calculate the `max_step_size` for projected directions
+            v = step[:, : self.dim_p] @ normal_vectors
+            s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
+            max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
+        return step, max_step_size
