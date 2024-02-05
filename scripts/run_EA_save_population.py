@@ -170,7 +170,7 @@ problems = [
     # CF7(),
     # CF8(),
     # CF9(),
-    CF10(),
+    # CF10(),
     # ZDT1(),
     # ZDT2(),
     # ZDT3(),
@@ -181,23 +181,23 @@ problems = [
     # ZDT6(),
     # ZDT6(),
     # DTLZ1(),
-    # DTLZ2(),
-    # DTLZ3(),
-    # DTLZ4(),
-    # DTLZ5(),
-    # DTLZ6(),
-    # DTLZ7(),
+    DTLZ2(),
+    DTLZ3(),
+    DTLZ4(),
+    DTLZ5(),
+    DTLZ6(),
+    DTLZ7(),
 ]
 
 idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
 problem = problems[idx]
 problem_name = problem.__class__.__name__
 problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
-termination = get_termination("n_gen", 700)
+termination = get_termination("n_gen", 800)
 constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
 # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
-for algorithm_name in ["NSGA-III"]:
+for algorithm_name in ["NSGA-II", "NSGA-III"]:
     algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
     # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
     data = Parallel(n_jobs=N)(

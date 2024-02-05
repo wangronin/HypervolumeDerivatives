@@ -40,7 +40,7 @@ problem = f
 pareto_front = problem.get_pareto_front(1000)
 
 path = "CF_gen_300"
-emoa = "NSGA-II"
+emoa = "NSGA-III"
 gen = 300
 
 
@@ -158,7 +158,6 @@ def execute(run: int):
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
-    y0 = np.array([problem.objective(_) for _ in x0])
 
     # TODO: this is an ad-hoc solution. Maybe fix this special case in the `ReferenceSet` class
     # if the minimal number of points in the `ref` clusters is smaller than
@@ -183,7 +182,6 @@ def execute(run: int):
         g_jac=problem.ieq_jacobian,
         N=len(x0),
         x0=x0,
-        y0=y0,
         xl=problem.xl,
         xu=problem.xu,
         max_iters=max_iters,

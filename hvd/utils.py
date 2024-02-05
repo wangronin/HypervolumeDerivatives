@@ -43,6 +43,20 @@ __author__ = "Hao Wang"
 #     return step, max_step_size
 
 
+# if 11 < 2:
+#     import matplotlib.pyplot as plt
+
+#     fig, ax = plt.subplots(1, 1, figsize=(10, 6.5))
+#     x = self.active_indicator._medoids
+#     y = self.state.Y
+#     ax.plot(x[:, 0], x[:, 1], "r+")
+#     ax.plot(y[:, 0], y[:, 1], "k+")
+#     for i in range(len(x)):
+#         ax.plot((x[i, 0], y[i, 0]), (x[i, 1], y[i, 1]), "k--")
+#     plt.savefig(f"{self.iter_count}.pdf")
+#     plt.close(fig)
+
+
 def merge_lists(x, y):
     if x is None:
         return y

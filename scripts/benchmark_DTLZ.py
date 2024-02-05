@@ -15,6 +15,7 @@ from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
 from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, PymooProblemWithAD
+from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -33,16 +34,16 @@ np.random.seed(66)
 
 max_iters = 6
 n_jobs = 30
-ref_point = np.array([11, 11])
 problem_name = sys.argv[1]
 print(problem_name)
 f = locals()[problem_name]()
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front()
 
-gen = 100
-path = f"./DTLZ-gen{gen}/"
-emoa = "NSGA-III"
+gen = 300
+# path = f"./DTLZ-gen{gen}/"
+path = "./DTLZ_refs/"
+emoa = "NSGA-II"
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -164,12 +165,17 @@ def execute(run: int):
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
+
+    # TODO: this is an ad-hoc solution. Maybe fix this special case in the `ReferenceSet` class
+    # if the minimal number of points in the `ref` clusters is smaller than
+    # the maximal number of points in `y0` clusters, then we merge all clusters
+    min_point_ref_cluster = np.min([len(r) for r in ref.values()])
+    max_point_y_cluster = np.max(np.unique(Y_label, return_counts=True)[1])
     # if the number of clusters of `Y` is more than that of the reference set
-    if len(np.unique(Y_label)) > len(ref):
+    if (len(np.unique(Y_label)) > len(ref)) or (max_point_y_cluster > min_point_ref_cluster):
         ref = np.vstack([r for r in ref.values()])
         Y_label = np.zeros(len(y0))
         eta = None
-
     N = len(x0)
     opt = DpN(
         dim=problem.n_var,
@@ -182,6 +188,7 @@ def execute(run: int):
         g_jac=problem.ieq_jacobian,
         N=len(x0),
         x0=x0,
+        # y0=y0,
         xl=problem.xl,
         xu=problem.xu,
         max_iters=max_iters,
@@ -192,14 +199,16 @@ def execute(run: int):
         Y_label=Y_label,
     )
     X, Y, _ = opt.run()
-    data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
-    df = pd.DataFrame(data, columns=["iteration", "f1", "f2", "f3"])
-    df.to_csv(f"./tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
+    # remove the dominated solution in Y
+    Y = get_non_dominated(Y)
+    # data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
+    # df = pd.DataFrame(data, columns=["iteration", "f1", "f2", "f3"])
+    # df.to_csv(f"./tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
     # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
     # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
-    return np.array([igd_value, gd_value])
+    return np.array([igd_value, gd_value, opt.state.n_jac_evals])
 
 
 # get all run IDs
@@ -207,14 +216,14 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if gen == 110 and problem_name == "DTLZ4":
-    run_id = list(set(run_id) - set([14]))
-
-if 1 < 2:
+print(run_id)
+if 11 < 2:
+    data = []
     for i in run_id:
-        execute(i)
+        print(i)
+        data.append(execute(i))
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
-    # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-    df = pd.DataFrame(np.array(data), columns=["IGD", "GD"])
-    df.to_csv(f"{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
+
+df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "Jac_calls"])
+df.to_csv(f"results/{problem_name}-DpN-{emoa}-{gen}.csv", index=False)

@@ -28,6 +28,8 @@ from hvd.sms_emoa import SMSEMOA
 
 
 class ProblemWrapper(ElementwiseProblem):
+    """Wrap a `MOOAnalytical` problem into a problem in `Pymoo"""
+
     def __init__(self, problem: MOOAnalytical) -> None:
         self._problem = problem
         super().__init__(
@@ -44,10 +46,10 @@ class ProblemWrapper(ElementwiseProblem):
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
         out["F"] = self._problem.objective(x)  # objective value
-        if self.n_eq_constr > 0:
-            out["H"] = self._problem.eq_constraint(x)  # equality constraint value
-        if self.n_ieq_constr > 0:
-            out["G"] = self._problem.ieq_constraint(x)  # inequality constraint value
+        if self._problem.n_eq_constr > 0:
+            out["H"] = np.array([self._problem.eq_constraint(_) for _ in x])  # equality constraint value
+        if self._problem.n_ieq_constr > 0:
+            out["G"] = np.array([self._problem.ieq_constraint(_) for _ in x])  # inequality constraint value
 
 
 class ModifiedObjective(Problem):
@@ -107,18 +109,20 @@ def minimize(
 
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
-    if problem.n_obj == 3:
-        if problem_name not in ["DTLZ4", "DTLZ6", "DTLZ7"]:
+    if problem.name().startswith("DTLZ"):
+        if problem_name in ["DTLZ5", "DTLZ6", "DTLZ7"]:
+            pareto_front = problem.pareto_front()
+        else:
             ref_dirs = UniformReferenceDirectionFactory(3, n_partitions=30).do()
             pareto_front = problem.pareto_front(ref_dirs)
-        else:
-            pareto_front = problem.pareto_front()
     else:
         pareto_front = problem.pareto_front(1000)
-    gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
-    igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
-    # return np.array([igd_value, gd_value, hypervolume(res.F, ref_point)])
-    # return np.array([igd_value, gd_value, np.sum(np.bitwise_or(res.X < 0, res.X > 1))])
+    # TODO: ad-hoc solution for `res.F` being `None`. Figure out why..
+    if res.F is None:
+        igd_value, gd_value = np.nan, np.nan
+    else:
+        gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
+        igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
     return np.array([igd_value, gd_value])
 
 
@@ -156,8 +160,9 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
     return int(np.median(pd.read_csv(f"{path}/{problem_name}-DpN-{algorithm_name}-{gen}.csv").Jac_calls))
 
 
-n_iter_newton = 8
+n_iter_newton = 6
 gen = 300
+# NOTE: the following running budget is estimated with upper bounds of AD's theory
 # gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
 # NOTE: 1.836 is obtained on ZDTs
 gen_func = lambda n_var, scale: int(1.836 * scale + 3)
@@ -166,8 +171,8 @@ problem = sys.argv[1]
 
 for problem_name in [problem]:
     print(problem_name)
-    # problem = get_problem(problem_name)
-    problem = ProblemWrapper(locals()[problem_name]())
+    problem = get_problem(problem_name)
+    # problem = ProblemWrapper(locals()[problem_name]())
     pop_size = 100 if problem.n_obj == 2 else 300
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
@@ -183,7 +188,9 @@ for problem_name in [problem]:
             for i in range(N)
         )
         # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-        df = pd.DataFrame(np.array(data), columns=["IGD", "GD"])
+        data = np.array(data)
+        data = data[~np.any(np.isnan(data), axis=1)]
+        df = pd.DataFrame(data, columns=["IGD", "GD"])
         df.to_csv(f"results/{problem_name}-{algorithm_name}-{gen}.csv", index=False)
         # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
