@@ -22,7 +22,7 @@ problems = [
     "CF7",
     "CF8",
     "CF9",
-    # "CF10",
+    "CF10",
     # "ZDT1",
     # "ZDT2",
     # "ZDT3",

@@ -600,7 +600,6 @@ class DpN:
         g: Callable = None,
         g_jac: Callable = None,
         x0: np.ndarray = None,
-        y0: np.ndarray = None,
         max_iters: Union[int, str] = np.inf,
         xtol: float = 0,
         verbose: bool = True,
@@ -650,7 +649,6 @@ class DpN:
         self._initialize(x0)
         self._set_indicator(ref, func, jac, hessian)
         self._set_logging(verbose)
-        self.y0 = y0
         # parameters controlling stop criteria
         self.xtol = xtol
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
@@ -763,11 +761,7 @@ class DpN:
 
     def newton_iteration(self):
         # compute the initial indicator values. The first clustering and matching is executed here.
-        if self.iter_count == 0:
-            # TODO: use `self.state.Y` instead
-            self._compute_indicator_value(self.y0)
-        else:
-            self._compute_indicator_value(self.state.Y)
+        self._compute_indicator_value(self.state.Y)
         # shift the reference set if needed
         self._shift_reference_set()
         # compute the Newton step
@@ -887,19 +881,6 @@ class DpN:
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_p], axis=1), 0),
             )
         )
-        if 11 < 2:
-            import matplotlib.pyplot as plt
-
-            fig, ax = plt.subplots(1, 1, figsize=(10, 6.5))
-            x = self.active_indicator._medoids
-            y = self.state.Y
-            ax.plot(x[:, 0], x[:, 1], "r+")
-            ax.plot(y[:, 0], y[:, 1], "k+")
-            for i in range(len(x)):
-                ax.plot((x[i, 0], y[i, 0]), (x[i, 1], y[i, 1]), "k--")
-            plt.savefig(f"{self.iter_count}.pdf")
-            plt.close(fig)
-
         indices = np.nonzero(masks)[0]
         if len(indices) == 0:
             return
