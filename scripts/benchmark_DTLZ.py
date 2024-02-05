@@ -188,7 +188,6 @@ def execute(run: int):
         g_jac=problem.ieq_jacobian,
         N=len(x0),
         x0=x0,
-        # y0=y0,
         xl=problem.xl,
         xu=problem.xu,
         max_iters=max_iters,

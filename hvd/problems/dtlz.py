@@ -6,7 +6,9 @@ from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 from pymoo.util.remote import Remote
 
 # TODO: implement `_calc_pareto_set` for all problem here.
-eps = 1e-7
+
+# NOTE: `eps` is to cap the decision variables below for DTLZ6 since it is not differentiable at x = 0
+eps = 1e-30
 
 
 def get_ref_dirs(n_obj):

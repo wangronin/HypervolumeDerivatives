@@ -26,7 +26,7 @@ np.seterr(divide="ignore", invalid="ignore")
 
 __authors__ = ["Hao Wang"]
 
-# TODO: rewrite the code of `HVN`
+# TODO: rewrite the code of `HVN` with the `State` class
 
 
 class HVN:
