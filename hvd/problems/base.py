@@ -1,7 +1,7 @@
 import os
 from functools import partial
 
-# enable double-precision
+# enable double-precision of JAX
 os.environ["JAX_ENABLE_X64"] = "True"
 
 import jax.numpy as jnp
@@ -17,6 +17,12 @@ __author__ = ["Hao Wang"]
 def hessian(fun):
     return jit(jacfwd(jacrev(fun)))
 
+def add_boundry_constraints(ieq_func, xl, xu):
+
+    def func(x):
+        return jnp.concatenate([ieq_func(x), xl - x, x - xu]) if ieq_func is not None else jnp.concatenate([xl - x, x - xu])
+
+    return func
 
 class MOOAnalytical:
     def __init__(self):
@@ -38,53 +44,47 @@ class MOOAnalytical:
         return np.array(self._objective_hessian(x))
 
 
-def add_box_constraints(ieq_func, xl, xu):
-    def func(x):
-        return jnp.concatenate([ieq_func(x), xl - x, x - xu])
-
-    return func
-
-
 class ConstrainedMOOAnalytical(MOOAnalytical):
     n_eq_constr = 0
     n_ieq_constr = 0
 
-    def __init__(self):
+    def __init__(self, boundry_constraints: bool = False):
         super().__init__()
-        if self.n_eq_constr > 0:
-            eq_func = partial(self.__class__._eq_constraint, self)
-            self._eq_func = jit(eq_func)
+        self._eq = jit(partial(self.__class__._eq_constraint, self)) if self.n_eq_constr > 0 else None 
+        self._ieq = partial(self.__class__._ieq_constraint, self) if self.n_ieq_constr > 0 else None
 
-        if self.n_ieq_constr > 0:
-            ieq_func = add_box_constraints(partial(self.__class__._ieq_constraint, self), self.xl, self.xu)
+        if boundry_constraints:
+            self._ieq = add_boundry_constraints(self._ieq, self.xl, self.xu)
             self.n_ieq_constr += 2 * self.n_var
-            self._ieq_func = jit(ieq_func)
-        self._eq_constraint_jacobian = jit(jacrev(eq_func)) if self.n_eq_constr > 0 else None
-        self._eq_constraint_hessian = hessian(eq_func) if self.n_eq_constr > 0 else None
-        self._ieq_constraint_jacobian = jit(jacrev(ieq_func)) if self.n_ieq_constr > 0 else None
-        self._ieq_constraint_hessian = hessian(ieq_func) if self.n_ieq_constr > 0 else None
+        if self._ieq is not None:
+            self._ieq = jit(self._ieq)
+
+        self._eq_jacobian = jit(jacrev(self._eq)) if self._eq is not None else None
+        self._eq_hessian = hessian(self._eq) if self._eq is not None else None
+        self._ieq_jacobian = jit(jacrev(self._ieq)) if self._ieq is not None else None
+        self._ieq_hessian = hessian(self._ieq) if self._ieq is not None else None
 
     def eq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq_func(x))
+        return np.array(self._eq(x))
 
     def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq_func(x))
+        return np.array(self._ieq(x))
 
     @timeit
     def eq_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq_constraint_jacobian(x))
+        return np.array(self._eq_jacobian(x))
 
     @timeit
     def eq_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq_constraint_hessian(x))
+        return np.array(self._eq_hessian(x))
 
     @timeit
     def ieq_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq_constraint_jacobian(x))
+        return np.array(self._ieq_jacobian(x))
 
     @timeit
     def ieq_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq_constraint_hessian(x))
+        return np.array(self._ieq_hessian(x))
 
 
 # TODO: unify this class with the `ConstrainedMOOAnalytical`
@@ -209,7 +209,7 @@ class UF7(MOOAnalytical):
 
 
 class UF8(MOOAnalytical):
-    def __init__(self, n_var: int = 30) -> None:
+    def __init__(self, n_var: int = 30, **kwargs) -> None:
         self.n_obj = 3
         self.n_var = n_var
         self.xl = np.r_[0, 0, np.zeros(self.n_var - 2) - 2]
