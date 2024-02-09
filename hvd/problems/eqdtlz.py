@@ -31,8 +31,6 @@ class _DTLZ(MOOAnalytical):
 
 
 class DTLZ1(_DTLZ, ConstrainedMOOAnalytical):
-    n_eq_constr = 22
-
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         D = len(x)
@@ -42,110 +40,8 @@ class DTLZ1(_DTLZ, ConstrainedMOOAnalytical):
             0.5 * (1 + g) * jnp.cumprod(jnp.r_[[1], x[0 : M - 1]])[::-1] * jnp.r_[[1], 1 - x[0 : M - 1][::-1]]
         )
 
-    @timeit
-    def _eq_constraint(self, x: jnp.ndarray) -> float:
-        return jnp.vstack([self.xl - x, x - self.xu])
 
-
-class Eq1DTLZ1(DTLZ1, ConstrainedMOOAnalytical):
-    n_eq_constr = 1
-
-    @timeit
-    def _eq_constraint(self, x: jnp.ndarray) -> float:
-        M = self.n_obj
-        r = 0.4
-        xx = x[0 : M - 1] - 0.5
-        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
-
-
-class DTLZ2(_DTLZ, ConstrainedMOOAnalytical):
-    n_eq_constr = 22
-
-    @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        M = self.n_obj
-        g = jnp.sum((x[M - 1 :] - 0.5) ** 2)
-        return (
-            (1 + g)
-            * jnp.cumprod(jnp.r_[[1], jnp.cos(x[0 : M - 1] * jnp.pi / 2)])[::-1]
-            * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
-        )
-
-    @timeit
-    def _eq_constraint(self, x: jnp.ndarray) -> float:
-        return jnp.vstack([self.xl - x, x - self.xu])
-
-
-class Eq1DTLZ2(DTLZ2, ConstrainedMOOAnalytical):
-    n_eq_constr = 1
-
-    @timeit
-    def _eq_constraint(self, x: jnp.ndarray) -> float:
-        M = self.n_obj
-        r = 0.4
-        xx = x[0 : M - 1] - 0.5
-        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
-
-
-class DTLZ3(_DTLZ, ConstrainedMOOAnalytical):
-    n_eq_constr = 22
-
-    @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        M = self.n_obj
-        D = len(x)
-        g = 100 * (D - M + 1 + jnp.sum((x[M - 1 :] - 0.5) ** 2 - jnp.cos(20.0 * jnp.pi * (x[M - 1 :] - 0.5))))
-        return (
-            (1 + g)
-            * jnp.cumprod(jnp.r_[[1], jnp.cos(x[0 : M - 1] * jnp.pi / 2)])[::-1]
-            * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
-        )
-
-    @timeit
-    def _eq_constraint(self, x: jnp.ndarray) -> float:
-        return jnp.vstack([self.xl - x, x - self.xu])
-
-
-class Eq1DTLZ3(DTLZ3, ConstrainedMOOAnalytical):
-    n_eq_constr = 1
-
-    @timeit
-    def _eq_constraint(self, x: jnp.ndarray) -> float:
-        M = self.n_obj
-        r = 0.4
-        xx = x[0 : M - 1] - 0.5
-        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
-
-
-class DTLZ4(_DTLZ, ConstrainedMOOAnalytical):
-    n_eq_constr = 22
-
-    @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        M = self.n_obj
-        x_ = x[0 : M - 1] ** 100
-        g = jnp.sum((x[M - 1 :] - 0.5) ** 2)
-        return (
-            (1 + g)
-            * jnp.cumprod(jnp.r_[[1], jnp.cos(x_ * jnp.pi / 2)])[::-1]
-            * jnp.r_[[1], jnp.sin(x_[::-1] * jnp.pi / 2)]
-        )
-
-    @timeit
-    def _eq_constraint(self, x: jnp.ndarray) -> float:
-        return jnp.vstack([self.xl - x, x - self.xu])
-
-
-class Eq1DTLZ4(DTLZ4, ConstrainedMOOAnalytical):
-    @timeit
-    def _eq_constraint(self, x: jnp.ndarray) -> float:
-        M = self.n_obj
-        r = 0.4
-        xx = x[0 : M - 1] - 0.5
-        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
-
-
-class Eq1IDTLZ1(Eq1DTLZ1):
+class IDTLZ1(_DTLZ, ConstrainedMOOAnalytical):
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         D = len(x)
@@ -156,7 +52,20 @@ class Eq1IDTLZ1(Eq1DTLZ1):
         ]
 
 
-class Eq1IDTLZ2(Eq1DTLZ2):
+class DTLZ2(_DTLZ, ConstrainedMOOAnalytical):
+
+    @timeit
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+        M = self.n_obj
+        g = jnp.sum((x[M - 1 :] - 0.5) ** 2)
+        return (
+            (1 + g)
+            * jnp.cumprod(jnp.r_[[1], jnp.cos(x[0 : M - 1] * jnp.pi / 2)])[::-1]
+            * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
+        )
+
+
+class IDTLZ2(_DTLZ, ConstrainedMOOAnalytical):
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         M = self.n_obj
@@ -168,7 +77,20 @@ class Eq1IDTLZ2(Eq1DTLZ2):
         )
 
 
-class Eq1IDTLZ3(Eq1DTLZ3):
+class DTLZ3(_DTLZ, ConstrainedMOOAnalytical):
+    @timeit
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+        M = self.n_obj
+        D = len(x)
+        g = 100 * (D - M + 1 + jnp.sum((x[M - 1 :] - 0.5) ** 2 - jnp.cos(20.0 * jnp.pi * (x[M - 1 :] - 0.5))))
+        return (
+            (1 + g)
+            * jnp.cumprod(jnp.r_[[1], jnp.cos(x[0 : M - 1] * jnp.pi / 2)])[::-1]
+            * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
+        )
+
+
+class IDTLZ3(_DTLZ, ConstrainedMOOAnalytical):
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         M = self.n_obj
@@ -179,7 +101,20 @@ class Eq1IDTLZ3(Eq1DTLZ3):
         ] * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
 
 
-class Eq1IDTLZ4(Eq1DTLZ4):
+class DTLZ4(_DTLZ, ConstrainedMOOAnalytical):
+    @timeit
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+        M = self.n_obj
+        x_ = x[0 : M - 1] ** 100
+        g = jnp.sum((x[M - 1 :] - 0.5) ** 2)
+        return (
+            (1 + g)
+            * jnp.cumprod(jnp.r_[[1], jnp.cos(x_ * jnp.pi / 2)])[::-1]
+            * jnp.r_[[1], jnp.sin(x_[::-1] * jnp.pi / 2)]
+        )
+
+
+class IDTLZ4(_DTLZ, ConstrainedMOOAnalytical):
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         M = self.n_obj
@@ -188,3 +123,98 @@ class Eq1IDTLZ4(Eq1DTLZ4):
         return (1 + g) / 2 - (1 + g) * jnp.cumprod(jnp.r_[[1], jnp.cos(x_ * jnp.pi / 2)])[::-1] * jnp.r_[
             [1], jnp.sin(x_[::-1] * jnp.pi / 2)
         ]
+
+
+class Eq1DTLZ1(DTLZ1):
+    n_eq_constr = 1
+
+    @timeit
+    def _eq_constraint(self, x: jnp.ndarray) -> float:
+        M = self.n_obj
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
+
+
+class Eq1IDTLZ1(IDTLZ1):
+    n_eq_constr = 1
+
+    @timeit
+    def _eq_constraint(self, x: jnp.ndarray) -> float:
+        M = self.n_obj
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
+    
+
+class Eq1DTLZ2(DTLZ2):
+    n_eq_constr = 1
+
+    @timeit
+    def _eq_constraint(self, x: jnp.ndarray) -> float:
+        M = self.n_obj
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
+
+
+class Eq1IDTLZ2(IDTLZ2):
+    n_eq_constr = 1 
+
+    @timeit
+    def _eq_constraint(self, x: jnp.ndarray) -> float:
+        M = self.n_obj
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
+    
+
+class Eq1DTLZ3(DTLZ3):
+    n_eq_constr = 1
+
+    @timeit
+    def _eq_constraint(self, x: jnp.ndarray) -> float:
+        M = self.n_obj
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
+
+
+class Eq1IDTLZ3(IDTLZ3):
+    n_eq_constr = 1
+
+    @timeit
+    def _eq_constraint(self, x: jnp.ndarray) -> float:
+        M = self.n_obj
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
+
+
+class Eq1DTLZ4(DTLZ4):
+    n_eq_constr = 1
+
+    @timeit
+    def _eq_constraint(self, x: jnp.ndarray) -> float:
+        M = self.n_obj
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
+    
+
+class Eq1IDTLZ4(IDTLZ4):
+    n_eq_constr = 1
+    
+    @timeit
+    def _eq_constraint(self, x: jnp.ndarray) -> float:
+        M = self.n_obj
+        r = 0.4
+        xx = x[0 : M - 1] - 0.5
+        return jnp.abs(jnp.sum(xx**2) - r**2) - 1e-4
+
+
+
+
+
+
+

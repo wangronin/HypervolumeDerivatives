@@ -20,6 +20,13 @@ from hvd.problems import (
     CF8,
     CF9,
     CF10,
+    DTLZ1,
+    DTLZ2,
+    DTLZ3,
+    DTLZ4,
+    DTLZ5,
+    DTLZ6,
+    DTLZ7,
     ZDT1,
     ZDT2,
     ZDT3,
@@ -47,13 +54,15 @@ N = 1e5
 res = []
 data_FE = []
 # problems = [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]
-problems = [f"CF{k}" for k in range(1, 5)]
-# problems = [locals()[k] for k in problems]
-problems = [CF1(), CF2(), CF3(), CF4(), CF5()]
-problems_name = [type(p).__name__ for p in problems]
+# problems = [f"CF{k}" for k in range(1, 5)]
+problems_name = [f"DTLZ{k}" for k in range(1, 8)]
+dict_ = locals()
+problems = [dict_[k]() for k in problems_name]
+# problems = [CF1(), CF2(), CF3(), CF4(), CF5()]
+# problems_name = [type(p).__name__ for p in problems]
 for problem in problems:
-    # f = PymooProblemWithAD(problem)
-    f = problem
+    f = PymooProblemWithAD(problem)
+    # f = problem
     FE_time = []
     for i in range(int(N)):
         r = problem.xu - problem.xl
@@ -69,8 +78,8 @@ data_FE = np.vstack([np.repeat(problems_name, N), data_FE]).T
 N = 1e5
 data_AD = []
 for problem in problems:
-    # f = PymooProblemWithAD(problem)
-    f = problem
+    f = PymooProblemWithAD(problem)
+    # f = problem
     FE_time = []
     func = f.objective
     jac = f.objective_jacobian
@@ -92,6 +101,7 @@ for problem in problems:
         FE_time.append((t1 - t0) / 1000.0)
     data_AD += FE_time
     res.append(["AD", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
+
 data_AD = np.vstack([np.repeat(problems_name, N), data_AD]).T
 data = pd.DataFrame(
     np.c_[["FE"] * len(data_FE) + ["AD"] * len(data_AD), np.vstack([data_FE, data_AD])],

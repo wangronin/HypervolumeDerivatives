@@ -19,9 +19,10 @@ from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
-from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
+from hvd.problems import (CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10,
+                          IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4, Eq1IDTLZ1, Eq1IDTLZ2,
+                          Eq1IDTLZ3, Eq1IDTLZ4)
 from hvd.problems.base import MOOAnalytical
-
 # from pymoo.algorithms.moo.sms import SMSEMOA
 from hvd.sms_emoa import SMSEMOA
 
@@ -181,31 +182,42 @@ problems = [
     # ZDT6(),
     # ZDT6(),
     # DTLZ1(),
-    DTLZ2(),
-    DTLZ3(),
-    DTLZ4(),
-    DTLZ5(),
-    DTLZ6(),
-    DTLZ7(),
+    # DTLZ2(),
+    # DTLZ3(),
+    # DTLZ4(),
+    # DTLZ5(),
+    # DTLZ6(),
+    # DTLZ7(),
+    # Eq1IDTLZ1(),
+    # Eq1IDTLZ2(),
+    # Eq1IDTLZ3(),
+    # Eq1IDTLZ4(),
+    IDTLZ1(),
+    IDTLZ2(),
+    IDTLZ3(),
+    IDTLZ4(),
 ]
 
-idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
-problem = problems[idx]
-problem_name = problem.__class__.__name__
-problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
-termination = get_termination("n_gen", 800)
-constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
+# idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
+for problem in problems:
+# problem = problems[idx]
+    problem_name = problem.__class__.__name__
+    problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
+    termination = get_termination("n_gen", 800)
+    constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
-# for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
-for algorithm_name in ["NSGA-II", "NSGA-III"]:
-    algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
-    # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
-    data = Parallel(n_jobs=N)(
-        delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
-        for i in range(N)
-    )
-    data = pd.concat(data, axis=0)
-    # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
-    # save to Matlab's data format
-    mdic = {"data": data.values, "columns": data.columns.values}
-    savemat(f"{data_path}/{problem_name.upper()}_{algorithm_name}.mat", mdic)
+    # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
+    # for algorithm_name in ["NSGA-II", "NSGA-III"]:
+    for algorithm_name in ["NSGA-III"]:
+        algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
+        # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        data = Parallel(n_jobs=N)(
+            delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
+            for i in range(N)
+        )
+        data = pd.concat(data, axis=0)
+        # save to Matlab's data format
+        mdic = {"data": data.values, "columns": data.columns.values}
+        savemat(f"{data_path}/{problem_name.upper()}_{algorithm_name}.mat", mdic)
+        # save to CSV 
+        # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)

@@ -1,4 +1,8 @@
+import sys
+
 import numpy as np
+
+sys.path.insert(0, "./")
 
 from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4
 
@@ -10,7 +14,6 @@ def test_Eq1DTLZ1():
         np.isclose(f.objective(x), np.array([39.2583506542203, 363.3913996454754, 234.0513096302470]))
     )
     assert np.isclose(f.eq_constraint(x), 0.01943601)
-
 
 def test_Eq1DTLZ2():
     f = Eq1DTLZ2()

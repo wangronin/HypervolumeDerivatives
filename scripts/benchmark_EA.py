@@ -18,9 +18,9 @@ from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
+from hvd.problems import (CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10,
+                          Eq1IDTLZ1, Eq1IDTLZ2, Eq1IDTLZ3, Eq1IDTLZ4)
 from hvd.problems.base import MOOAnalytical
-
 # from pymoo.algorithms.moo.sms import SMSEMOA
 from hvd.sms_emoa import SMSEMOA
 
@@ -176,7 +176,7 @@ for problem_name in [problem]:
     pop_size = 100 if problem.n_obj == 2 else 300
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
-    for algorithm_name in ("NSGA-II",):
+    for algorithm_name in ("NSGA-III",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
