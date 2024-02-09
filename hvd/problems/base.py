@@ -54,8 +54,8 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
         if self.n_eq_constr > 0:
             eq_func = partial(self.__class__._eq_constraint, self)
             self._eq_func = jit(eq_func)
+
         if self.n_ieq_constr > 0:
-            # TODO: convert this operation to an argument of this class
             ieq_func = add_box_constraints(partial(self.__class__._ieq_constraint, self), self.xl, self.xu)
             self.n_ieq_constr += 2 * self.n_var
             self._ieq_func = jit(ieq_func)
