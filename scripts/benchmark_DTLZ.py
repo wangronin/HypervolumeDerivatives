@@ -14,7 +14,8 @@ from matplotlib import rcParams
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
-from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, PymooProblemWithAD
+from hvd.problems import (DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7,
+                          PymooProblemWithAD)
 from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
@@ -42,8 +43,8 @@ pareto_front = problem.get_pareto_front()
 
 gen = 300
 # path = f"./DTLZ-gen{gen}/"
-path = "./DTLZ_refs/"
-emoa = "NSGA-II"
+path = "./DTLZ_new/"
+emoa = "NSGA-III"
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -140,17 +141,22 @@ def execute(run: int):
                 f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
             ).values
         else:
-            r = pd.read_csv(
-                f"{path}/{problem_name}_{emoa}_run_{run}_ref_{i+1}_gen{gen}.csv", header=None
-            ).values
+            if n_cluster == 1:
+                ref_file = f"{path}/{problem_name}_{emoa}_run_{run}_ref_gen{gen}.csv"
+            else:
+                ref_file = f"{path}/{problem_name}_{emoa}_run_{run}_ref_{i+1}_gen{gen}.csv"
+            r = pd.read_csv(ref_file, header=None).values
         # downsample the reference; otherwise, initial clustering take too long
         ref[i] = np.array(random.sample(r.tolist(), 500)) if len(r) >= 500 else r
-        eta[i] = pd.read_csv(
-            f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
-        ).values.ravel()
+        try:
+            eta[i] = pd.read_csv(
+                f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
+            ).values.ravel()
+        except:
+            eta = None
 
     # sometimes the precomputed `eta` value can be `nan`
-    if np.any([np.any(np.isnan(_eta)) for _eta in eta.values()]):
+    if (eta is not None) and (np.any([np.any(np.isnan(_eta)) for _eta in eta.values()])):
         eta = None
 
     # the load the final population from an EMOA
@@ -215,7 +221,6 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-print(run_id)
 if 11 < 2:
     data = []
     for i in run_id:
