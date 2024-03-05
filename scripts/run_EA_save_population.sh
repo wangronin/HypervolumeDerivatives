@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=MOEA
-#SBATCH --array=0-9
+#SBATCH --job-name=MOEA/D
+#SBATCH --array=0-15
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=15

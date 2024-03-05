@@ -31,8 +31,8 @@ from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 # pop_to_numpy = lambda pop: np.array([np.r_[ind.F, ind.H, ind.G] for ind in pop])
-# data_path = "/data1/wangh5"
-data_path = "./"
+data_path = "/data1/wangh5"
+# data_path = "./"
 
 
 class ProblemWrapper(PymooElementwiseProblem):
@@ -183,11 +183,7 @@ problems = [
     ZDT1(),
     ZDT2(),
     ZDT3(),
-    ZDT1(),
-    ZDT2(),
-    ZDT3(),
     ZDT4(),
-    ZDT6(),
     ZDT6(),
     DTLZ1(),
     DTLZ2(),
@@ -207,9 +203,10 @@ problems = [
     # CONV42F()
 ]
 
-# idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
-for problem in problems:
-# problem = problems[idx]
+
+idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
+for problem in [problems[idx]]:
+# for problem in problems:
     problem_name = problem.__class__.__name__
     problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
     termination = get_termination("n_gen", 600)
