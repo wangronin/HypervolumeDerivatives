@@ -155,9 +155,9 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
         if n_objective == 2:
-            ref_dirs = get_reference_directions("uniform", 2, n_partitions=99)
+            ref_dirs = get_reference_directions("uniform", 2, n_partitions=50)
         elif n_objective == 3:
-            ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
+            ref_dirs = get_reference_directions("uniform", 3, n_partitions=16)
         algorithm = MOEAD(ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7)
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=pop_size)
