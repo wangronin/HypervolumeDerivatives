@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, "./")
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
@@ -11,7 +12,8 @@ from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
-from pymoo.core.problem import ElementwiseProblem, Problem
+from pymoo.core.problem import ElementwiseProblem as PymooElementwiseProblem
+from pymoo.core.problem import Problem
 from pymoo.problems import get_problem
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
@@ -19,16 +21,45 @@ from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.problems import (CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10,
-                          Eq1IDTLZ1, Eq1IDTLZ2, Eq1IDTLZ3, Eq1IDTLZ4)
+                          IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4, Eq1IDTLZ1, Eq1IDTLZ2,
+                          Eq1IDTLZ3, Eq1IDTLZ4)
 from hvd.problems.base import MOOAnalytical
 # from pymoo.algorithms.moo.sms import SMSEMOA
 from hvd.sms_emoa import SMSEMOA
 
 # ref_point = np.array([11, 11])
 
+pop_to_numpy = lambda pop: np.array([ind.F for ind in pop])
 
-class ProblemWrapper(ElementwiseProblem):
-    """Wrap a `MOOAnalytical` problem into a problem in `Pymoo"""
+def plot(nd, Y, pareto_front, fig_name):
+    fig = plt.figure(figsize=plt.figaspect(1 / 2.0))
+    plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
+    ax0 = fig.add_subplot(1, 2, 1, projection="3d")
+    ax0.set_box_aspect((1, 1, 1))
+    ax0.view_init(45, 45)
+    ax0.plot(nd[:, 0], nd[:, 1], nd[:, 2], "k+", ms=12, alpha=1)
+    ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.3)
+    ax0.set_title(f"{len(nd)} ND points")
+    ax0.set_xlabel(r"$f_1$")
+    ax0.set_ylabel(r"$f_2$")
+    ax0.set_ylabel(r"$f_3$")
+
+    ax1 = fig.add_subplot(1, 2, 2, projection="3d")
+    ax1.set_box_aspect((1, 1, 1))
+    ax1.view_init(45, 45)
+    ax1.plot(Y[:, 0], Y[:, 1], Y[:, 2], "k+", ms=12, alpha=1)
+    ax1.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.3)
+    ax1.set_title(f"all points")
+    ax1.set_xlabel(r"$f_1$")
+    ax1.set_ylabel(r"$f_2$")
+    ax1.set_ylabel(r"$f_3$")
+    plt.tight_layout()
+    plt.savefig(fig_name, dpi=1000)
+    plt.close(fig)
+
+
+class ProblemWrapper(PymooElementwiseProblem):
+    """Wrap of the problem I wrote into `Pymoo`'s problem"""
 
     def __init__(self, problem: MOOAnalytical) -> None:
         self._problem = problem
@@ -41,16 +72,16 @@ class ProblemWrapper(ElementwiseProblem):
             n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
         )
 
-    def pareto_front(self, N: int) -> np.ndarray:
-        return self._problem.get_pareto_front(N)
-
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
-        out["F"] = self._problem.objective(x)  # objective value
+        x = np.atleast_2d(x)
+        out["F"] = np.array([self._problem.objective(_) for _ in x])  # objective value
         if self._problem.n_eq_constr > 0:
             out["H"] = np.array([self._problem.eq_constraint(_) for _ in x])  # equality constraint value
         if self._problem.n_ieq_constr > 0:
             out["G"] = np.array([self._problem.ieq_constraint(_) for _ in x])  # inequality constraint value
 
+    def pareto_front(self, N: int = 1000):
+        return self._problem.get_pareto_front(N)
 
 class ModifiedObjective(Problem):
     """Modified objective function based on the following paper:
@@ -85,7 +116,7 @@ class ModifiedObjective(Problem):
 
 
 def minimize(
-    problem, algorithm, termination=None, copy_algorithm=True, copy_termination=True, run_id=None, **kwargs
+    problem, algorithm, algorithm_name, termination=None, copy_algorithm=True, copy_termination=True, run_id=None, **kwargs
 ):
     # create a copy of the algorithm object to ensure no side-effects
     if copy_algorithm:
@@ -106,7 +137,6 @@ def minimize(
     while algorithm.has_next():
         algorithm.next()
     res = algorithm.result()
-
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
     if problem.name().startswith("DTLZ"):
@@ -123,6 +153,10 @@ def minimize(
     else:
         gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
         igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
+
+    # Y = pop_to_numpy(res.pop)
+    # fig_name = f"./figure/{problem_name}_{algorithm_name}_run{run_id}_{gen}.pdf"
+    # plot(res.F, Y, pareto_front, fig_name)
     return np.array([igd_value, gd_value])
 
 
@@ -161,7 +195,7 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
 
 
 n_iter_newton = 6
-gen = 300
+gen = 800
 # NOTE: the following running budget is estimated with upper bounds of AD's theory
 # gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
 # NOTE: 1.836 is obtained on ZDTs
@@ -171,20 +205,21 @@ problem = sys.argv[1]
 
 for problem_name in [problem]:
     print(problem_name)
-    problem = get_problem(problem_name)
-    # problem = ProblemWrapper(locals()[problem_name]())
+    # problem = get_problem(problem_name)
+    problem = ProblemWrapper(locals()[problem_name]())
     pop_size = 100 if problem.n_obj == 2 else 300
     constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
 
-    for algorithm_name in ("NSGA-III",):
+    for algorithm_name in ("NSGA-II",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
-        termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
+        termination = get_termination("n_gen", gen)
+                                    #   + n_iter_newton * gen_func(problem.n_var, scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
-        # minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        # minimize(problem, algorithm, algorithm_name, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
-            delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
+            delayed(minimize)(problem, algorithm, algorithm_name, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
         )
         # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])

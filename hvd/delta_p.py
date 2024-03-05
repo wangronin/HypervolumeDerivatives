@@ -55,7 +55,7 @@ class GenerationalDistance:
         return np.mean(self.D[np.arange(len(Y)), self.indices] ** self.p) ** (1 / self.p)
 
     def compute_derivatives(
-        self, X: np.ndarray, Y: np.ndarray = None, compute_hessian: bool = True
+        self, X: np.ndarray, Y: np.ndarray = None, compute_hessian: bool = True, Jacobian: np.ndarray = None, **kwargs,
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """compute the derivatives of the generational distance^p
 
@@ -76,7 +76,12 @@ class GenerationalDistance:
             Y = np.array([self.func(x) for x in X])
 
         self._compute_indices(Y)
-        J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
+        # Jacobian of the objective function
+        if Jacobian is None:
+            J = np.array([self.jac(x) for x in X])  # (N, n_obj, dim)
+        else:
+            J = Jacobian
+        # J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
         diff = Y - self.ref[self.indices]  # (N, n_objective)
         diff_norm = np.sqrt(np.sum(diff**2, axis=1)).reshape(-1, 1)  # (N, 1)
         grad_ = np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
@@ -139,6 +144,7 @@ class ReferenceSet:
             out[Y_idx[v]] = medoids
             for i, j in enumerate(Y_idx[v]):
                 self._medoids_idx[j] = (k, i)
+        # TODO: make `out` a property
         return out
 
     def set_medoids(self, medroid: np.ndarray, k: int):
@@ -249,6 +255,7 @@ class InvertedGenerationalDistance:
         Y_ = Y
         Y_idx = None
         # if the reference set is clustered, then also try to cluster the approximation set
+        # TODO: implement clustering of `Y`
         if Y_label is not None:
             n_cluster = len(np.unique(Y_label))
             Y_idx = [np.nonzero(Y_label == i)[0] for i in range(n_cluster)]

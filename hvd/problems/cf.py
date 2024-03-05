@@ -365,7 +365,6 @@ class CF8(UF8, ConstrainedMOOAnalytical):
 
 class CF9(CF8, ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
-        self.n_var = n_var
         super().__init__(n_var, boundry_constraints)
         self.xl = np.r_[0, 0, np.zeros(self.n_var - 2) - 2]
         self.xu = np.r_[1, 1, np.zeros(self.n_var - 2) + 2]

@@ -22,9 +22,12 @@ from scipy.io import savemat
 from hvd.problems import (CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10,
                           IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4, Eq1IDTLZ1, Eq1IDTLZ2,
                           Eq1IDTLZ3, Eq1IDTLZ4)
-from hvd.problems.base import MOOAnalytical
-# from pymoo.algorithms.moo.sms import SMSEMOA
+from hvd.problems.base import CONV42F, MOOAnalytical
+# NOTE: this is a slightly faster implementation of SMS-EMOA
 from hvd.sms_emoa import SMSEMOA
+
+# from pymoo.algorithms.moo.sms import SMSEMOA
+
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 # pop_to_numpy = lambda pop: np.array([np.r_[ind.F, ind.H, ind.G] for ind in pop])
@@ -49,9 +52,9 @@ class ProblemWrapper(PymooElementwiseProblem):
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
         x = np.atleast_2d(x)
         out["F"] = np.array([self._problem.objective(_) for _ in x])  # objective value
-        if self._problem.n_eq_constr > 0:
+        if hasattr(self._problem, "n_eq_constr") and self._problem.n_eq_constr > 0:
             out["H"] = np.array([self._problem.eq_constraint(_) for _ in x])  # equality constraint value
-        if self._problem.n_ieq_constr > 0:
+        if hasattr(self._problem, "n_ieq_constr") and self._problem.n_ieq_constr > 0:
             out["G"] = np.array([self._problem.ieq_constraint(_) for _ in x])  # inequality constraint value
 
 
@@ -131,7 +134,12 @@ def minimize(
 
 
 def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:
-    pop_size = 100 if n_objective == 2 else 300
+    if n_objective == 2:
+        pop_size = 100
+    elif n_objective == 3:
+        pop_size = 300
+    elif n_objective == 4:
+        pop_size = 600
 
     if algorithm_name == "NSGA-II":
         algorithm = NSGA2(pop_size=pop_size)
@@ -142,7 +150,7 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
         elif n_objective == 3:
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=23)
         elif n_objective == 4:
-            ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
+            ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=13)
         algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
@@ -172,22 +180,22 @@ problems = [
     # CF8(),
     # CF9(),
     # CF10(),
-    # ZDT1(),
-    # ZDT2(),
-    # ZDT3(),
-    # ZDT1(),
-    # ZDT2(),
-    # ZDT3(),
-    # ZDT4(),
-    # ZDT6(),
-    # ZDT6(),
-    # DTLZ1(),
-    # DTLZ2(),
-    # DTLZ3(),
-    # DTLZ4(),
-    # DTLZ5(),
-    # DTLZ6(),
-    # DTLZ7(),
+    ZDT1(),
+    ZDT2(),
+    ZDT3(),
+    ZDT1(),
+    ZDT2(),
+    ZDT3(),
+    ZDT4(),
+    ZDT6(),
+    ZDT6(),
+    DTLZ1(),
+    DTLZ2(),
+    DTLZ3(),
+    DTLZ4(),
+    DTLZ5(),
+    DTLZ6(),
+    DTLZ7(),
     # Eq1IDTLZ1(),
     # Eq1IDTLZ2(),
     # Eq1IDTLZ3(),
@@ -196,6 +204,7 @@ problems = [
     IDTLZ2(),
     IDTLZ3(),
     IDTLZ4(),
+    # CONV42F()
 ]
 
 # idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
@@ -203,12 +212,12 @@ for problem in problems:
 # problem = problems[idx]
     problem_name = problem.__class__.__name__
     problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
-    termination = get_termination("n_gen", 800)
-    constrained = problem.n_eq_constr > 0 or problem.n_ieq_constr > 0
+    termination = get_termination("n_gen", 600)
+    constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0)
 
     # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
     # for algorithm_name in ["NSGA-II", "NSGA-III"]:
-    for algorithm_name in ["NSGA-III"]:
+    for algorithm_name in ["MOEAD"]:
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
         # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(

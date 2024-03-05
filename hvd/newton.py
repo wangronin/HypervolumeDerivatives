@@ -12,15 +12,8 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import (
-    compute_chim,
-    get_logger,
-    get_non_dominated,
-    merge_lists,
-    non_domin_sort,
-    precondition_hessian,
-    set_bounds,
-)
+from .utils import (compute_chim, get_logger, get_non_dominated, merge_lists,
+                    non_domin_sort, precondition_hessian, set_bounds)
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -822,7 +815,7 @@ class DpN:
         primal_vars, dual_vars = state.primal, state.dual
         if grad is None:
             grad = self.active_indicator.compute_derivatives(
-                primal_vars, state.Y, self.Y_label, compute_hessian=False, Jacobian=state.J
+                X=primal_vars, Y=state.Y, Y_label=self.Y_label, compute_hessian=False, Jacobian=state.J
             )
         R = grad  # the unconstrained case
         dH, idx = None, None
@@ -839,7 +832,7 @@ class DpN:
         R = np.zeros((self.N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
         grad, Hessian = self.active_indicator.compute_derivatives(
-            primal_vars, self.state.Y, self.Y_label, Jacobian=self.state.J
+            X=primal_vars, Y=self.state.Y, Jacobian=self.state.J, Y_label=self.Y_label, 
         )
         # the root-finding problem and the gradient of the active constraints
         R_list, dH, active_indices = self._compute_R(self.state, grad=grad)
@@ -872,7 +865,7 @@ class DpN:
         1. always shift the first reference set (`self.iter_count == 0`); Otherwise, weird matching can happen
         2. if at least one approximation point is close to its matched target and the Newton step is not zero.
         """
-        distance = np.linalg.norm(self.state.Y - self.active_indicator._medoids, axis=1)
+        distance = np.linalg.norm(self.state.Y - self._igd._medoids, axis=1)
         masks = (
             np.array([True] * self.N)
             if self.iter_count == 0
@@ -897,15 +890,17 @@ class DpN:
         for i, k in enumerate(indices):
             n = self._eta[self.Y_label[k]]
             # NOTE: initial shift CF1: 0.6, CF2/3: 0.2
+            # DTLZ4: 0.08 seems to work a bit better
+            # TODO: create a configuration class to set those hyperparameter of this method, e.g., shift amount
             v = 0.05 * n if self.iter_count > 0 else 0.2 * n  # the initial shift is a bit larger
-            self.active_indicator.shift_medoids(v, k)
+            self._igd.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
-            self.history_medoids = [[m.copy()] for m in self.active_indicator._medoids]
+            self.history_medoids = [[m.copy()] for m in self._igd._medoids]
         else:
             # log the updated medoids
             for i, k in enumerate(indices):
-                self.history_medoids[k].append(self.active_indicator._medoids[indices][i])
+                self.history_medoids[k].append(self._igd._medoids[indices][i])
         self.logger.info(f"{len(indices)} target points are shifted")
 
     def _backtracking_line_search(

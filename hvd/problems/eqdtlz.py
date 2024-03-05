@@ -4,15 +4,16 @@ import numpy as np
 from ..utils import timeit
 from .base import ConstrainedMOOAnalytical, MOOAnalytical
 
+# TODO: unify the DTLZ classes here with the ones in `dtlz.py`
 
 class _DTLZ(MOOAnalytical):
-    def __init__(self, n_obj: int = 3, n_var: int = 11):
+    def __init__(self, n_obj: int = 3, n_var: int = 11, boundry_constraints: bool = False):
         self.n_obj = n_obj
         # the default decision space of 11-dimensional
         self.n_var = n_var if n_var is not None else self.n_obj + 8
         self.xl = np.zeros(self.n_var)
         self.xu = np.ones(self.n_var)
-        super().__init__()
+        super().__init__(boundry_constraints=boundry_constraints)
 
     def get_pareto_set(self, N: int = 1000, kind="uniform") -> np.ndarray:
         M = self.n_obj
@@ -124,7 +125,7 @@ class IDTLZ4(_DTLZ, ConstrainedMOOAnalytical):
             [1], jnp.sin(x_[::-1] * jnp.pi / 2)
         ]
 
-
+# TODO: somehow simplify the way of defining the following classes since the constraints are the same
 class Eq1DTLZ1(DTLZ1):
     n_eq_constr = 1
 
