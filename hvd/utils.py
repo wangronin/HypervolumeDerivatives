@@ -14,49 +14,6 @@ from sklearn.neighbors import LocalOutlierFactor
 __author__ = "Hao Wang"
 
 
-# def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-#     if 1 < 2:
-#         return step, np.ones(len(step))
-
-#     primal_vars = self.state.primal
-#     step_primal = step[:, : self.dim_p]
-#     normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
-#     # calculate the maximal step-size
-#     dist = np.c_[
-#         np.abs(primal_vars - self.xl),
-#         np.abs(self.xu - primal_vars),
-#     ]
-#     v = step_primal @ normal_vectors
-#     s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-#     max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
-#     # project Newton's direction onto the box boundary
-#     idx = max_step_size == 0
-#     if np.any(idx) > 0:
-#         proj_dim = [np.argmin(_) for _ in s[idx]]
-#         proj_axis = normal_vectors[:, proj_dim]
-#         step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
-#         step[:, : self.dim_p] = step_primal
-#         # re-calculate the `max_step_size` for projected directions
-#         v = step[:, : self.dim_p] @ normal_vectors
-#         s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-#         max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
-#     return step, max_step_size
-
-
-# if 11 < 2:
-#     import matplotlib.pyplot as plt
-
-#     fig, ax = plt.subplots(1, 1, figsize=(10, 6.5))
-#     x = self.active_indicator._medoids
-#     y = self.state.Y
-#     ax.plot(x[:, 0], x[:, 1], "r+")
-#     ax.plot(y[:, 0], y[:, 1], "k+")
-#     for i in range(len(x)):
-#         ax.plot((x[i, 0], y[i, 0]), (x[i, 1], y[i, 1]), "k--")
-#     plt.savefig(f"{self.iter_count}.pdf")
-#     plt.close(fig)
-
-
 def merge_lists(x, y):
     if x is None:
         return y

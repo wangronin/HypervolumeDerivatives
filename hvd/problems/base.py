@@ -4,6 +4,7 @@ from functools import partial
 # enable double-precision of JAX
 os.environ["JAX_ENABLE_X64"] = "True"
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import jacfwd, jacrev, jit
@@ -26,10 +27,9 @@ def add_boundry_constraints(ieq_func, xl, xu):
 
 class MOOAnalytical:
     def __init__(self):
-        obj_func = partial(self.__class__._objective, self)
-        self._obj_func = jit(obj_func)
-        self._objective_jacobian = jit(jacrev(obj_func))
-        self._objective_hessian = jit(hessian(obj_func))
+        self._obj_func = jit(partial(self.__class__._objective, self))
+        self._objective_jacobian = jit(jacrev(self._obj_func))
+        self._objective_hessian = jit(hessian(self._obj_func))
         self.CPU_time: int = 0  # in nanoseconds
 
     def objective(self, x: np.ndarray) -> np.ndarray:
@@ -154,6 +154,11 @@ class CONV3(MOOAnalytical):
 
 
 class CONV4(MOOAnalytical):
+    pass
+
+
+class CONV42F(MOOAnalytical):
+    """Convex Problem 4 with 2 disconnected Pareto fronts"""
     def __init__(self):
         self.n_obj = 4
         self.n_var = 4
@@ -168,14 +173,14 @@ class CONV4(MOOAnalytical):
         fa4 = jnp.array([2, 2, 2, 0])
         fa1 = jnp.array([0, 2, 2, 2])
         deltay = fa4 - fa1
-
-        if jnp.all(x < 0):
-            z = x + deltaa
-            y = jnp.array([jnp.sum((z - a[i]) ** 2) - 1.1 * deltay[i] for i in range(4)])
-        else:
-            y = jnp.array([jnp.sum((x - a[i]) ** 2) for i in range(4)])
+        z = x + deltaa
+        y = jax.lax.select(jnp.all(x < 0), jnp.array([jnp.sum((z - a[i]) ** 2) - 1.1 * deltay[i] for i in range(4)]), jnp.array([jnp.sum((x - a[i]) ** 2) for i in range(4)]))
+        # if jnp.all(x < 0):
+        #     z = x + deltaa
+        #     y = jnp.array([jnp.sum((z - a[i]) ** 2) - 1.1 * deltay[i] for i in range(4)])
+        # else:
+        #     y = jnp.array([jnp.sum((x - a[i]) ** 2) for i in range(4)])
         return y
-
 
 class UF7(MOOAnalytical):
     def __init__(self, n_var: int = 30) -> None:
