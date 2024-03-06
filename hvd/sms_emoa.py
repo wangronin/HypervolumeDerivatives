@@ -50,7 +50,7 @@ def hvc_monte_carlo(dom, V, n_dom=None, k=1):
 
 class ApproximateMonteCarloHypervolume(DynamicHypervolume):
 
-    def __init__(self, ref_point, n_samples=5000, n_exclusive=1, **kwargs) -> None:
+    def __init__(self, ref_point, n_samples=2000, n_exclusive=1, **kwargs) -> None:
         self.n_samples = n_samples
         self.n_exclusive = n_exclusive
 
