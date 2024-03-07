@@ -27,8 +27,8 @@ from hvd.problems.base import CONV42F, MOOAnalytical
 from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
-data_path = "/data1/wangh5"
-# data_path = "./"
+# data_path = "/data1/wangh5"
+data_path = "./"
 
 
 class ProblemWrapper(PymooElementwiseProblem):
@@ -150,9 +150,9 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
         if n_objective == 2:
-            ref_dirs = get_reference_directions("uniform", 2, n_partitions=30)
+            ref_dirs = get_reference_directions("uniform", 2, n_partitions=99)
         elif n_objective == 3:
-            ref_dirs = get_reference_directions("uniform", 3, n_partitions=12)
+            ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
         algorithm = MOEAD(ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7)
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=pop_size)
@@ -165,21 +165,21 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 N = 30
 problems = [
-    CF1(),
-    CF2(),
-    CF3(),
-    CF4(),
-    CF5(),
-    CF6(),
-    CF7(),
-    CF8(),
-    CF9(),
-    CF10(),
-    # ZDT1(),
-    # ZDT2(),
-    # ZDT3(),
-    # ZDT4(),
-    # ZDT6(),
+    # CF1(),
+    # CF2(),
+    # CF3(),
+    # CF4(),
+    # CF5(),
+    # CF6(),
+    # CF7(),
+    # CF8(),
+    # CF9(),
+    # CF10(),
+    ZDT1(),
+    ZDT2(),
+    ZDT3(),
+    ZDT4(),
+    ZDT6(),
     DTLZ1(),
     DTLZ2(),
     DTLZ3(),
@@ -209,7 +209,7 @@ for problem in problems:
 
     # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
     # for algorithm_name in ["NSGA-II", "NSGA-III"]:
-    for algorithm_name in ["SMS-EMOA"]:
+    for algorithm_name in ["MOEAD"]:
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
         # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
