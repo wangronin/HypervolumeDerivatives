@@ -43,15 +43,22 @@ class DTLZ1(_DTLZ, ConstrainedMOOAnalytical):
 
 
 class IDTLZ1(_DTLZ, ConstrainedMOOAnalytical):
+    # @timeit
+    # def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    #     D = len(x)
+    #     M = self.n_obj
+    #     g = 100 * (D - M + 1 + jnp.sum((x[M - 1 :] - 0.5) ** 2 - jnp.cos(20.0 * jnp.pi * (x[M - 1 :] - 0.5))))
+    #     return (1 + g) / 2 - 0.5 * (1 + g) * jnp.cumprod(jnp.r_[[1], x[0 : M - 1]])[::-1] * jnp.r_[
+    #         [1], 1 - x[0 : M - 1][::-1]
+    #     ]
     @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: np.ndarray) -> jnp.ndarray:
         D = len(x)
         M = self.n_obj
-        g = 100 * (D - M + 1 + jnp.sum((x[M - 1 :] - 0.5) ** 2 - jnp.cos(20.0 * jnp.pi * (x[M - 1 :] - 0.5))))
-        return (1 + g) / 2 - 0.5 * (1 + g) * jnp.cumprod(jnp.r_[[1], x[0 : M - 1]])[::-1] * jnp.r_[
+        g = 100 * (D - M + 1 + np.sum((x[M - 1 :] - 0.5) ** 2 - np.cos(20.0 * np.pi * (x[M - 1 :] - 0.5))))
+        return (1 + g) / 2 - 0.5 * (1 + g) * np.cumprod(np.r_[[1], x[0 : M - 1]])[::-1] * np.r_[
             [1], 1 - x[0 : M - 1][::-1]
         ]
-
 
 class DTLZ2(_DTLZ, ConstrainedMOOAnalytical):
 
