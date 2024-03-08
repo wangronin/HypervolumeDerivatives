@@ -52,7 +52,7 @@ class IDTLZ1(_DTLZ, ConstrainedMOOAnalytical):
     #         [1], 1 - x[0 : M - 1][::-1]
     #     ]
     @timeit
-    def _objective(self, x: np.ndarray) -> jnp.ndarray:
+    def _objective(self, x: np.ndarray) -> np.ndarray:
         D = len(x)
         M = self.n_obj
         g = 100 * (D - M + 1 + np.sum((x[M - 1 :] - 0.5) ** 2 - np.cos(20.0 * np.pi * (x[M - 1 :] - 0.5))))
@@ -74,14 +74,24 @@ class DTLZ2(_DTLZ, ConstrainedMOOAnalytical):
 
 
 class IDTLZ2(_DTLZ, ConstrainedMOOAnalytical):
+    # @timeit
+    # def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    #     M = self.n_obj
+    #     g = jnp.sum((x[M - 1 :] - 0.5) ** 2)
+    #     return (1 + g) / 2 - (
+    #         (1 + g)
+    #         * jnp.cumprod(jnp.r_[[1], jnp.cos(x[0 : M - 1] * jnp.pi / 2)])[::-1]
+    #         * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
+    #     )
+
     @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_obj
-        g = jnp.sum((x[M - 1 :] - 0.5) ** 2)
+        g = np.sum((x[M - 1 :] - 0.5) ** 2)
         return (1 + g) / 2 - (
             (1 + g)
-            * jnp.cumprod(jnp.r_[[1], jnp.cos(x[0 : M - 1] * jnp.pi / 2)])[::-1]
-            * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
+            * np.cumprod(np.r_[[1], np.cos(x[0 : M - 1] * np.pi / 2)])[::-1]
+            * np.r_[[1], np.sin(x[0 : M - 1][::-1] * np.pi / 2)]
         )
 
 
@@ -99,14 +109,23 @@ class DTLZ3(_DTLZ, ConstrainedMOOAnalytical):
 
 
 class IDTLZ3(_DTLZ, ConstrainedMOOAnalytical):
+    # @timeit
+    # def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    #     M = self.n_obj
+    #     D = len(x)
+    #     g = 100 * (D - M + 1 + jnp.sum((x[M - 1 :] - 0.5) ** 2 - jnp.cos(20.0 * jnp.pi * (x[M - 1 :] - 0.5))))
+    #     return (1 + g) / 2 - (1 + g) * jnp.cumprod(jnp.r_[[1], jnp.cos(x[0 : M - 1] * jnp.pi / 2)])[
+    #         ::-1
+    #     ] * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
+    
     @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_obj
         D = len(x)
-        g = 100 * (D - M + 1 + jnp.sum((x[M - 1 :] - 0.5) ** 2 - jnp.cos(20.0 * jnp.pi * (x[M - 1 :] - 0.5))))
-        return (1 + g) / 2 - (1 + g) * jnp.cumprod(jnp.r_[[1], jnp.cos(x[0 : M - 1] * jnp.pi / 2)])[
+        g = 100 * (D - M + 1 + np.sum((x[M - 1 :] - 0.5) ** 2 - np.cos(20.0 * np.pi * (x[M - 1 :] - 0.5))))
+        return (1 + g) / 2 - (1 + g) * np.cumprod(np.r_[[1], np.cos(x[0 : M - 1] * np.pi / 2)])[
             ::-1
-        ] * jnp.r_[[1], jnp.sin(x[0 : M - 1][::-1] * jnp.pi / 2)]
+        ] * np.r_[[1], np.sin(x[0 : M - 1][::-1] * np.pi / 2)]
 
 
 class DTLZ4(_DTLZ, ConstrainedMOOAnalytical):
@@ -123,13 +142,22 @@ class DTLZ4(_DTLZ, ConstrainedMOOAnalytical):
 
 
 class IDTLZ4(_DTLZ, ConstrainedMOOAnalytical):
+    # @timeit
+    # def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    #     M = self.n_obj
+    #     x_ = x[0 : M - 1] ** 100
+    #     g = jnp.sum((x[M - 1 :] - 0.5) ** 2)
+    #     return (1 + g) / 2 - (1 + g) * jnp.cumprod(jnp.r_[[1], jnp.cos(x_ * jnp.pi / 2)])[::-1] * jnp.r_[
+    #         [1], jnp.sin(x_[::-1] * jnp.pi / 2)
+    #     ]
+
     @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+    def _objective(self, x: np.ndarray) -> np.ndarray:
         M = self.n_obj
         x_ = x[0 : M - 1] ** 100
-        g = jnp.sum((x[M - 1 :] - 0.5) ** 2)
-        return (1 + g) / 2 - (1 + g) * jnp.cumprod(jnp.r_[[1], jnp.cos(x_ * jnp.pi / 2)])[::-1] * jnp.r_[
-            [1], jnp.sin(x_[::-1] * jnp.pi / 2)
+        g = np.sum((x[M - 1 :] - 0.5) ** 2)
+        return (1 + g) / 2 - (1 + g) * np.cumprod(np.r_[[1], np.cos(x_ * np.pi / 2)])[::-1] * np.r_[
+            [1], np.sin(x_[::-1] * np.pi / 2)
         ]
 
 # TODO: somehow simplify the way of defining the following classes since the constraints are the same
