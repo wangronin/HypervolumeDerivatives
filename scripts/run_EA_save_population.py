@@ -198,9 +198,9 @@ problems = [
     # CONV42F()
 ]
 
-idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
-for problem in [problems[idx]]:
-# for problem in problems:
+# idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
+# for problem in [problems[idx]]:
+for problem in problems:
     problem_name = problem.__class__.__name__
     print(problem_name)
     problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
