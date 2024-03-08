@@ -28,7 +28,7 @@ from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 # data_path = "/data1/wangh5"
-data_path = "./"
+data_path = "~/data"
 
 
 class ProblemWrapper(PymooElementwiseProblem):
