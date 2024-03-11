@@ -211,9 +211,6 @@ def execute(run: int):
     X, Y, _ = opt.run()
     # remove the dominated solution in Y
     Y = get_non_dominated(Y)
-    # data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
-    # df = pd.DataFrame(data, columns=["iteration", "f1", "f2", "f3"])
-    # df.to_csv(f"./tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
     # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
     # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
@@ -226,7 +223,10 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 1 < 2:
+if problem_name == "DTLZ2" and emoa == "SMS-EMOA":
+    run_id = list(set(run_id) - set([7]))
+
+if 11 < 2:
     data = []
     for i in run_id:
         print(i)

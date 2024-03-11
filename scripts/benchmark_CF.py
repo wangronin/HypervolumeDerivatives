@@ -13,7 +13,7 @@ from matplotlib import rcParams
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
-from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, PymooProblemWithAD
+from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
@@ -31,7 +31,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 8
+max_iters = 6
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
@@ -40,7 +40,7 @@ problem = f
 pareto_front = problem.get_pareto_front(1000)
 
 path = "CF_gen_300"
-emoa = "NSGA-III"
+emoa = "SMS-EMOA"
 gen = 300
 
 
@@ -133,16 +133,27 @@ def execute(run: int):
     eta = dict()
     # load the reference set
     for i in range(n_cluster):
-        r = pd.read_csv(
-            f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
-        ).values
+        try:
+            r = pd.read_csv(
+                f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
+            ).values
+        except:
+            continue
         # downsample the reference; otherwise, the initial clustering takes forever
         ref[i] = np.array(random.sample(r.tolist(), 500)) if len(r) >= 500 else r
-        eta[i] = pd.read_csv(
-            f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
-        ).values.ravel()
+        try:
+            eta[i] = pd.read_csv(
+                f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
+            ).values.ravel()
+        except:
+            if i > 0 and eta[i - 1] is not None:  # copy the shift direction from the last cluster
+                eta[i] = eta[i - 1]
+            else:
+                eta = None
+        # eta[i] = pd.read_csv(
+        #     f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
+        # ).values.ravel()
 
-    all_ref = np.concatenate([v for v in ref.values()], axis=0)
     # sometimes the precomputed `eta` value can be `nan`
     if np.any([np.any(np.isnan(_eta)) for _eta in eta.values()]):
         eta = None
@@ -154,7 +165,8 @@ def execute(run: int):
         f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_labels_gen{gen}.csv", header=None
     ).values.ravel()
     Y_label = Y_label - 1
-    idx = Y_label != -2  # outliers
+    # removing the outliers in `Y`
+    idx = (Y_label != -2) & (Y_label != -1)
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
@@ -195,13 +207,13 @@ def execute(run: int):
     # remove the dominated solution in Y
     Y = get_non_dominated(Y)
     # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    fig_name = f"{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    # fig_name = f"{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
+    # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
-    data = np.concatenate([np.c_[[0] * len(x0), y0], np.c_[[max_iters] * len(x0), opt.hist_Y[-1]]], axis=0)
-    df = pd.DataFrame(data, columns=["iteration"] + [f"f{i+1}" for i in range(problem.n_obj)])
-    df.to_csv(f"tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
+    # data = np.concatenate([np.c_[[0] * len(x0), y0], np.c_[[max_iters] * len(x0), opt.hist_Y[-1]]], axis=0)
+    # df = pd.DataFrame(data, columns=["iteration"] + [f"f{i+1}" for i in range(problem.n_obj)])
+    # df.to_csv(f"tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
     # return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
 

@@ -8,9 +8,9 @@ pvalues = []
 stats = []
 stats_func = lambda x: [np.median(x), np.quantile(x, 0.9) - np.quantile(x, 0.1)]
 MOEAs = [
-    "NSGA-III",
+    # "NSGA-II",
     # "NSGA-III",
-    # "SMS-EMOA",
+    "SMS-EMOA",
 ]
 problems = [
     # "CF1",
@@ -28,20 +28,20 @@ problems = [
     # "ZDT3",
     # "ZDT4",
     # "ZDT6",
-    # "DTLZ1",
-    # "DTLZ2",
-    # "DTLZ3",
-    # "DTLZ4",
-    # "DTLZ5",
-    # "DTLZ6",
-    # "DTLZ7",
-    "IDTLZ1",
-    "IDTLZ2",
-    "IDTLZ3",
-    "IDTLZ4",
-    "Eq1IDTLZ1",
-    "Eq1IDTLZ2",
-    "Eq1IDTLZ3",
+    "DTLZ1",
+    "DTLZ2",
+    "DTLZ3",
+    "DTLZ4",
+    "DTLZ5",
+    "DTLZ6",
+    "DTLZ7",
+    # "IDTLZ1",
+    # "IDTLZ2",
+    # "IDTLZ3",
+    # "IDTLZ4",
+    # "Eq1IDTLZ1",
+    # "Eq1IDTLZ2",
+    # "Eq1IDTLZ3",
     # "Eq1IDTLZ4",
 ]
 
@@ -49,11 +49,14 @@ for moea in MOEAs:
     for problem in problems:
         data1 = pd.read_csv(f"./results/{problem}-DpN-{moea}-{gen}.csv")
         data2 = pd.read_csv(f"./results/{problem}-{moea}-{gen}.csv")
-        x, y = np.maximum(data1.GD.values, data1.IGD.values), np.maximum(data2.GD.values, data2.IGD.values)
+        x, y = data1.IGD.values, data2.IGD.values
+        # x, y = np.maximum(data1.GD.values, data1.IGD.values), np.maximum(data2.GD.values, data2.IGD.values)
+        if moea == "NSGA-III" and problem == "Eq1IDTLZ4":
+            x = x[x <= 1.7]
         # filtering out the outliers in DpN
-        # q = np.quantile(x, q=(0.25, 0.75))
-        # iqr = q[1] - q[0]
-        # x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
+        q = np.quantile(x, q=(0.25, 0.75))
+        iqr = q[1] - q[0]
+        x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
         pvalue = mannwhitneyu(x=x, y=y, alternative="two-sided").pvalue
         pvalues.append(pvalue)
         stats.append([stats_func(x), stats_func(y)])
