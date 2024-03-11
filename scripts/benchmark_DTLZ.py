@@ -14,8 +14,7 @@ from matplotlib import rcParams
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
-from hvd.problems import (DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7,
-                          PymooProblemWithAD)
+from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, PymooProblemWithAD
 from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
@@ -145,7 +144,10 @@ def execute(run: int):
                 ref_file = f"{path}/{problem_name}_{emoa}_run_{run}_ref_gen{gen}.csv"
             else:
                 ref_file = f"{path}/{problem_name}_{emoa}_run_{run}_ref_{i+1}_gen{gen}.csv"
-            r = pd.read_csv(ref_file, header=None).values
+            try:
+                r = pd.read_csv(ref_file, header=None).values
+            except:
+                continue
         # downsample the reference; otherwise, initial clustering take too long
         ref[i] = np.array(random.sample(r.tolist(), 500)) if len(r) >= 500 else r
         try:
@@ -153,7 +155,10 @@ def execute(run: int):
                 f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
             ).values.ravel()
         except:
-            eta = None
+            if i > 0 and eta[i - 1] is not None:  # copy the shift direction from the last cluster
+                eta[i] = eta[i - 1]
+            else:
+                eta = None
 
     # sometimes the precomputed `eta` value can be `nan`
     if (eta is not None) and (np.any([np.any(np.isnan(_eta)) for _eta in eta.values()])):
@@ -167,7 +172,7 @@ def execute(run: int):
     ).values.ravel()
     Y_label = Y_label - 1
     # removing the outliers in `Y`
-    idx = Y_label != -2
+    idx = (Y_label != -2) & (Y_label != -1)
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
@@ -182,7 +187,7 @@ def execute(run: int):
         ref = np.vstack([r for r in ref.values()])
         Y_label = np.zeros(len(y0))
         eta = None
-    N = len(x0)
+
     opt = DpN(
         dim=problem.n_var,
         n_obj=problem.n_obj,
@@ -221,7 +226,7 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 11 < 2:
+if 1 < 2:
     data = []
     for i in run_id:
         print(i)

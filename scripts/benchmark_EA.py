@@ -12,8 +12,6 @@ from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
-from pymoo.core.problem import ElementwiseProblem as PymooElementwiseProblem
-from pymoo.core.problem import Problem
 from pymoo.core.problem import Problem as PymooProblem
 from pymoo.problems.many import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
 from pymoo.termination import get_termination
@@ -21,15 +19,14 @@ from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.problems import (CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10,
-                          IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4, Eq1IDTLZ1, Eq1IDTLZ2,
-                          Eq1IDTLZ3, Eq1IDTLZ4)
-from hvd.problems.base import MOOAnalytical
+from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
+from hvd.problems.base import CONV42F, MOOAnalytical, PymooProblemWrapper
 from hvd.sms_emoa import SMSEMOA
 
 # ref_point = np.array([11, 11])
 
 pop_to_numpy = lambda pop: np.array([ind.F for ind in pop])
+
 
 def plot(nd, Y, pareto_front, fig_name):
     fig = plt.figure(figsize=plt.figaspect(1 / 2.0))
@@ -58,65 +55,15 @@ def plot(nd, Y, pareto_front, fig_name):
     plt.close(fig)
 
 
-class ProblemWrapper(PymooElementwiseProblem):
-    """Wrap of the problem I wrote into `Pymoo`'s problem"""
-
-    def __init__(self, problem: MOOAnalytical) -> None:
-        self._problem = problem
-        super().__init__(
-            n_var=problem.n_var,
-            n_obj=problem.n_obj,
-            xl=problem.xl,
-            xu=problem.xu,
-            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
-            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
-        )
-
-    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
-        x = np.atleast_2d(x)
-        out["F"] = np.array([self._problem.objective(_) for _ in x])  # objective value
-        if hasattr(self._problem, "n_eq_constr") and self._problem.n_eq_constr > 0:
-            out["H"] = np.array([self._problem.eq_constraint(_) for _ in x])  # equality constraint value
-        if hasattr(self._problem, "n_ieq_constr") and self._problem.n_ieq_constr > 0:
-            out["G"] = np.array([self._problem.ieq_constraint(_) for _ in x])  # inequality constraint value
-
-    def pareto_front(self, N: int = 1000):
-        return self._problem.get_pareto_front(N)
-
-class ModifiedObjective(Problem):
-    """Modified objective function based on the following paper:
-
-    Ishibuchi, H.; Matsumoto, T.; Masuyama, N.; Nojima, Y.
-    Effects of dominance resistant solutions on the performance of evolutionary multi-objective
-    and many-objective algorithms. In Proceedings of the Genetic and Evolutionary Computation
-    Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020.
-    """
-
-    def __init__(self, problem: Problem) -> None:
-        self._problem = problem
-        self._alpha = 0.02
-        super().__init__(
-            n_var=problem.n_var,
-            n_obj=problem.n_obj,
-            xl=problem.xl,
-            xu=problem.xu,
-            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
-            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
-        )
-
-    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
-        self._problem._evaluate(x, out, *args, **kwargs)
-        F = out["F"]
-        out["F"] = (1 - self._alpha) * F + self._alpha * np.tile(
-            F.sum(axis=1).reshape(-1, 1), (1, self.n_obj)
-        ) / self.n_obj
-
-    # def pareto_front(self, *args, **kwargs):
-    # return self._problem.pareto_front(*args, **kwargs)
-
-
 def minimize(
-    problem, algorithm, algorithm_name, termination=None, copy_algorithm=True, copy_termination=True, run_id=None, **kwargs
+    problem,
+    algorithm,
+    algorithm_name,
+    termination=None,
+    copy_algorithm=True,
+    copy_termination=True,
+    run_id=None,
+    **kwargs,
 ):
     # create a copy of the algorithm object to ensure no side-effects
     if copy_algorithm:
@@ -206,10 +153,11 @@ problem_names = sys.argv[1]
 for problem_name in [problem_names]:
     print(problem_name)
     problem = locals()[problem_name]()
-    problem = problem if isinstance(problem, PymooProblem) else ProblemWrapper(problem)
+    problem = problem if isinstance(problem, PymooProblem) else PymooProblemWrapper(problem)
     pop_size = 100 if problem.n_obj == 2 else 300
-    constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0)
-
+    constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
+        hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
+    )
     for algorithm_name in ("SMS-EMOA",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
@@ -218,7 +166,9 @@ for problem_name in [problem_names]:
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
         # minimize(problem, algorithm, algorithm_name, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
-            delayed(minimize)(problem, algorithm, algorithm_name, termination, run_id=i + 1, seed=i + 1, verbose=False)
+            delayed(minimize)(
+                problem, algorithm, algorithm_name, termination, run_id=i + 1, seed=i + 1, verbose=False
+            )
             for i in range(N)
         )
         # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])

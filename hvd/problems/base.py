@@ -8,7 +8,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jax import jacfwd, jacrev, jit
+from pymoo.core.problem import ElementwiseProblem as PymooElementwiseProblem
 from pymoo.core.problem import Problem
+from pymoo.core.problem import Problem as PymooProblem
 
 from ..utils import timeit
 
@@ -18,12 +20,18 @@ __author__ = ["Hao Wang"]
 def hessian(fun):
     return jit(jacfwd(jacrev(fun)))
 
+
 def add_boundry_constraints(ieq_func, xl, xu):
 
     def func(x):
-        return jnp.concatenate([ieq_func(x), xl - x, x - xu]) if ieq_func is not None else jnp.concatenate([xl - x, x - xu])
+        return (
+            jnp.concatenate([ieq_func(x), xl - x, x - xu])
+            if ieq_func is not None
+            else jnp.concatenate([xl - x, x - xu])
+        )
 
     return func
+
 
 class MOOAnalytical:
     def __init__(self):
@@ -51,7 +59,7 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
 
     def __init__(self, boundry_constraints: bool = False):
         super().__init__()
-        self._eq = jit(partial(self.__class__._eq_constraint, self)) if self.n_eq_constr > 0 else None 
+        self._eq = jit(partial(self.__class__._eq_constraint, self)) if self.n_eq_constr > 0 else None
         self._ieq = partial(self.__class__._ieq_constraint, self) if self.n_ieq_constr > 0 else None
 
         if boundry_constraints:
@@ -160,6 +168,7 @@ class CONV4(MOOAnalytical):
 
 class CONV42F(MOOAnalytical):
     """Convex Problem 4 with 2 disconnected Pareto fronts"""
+
     def __init__(self):
         self.n_obj = 4
         self.n_var = 4
@@ -175,13 +184,13 @@ class CONV42F(MOOAnalytical):
         fa1 = jnp.array([0, 2, 2, 2])
         deltay = fa4 - fa1
         z = x + deltaa
-        y = jax.lax.select(jnp.all(x < 0), jnp.array([jnp.sum((z - a[i]) ** 2) - 1.1 * deltay[i] for i in range(4)]), jnp.array([jnp.sum((x - a[i]) ** 2) for i in range(4)]))
-        # if jnp.all(x < 0):
-        #     z = x + deltaa
-        #     y = jnp.array([jnp.sum((z - a[i]) ** 2) - 1.1 * deltay[i] for i in range(4)])
-        # else:
-        #     y = jnp.array([jnp.sum((x - a[i]) ** 2) for i in range(4)])
+        y = jax.lax.select(
+            jnp.all(x < 0),
+            jnp.array([jnp.sum((z - a[i]) ** 2) - 1.1 * deltay[i] for i in range(4)]),
+            jnp.array([jnp.sum((x - a[i]) ** 2) for i in range(4)]),
+        )
         return y
+
 
 class UF7(MOOAnalytical):
     def __init__(self, n_var: int = 30) -> None:
@@ -243,3 +252,58 @@ class UF8(MOOAnalytical):
                 jnp.sin(0.5 * x[:, 0] * jnp.pi) + 2 * jnp.mean(y[:, J3] ** 2, 1),
             ]
         ).T
+
+
+class PymooProblemWrapper(PymooElementwiseProblem):
+    """Wrap of the problem I wrote into `Pymoo`'s problem"""
+
+    def __init__(self, problem: MOOAnalytical) -> None:
+        self._problem = problem
+        super().__init__(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
+            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
+            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
+        )
+
+    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
+        x = np.atleast_2d(x)
+        out["F"] = np.array([self._problem.objective(_) for _ in x])  # objective value
+        if hasattr(self._problem, "n_eq_constr") and self._problem.n_eq_constr > 0:
+            out["H"] = np.array([self._problem.eq_constraint(_) for _ in x])  # equality constraint value
+        if hasattr(self._problem, "n_ieq_constr") and self._problem.n_ieq_constr > 0:
+            out["G"] = np.array([self._problem.ieq_constraint(_) for _ in x])  # inequality constraint value
+
+
+class ModifiedObjective(PymooProblem):
+    """Modified objective function based on the following paper:
+
+    Ishibuchi, H.; Matsumoto, T.; Masuyama, N.; Nojima, Y.
+    Effects of dominance resistant solutions on the performance of evolutionary multi-objective
+    and many-objective algorithms. In Proceedings of the Genetic and Evolutionary Computation
+    Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020.
+    """
+
+    def __init__(self, problem: PymooProblem) -> None:
+        self._problem = problem
+        self._alpha = 0.02
+        super().__init__(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
+            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
+            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
+        )
+
+    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
+        self._problem._evaluate(x, out, *args, **kwargs)
+        F = out["F"]
+        out["F"] = (1 - self._alpha) * F + self._alpha * np.tile(
+            F.sum(axis=1).reshape(-1, 1), (1, self.n_obj)
+        ) / self.n_obj
+
+    # def pareto_front(self, *args, **kwargs):
+    # return self._problem.pareto_front(*args, **kwargs)
