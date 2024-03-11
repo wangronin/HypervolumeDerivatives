@@ -17,10 +17,12 @@ from pymoo.util.normalization import normalize
 
 from .exact import ExactHypervolume
 
+# NOTE: speedup the MC hypervolume contribution with `numba`
+
 
 @jit(nopython=True, error_model="numpy", cache=True)
 def alpha(N, k):
-    alpha = np.zeros(N+1)
+    alpha = np.zeros(N + 1)
 
     for i in range(1, N + 1):
         alpha[i] = np.prod(np.array([(k - j) / (N - j) for j in range(1, i)])) / i
@@ -38,6 +40,7 @@ def hv_monte_carlo(dom, V, n_dom=None):
     hv = np.sum(np.array([np.sum(a[n_dom[dom[i]]]) for i in range(N)])) / n_samples * V
     return hv
 
+
 @jit(nopython=True, error_model="numpy", cache=True)
 def hvc_monte_carlo(dom, V, n_dom=None, k=1):
     N, n_samples = dom.shape
@@ -47,6 +50,7 @@ def hvc_monte_carlo(dom, V, n_dom=None, k=1):
     a = alpha(N, k)
     hvc = np.array([np.sum(np.array((np.sum(a[n_dom[dom[i]]]) / n_samples * V))) for i in range(N)])
     return hvc
+
 
 class ApproximateMonteCarloHypervolume(DynamicHypervolume):
 
@@ -87,7 +91,6 @@ class ApproximateMonteCarloHypervolume(DynamicHypervolume):
         V, dom = self.V, self.dom
         n_dom = dom.sum(axis=0)
         self.hvc = hvc_monte_carlo(dom, V, n_dom=n_dom, k=self.n_exclusive)
-
 
 
 class LeastHypervolumeContributionSurvival(Survival):

@@ -12,8 +12,15 @@ from scipy.spatial.distance import cdist
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import (compute_chim, get_logger, get_non_dominated, merge_lists,
-                    non_domin_sort, precondition_hessian, set_bounds)
+from .utils import (
+    compute_chim,
+    get_logger,
+    get_non_dominated,
+    merge_lists,
+    non_domin_sort,
+    precondition_hessian,
+    set_bounds,
+)
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -832,7 +839,10 @@ class DpN:
         R = np.zeros((self.N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
         grad, Hessian = self.active_indicator.compute_derivatives(
-            X=primal_vars, Y=self.state.Y, Jacobian=self.state.J, Y_label=self.Y_label, 
+            X=primal_vars,
+            Y=self.state.Y,
+            Jacobian=self.state.J,
+            Y_label=self.Y_label,
         )
         # the root-finding problem and the gradient of the active constraints
         R_list, dH, active_indices = self._compute_R(self.state, grad=grad)
