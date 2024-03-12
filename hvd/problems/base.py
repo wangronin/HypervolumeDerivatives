@@ -35,14 +35,14 @@ def add_boundry_constraints(ieq_func, xl, xu):
 
 class MOOAnalytical:
     def __init__(self):
-        self._obj_func = jit(partial(self.__class__._objective, self))
-        self._objective_jacobian = jit(jacrev(self._obj_func))
-        self._objective_hessian = jit(hessian(self._obj_func))
+        # self._obj_func = jit(partial(self.__class__._objective, self))
+        # self._objective_jacobian = jit(jacrev(self._obj_func))
+        # self._objective_hessian = jit(hessian(self._obj_func))
         self.CPU_time: int = 0  # in nanoseconds
 
     def objective(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._obj_func(x))
-        # return self._obj_func(x)
+        # return np.array(self._obj_func(x))
+        return self._objective(x)
 
     @timeit
     def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
@@ -275,6 +275,9 @@ class PymooProblemWrapper(PymooElementwiseProblem):
             out["H"] = np.array([self._problem.eq_constraint(_) for _ in x])  # equality constraint value
         if hasattr(self._problem, "n_ieq_constr") and self._problem.n_ieq_constr > 0:
             out["G"] = np.array([self._problem.ieq_constraint(_) for _ in x])  # inequality constraint value
+
+    def pareto_front(self, *args, **kwargs) -> np.ndarray:
+        return self._problem.get_pareto_front(*args, **kwargs)
 
 
 class ModifiedObjective(PymooProblem):
