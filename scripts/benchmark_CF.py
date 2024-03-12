@@ -150,9 +150,6 @@ def execute(run: int):
                 eta[i] = eta[i - 1]
             else:
                 eta = None
-        # eta[i] = pd.read_csv(
-        #     f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
-        # ).values.ravel()
 
     # sometimes the precomputed `eta` value can be `nan`
     if np.any([np.any(np.isnan(_eta)) for _eta in eta.values()]):
@@ -236,7 +233,7 @@ if problem_name == "CF7" and emoa == "NSGA-II":
 if problem_name == "CF5" and emoa == "NSGA-III":
     run_id = list(set(run_id) - set([4]))
 
-print(run_id)
+# print(run_id)
 if 11 < 2:
     data = []
     for i in run_id:

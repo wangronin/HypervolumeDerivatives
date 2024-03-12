@@ -11,6 +11,7 @@
 *.csv
 *.mat
 *.png
+*.txt
 data/
 model/
 hv/
