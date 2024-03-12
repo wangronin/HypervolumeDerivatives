@@ -31,7 +31,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 8
+max_iters = 6
 n_jobs = 30
 # ref_point = np.array([11, 11])
 problem_name = sys.argv[1]
@@ -42,8 +42,8 @@ pareto_front = problem.get_pareto_front(1000)
 
 # path = "./Gen1510/"
 path = "ZDT_gen_300"
-emoa = "SMS-EMOA"
-gen = 300
+emoa = "MOEAD"
+gen = 200
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -188,13 +188,13 @@ def execute(run: int):
     )
     X, Y, _ = opt.run()
     # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    fig_name = f"{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    # fig_name = f"{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
+    # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
-    data = np.concatenate([np.c_[[0] * len(x0), y0], np.c_[[max_iters] * len(x0), opt.hist_Y[-1]]], axis=0)
-    df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
-    df.to_csv(f"tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
+    # data = np.concatenate([np.c_[[0] * len(x0), y0], np.c_[[max_iters] * len(x0), opt.hist_Y[-1]]], axis=0)
+    # df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
+    # df.to_csv(f"tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
     # return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
 

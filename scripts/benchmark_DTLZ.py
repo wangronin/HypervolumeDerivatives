@@ -61,7 +61,7 @@ pareto_front = problem.get_pareto_front()
 gen = 300
 # path = "./DTLZ_refs/"
 path = "IDTLZ/"
-emoa = "MOEAD"
+emoa = "SMS-EMOA"
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):

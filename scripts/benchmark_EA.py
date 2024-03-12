@@ -14,6 +14,7 @@ from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
 from pymoo.core.problem import Problem as PymooProblem
 from pymoo.problems.many import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
+from pymoo.problems.multi import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
@@ -124,7 +125,7 @@ def get_algorithm(
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
         if n_objective == 2:
-            ref_dirs = get_reference_directions("uniform", 2, n_partitions=99)
+            ref_dirs = get_reference_directions("uniform", 2, n_partitions=80)
         elif n_objective == 3:
             ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
         algorithm = MOEAD(ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7)
@@ -158,11 +159,11 @@ for problem_name in [problem_names]:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ("MOEAD",):
+    for algorithm_name in ("SMS-EMOA",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
-        termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
+        termination = get_termination("n_gen", gen)  # + n_iter_newton * gen_func(problem.n_var, scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
         # minimize(problem, algorithm, algorithm_name, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
