@@ -25,8 +25,7 @@ from hvd.problems.base import PymooProblemWrapper
 from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
-# data_path = "/data1/wangh5"
-data_path = "~/data"
+data_path = "./"
 
 
 def minimize(
@@ -150,10 +149,7 @@ for problem in problems:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-
-    # for algorithm_name in ("NSGA-II", "NSGA-III", "SMS-EMOA"):
-    # for algorithm_name in ["NSGA-II", "NSGA-III"]:
-    for algorithm_name in ["MOEAD"]:
+    for algorithm_name in ["NSGA-II"]:
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
         # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
