@@ -52,6 +52,7 @@ class IDTLZ1(_DTLZ, ConstrainedMOOAnalytical):
     #     return (1 + g) / 2 - 0.5 * (1 + g) * jnp.cumprod(jnp.r_[[1], x[0 : M - 1]])[::-1] * jnp.r_[
     #         [1], 1 - x[0 : M - 1][::-1]
     #     ]
+
     @timeit
     def _objective(self, x: np.ndarray) -> np.ndarray:
         D = len(x)
