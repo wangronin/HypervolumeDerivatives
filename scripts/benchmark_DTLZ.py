@@ -10,11 +10,24 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from matplotlib import rcParams
+from pymoo.core.problem import Problem as PymooProblem
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
-from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, PymooProblemWithAD
+from hvd.problems import (
+    DTLZ1,
+    DTLZ2,
+    DTLZ3,
+    DTLZ4,
+    DTLZ5,
+    DTLZ6,
+    DTLZ7,
+    IDTLZ1,
+    IDTLZ2,
+    IDTLZ3,
+    IDTLZ4,
+    PymooProblemWithAD,
+)
 from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
@@ -36,14 +49,19 @@ max_iters = 6
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
-f = locals()[problem_name]()
-problem = PymooProblemWithAD(f)
+
+if problem_name.startswith("IDTLZ"):
+    problem = locals()[problem_name](boundry_constraints=True)
+else:
+    problem = locals()[problem_name](boundry_constraints=True)
+
+problem = PymooProblemWithAD(problem) if isinstance(problem, PymooProblem) else problem
 pareto_front = problem.get_pareto_front()
 
 gen = 300
-# path = f"./DTLZ-gen{gen}/"
-path = "./DTLZ_refs/"
-emoa = "SMS-EMOA"
+# path = "./DTLZ_refs/"
+path = "IDTLZ/"
+emoa = "MOEAD"
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -187,6 +205,11 @@ def execute(run: int):
         ref = np.vstack([r for r in ref.values()])
         Y_label = np.zeros(len(y0))
         eta = None
+        # ensure the number of approximation points is less than the number of reference points
+        if len(ref) < len(y0):
+            n = len(ref)
+            x0 = x0[:n]
+            Y_label = Y_label[:n]
 
     opt = DpN(
         dim=problem.n_var,
@@ -225,6 +248,8 @@ run_id = [
 ]
 if problem_name == "DTLZ2" and emoa == "SMS-EMOA":
     run_id = list(set(run_id) - set([7]))
+if problem_name == "DTLZ4" and emoa == "MOEAD":
+    run_id = list(set(run_id) - set([3]))
 
 if 11 < 2:
     data = []

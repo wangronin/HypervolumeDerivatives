@@ -14,8 +14,7 @@ from matplotlib import rcParams
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
-from hvd.problems import (IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4, Eq1IDTLZ1, Eq1IDTLZ2,
-                          Eq1IDTLZ3, Eq1IDTLZ4)
+from hvd.problems import IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
@@ -42,8 +41,7 @@ pareto_front = problem.get_pareto_front()
 
 gen = 800
 path = "./IDTLZ/"
-# path = "./Eq1IDTLZ_300"
-emoa = "NSGA-II"
+emoa = "MOEAD"
 
 
 def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -222,7 +220,7 @@ run_id = [
 ]
 if problem_name == "IDTLZ4" and emoa == "NSGA-III":
     run_id = list(set(run_id) - set([12]))
-    
+
 if 11 < 2:
     data = []
     for i in run_id:
