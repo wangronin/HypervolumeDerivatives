@@ -39,7 +39,7 @@ f = locals()[problem_name]()
 problem = f
 pareto_front = problem.get_pareto_front(1000)
 
-path = "CF_gen_300"
+path = "./data-reference/CF/"
 emoa = "SMS-EMOA"
 gen = 300
 
@@ -203,15 +203,8 @@ def execute(run: int):
     X, Y, _ = opt.run()
     # remove the dominated solution in Y
     Y = get_non_dominated(Y)
-    # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    # fig_name = f"{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
-    # data = np.concatenate([np.c_[[0] * len(x0), y0], np.c_[[max_iters] * len(x0), opt.hist_Y[-1]]], axis=0)
-    # df = pd.DataFrame(data, columns=["iteration"] + [f"f{i+1}" for i in range(problem.n_obj)])
-    # df.to_csv(f"tmp/{problem_name}_DpN_{emoa}_run{run}_{gen}.csv")
-    # return np.array([igd_value, gd_value, hypervolume(Y, ref_point)])
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
 
 

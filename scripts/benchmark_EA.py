@@ -24,36 +24,7 @@ from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, IDTL
 from hvd.problems.base import CONV42F, MOOAnalytical, PymooProblemWrapper
 from hvd.sms_emoa import SMSEMOA
 
-# ref_point = np.array([11, 11])
-
 pop_to_numpy = lambda pop: np.array([ind.F for ind in pop])
-
-
-def plot(nd, Y, pareto_front, fig_name):
-    fig = plt.figure(figsize=plt.figaspect(1 / 2.0))
-    plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
-    ax0 = fig.add_subplot(1, 2, 1, projection="3d")
-    ax0.set_box_aspect((1, 1, 1))
-    ax0.view_init(45, 45)
-    ax0.plot(nd[:, 0], nd[:, 1], nd[:, 2], "k+", ms=12, alpha=1)
-    ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.3)
-    ax0.set_title(f"{len(nd)} ND points")
-    ax0.set_xlabel(r"$f_1$")
-    ax0.set_ylabel(r"$f_2$")
-    ax0.set_ylabel(r"$f_3$")
-
-    ax1 = fig.add_subplot(1, 2, 2, projection="3d")
-    ax1.set_box_aspect((1, 1, 1))
-    ax1.view_init(45, 45)
-    ax1.plot(Y[:, 0], Y[:, 1], Y[:, 2], "k+", ms=12, alpha=1)
-    ax1.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.3)
-    ax1.set_title(f"all points")
-    ax1.set_xlabel(r"$f_1$")
-    ax1.set_ylabel(r"$f_2$")
-    ax1.set_ylabel(r"$f_3$")
-    plt.tight_layout()
-    plt.savefig(fig_name, dpi=1000)
-    plt.close(fig)
 
 
 def minimize(
@@ -101,10 +72,6 @@ def minimize(
     else:
         gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
         igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
-
-    # Y = pop_to_numpy(res.pop)
-    # fig_name = f"./figure/{problem_name}_{algorithm_name}_run{run_id}_{gen}.pdf"
-    # plot(res.F, Y, pareto_front, fig_name)
     return np.array([igd_value, gd_value])
 
 
@@ -163,7 +130,7 @@ for problem_name in [problem_names]:
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
-        termination = get_termination("n_gen", gen)  # + n_iter_newton * gen_func(problem.n_var, scale))
+        termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
         # minimize(problem, algorithm, algorithm_name, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
