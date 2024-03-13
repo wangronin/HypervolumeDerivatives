@@ -59,8 +59,8 @@ problem = PymooProblemWithAD(problem) if isinstance(problem, PymooProblem) else 
 pareto_front = problem.get_pareto_front()
 
 gen = 300
-# path = "./DTLZ_refs/"
-path = "IDTLZ/"
+# path = "./data-reference/DTLZ/"
+path = "./data-reference/IDTLZ/"
 emoa = "NSGA-II"
 
 
@@ -250,6 +250,8 @@ if problem_name == "DTLZ2" and emoa == "SMS-EMOA":
     run_id = list(set(run_id) - set([7]))
 if problem_name == "DTLZ4" and emoa == "MOEAD":
     run_id = list(set(run_id) - set([3]))
+if problem_name == "IDTLZ4" and emoa == "NSGA-III":
+    run_id = list(set(run_id) - set([12]))
 
 if 11 < 2:
     data = []
