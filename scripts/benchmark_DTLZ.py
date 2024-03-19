@@ -48,97 +48,146 @@ np.random.seed(66)
 max_iters = 6
 n_jobs = 30
 problem_name = sys.argv[1]
+gen = 300
+emoa = "NSGA-III"
 print(problem_name)
-
 if problem_name.startswith("IDTLZ"):
     problem = locals()[problem_name](boundry_constraints=True)
-else:
+    path = "./data-reference/IDTLZ/"
+elif problem_name.startswith("DTLZ"):
     problem = locals()[problem_name](boundry_constraints=True)
+    path = "./data-reference/DTLZ/"
 
 problem = PymooProblemWithAD(problem) if isinstance(problem, PymooProblem) else problem
 pareto_front = problem.get_pareto_front()
 
-gen = 300
-# path = "./data-reference/DTLZ/"
-path = "./data-reference/IDTLZ/"
-emoa = "NSGA-II"
 
+def plot_3d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
+    colors = plt.get_cmap("tab20").colors
+    colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
+    medoids0 = np.array([h[0] for h in history_medoids])
 
-def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
-    fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
-    plt.subplots_adjust(right=0.93, left=0.05)
-    ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
-    ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
-    ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
+    fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
+    plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
+    ax0 = fig.add_subplot(1, 3, 1, projection="3d")
+    ax0.set_box_aspect((1, 1, 1))
+    ax0.view_init(45, 45)
+    ax0.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=12, alpha=0.3)
+    # ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.4)
+    # ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "b.", mec="none", ms=5, alpha=0.2)
+    ax0.plot(
+        medoids0[:, 0],
+        medoids0[:, 1],
+        medoids0[:, 2],
+        color=colors[0],
+        ls="none",
+        marker="^",
+        mec="none",
+        ms=7,
+        alpha=0.8,
+    )
+
     ax0.set_title("Objective space (Initialization)")
-    # ax0.set_xlabel(r"$f_1$")
-    # ax0.set_ylabel(r"$f_2$")
-    ax0.set_xlabel("f1")
-    ax0.set_ylabel("f2")
-    lgnd = ax0.legend(["Pareto front", "Y0", "reference set", "matched points"])
+    ax0.set_xlabel(r"$f_1$")
+    ax0.set_ylabel(r"$f_2$")
+    ax0.set_zlabel(r"$f_3$")
+    lgnd = ax0.legend(
+        # [r"$Y_0$", "Pareto front", "medoids"],
+        [r"$Y_0$", "medoids"],
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=2,
+        fancybox=True,
+    )
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
 
-    N = len(y0)
-    trajectory = np.array([y0] + hist_Y)
-    for i in range(N):
-        x, y = trajectory[:, i, 0], trajectory[:, i, 1]
-        ax1.quiver(
-            x[:-1],
-            y[:-1],
-            x[1:] - x[:-1],
-            y[1:] - y[:-1],
-            scale_units="xy",
-            angles="xy",
-            scale=1,
-            color="k",
-            width=0.003,
-            alpha=0.5,
-            headlength=4.5,
-            headwidth=2.5,
-        )
+    for i in range(len(y0)):
+        ax0.plot((medoids0[i, 0], y0[i, 0]), (medoids0[i, 1], y0[i, 1]), (medoids0[i, 2], y0[i, 2]), "k-")
+
+    ax1 = fig.add_subplot(1, 3, 2, projection="3d")
+    ax1.set_box_aspect((1, 1, 1))
+    ax1.view_init(45, 45)
+    if 11 < 2:
+        trajectory = np.array([y0] + hist_Y)
+        for i in range(len(y0)):
+            x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+            ax1.quiver(
+                x[:-1],
+                y[:-1],
+                z[:-1],
+                x[1:] - x[:-1],
+                y[1:] - y[:-1],
+                z[1:] - z[:-1],
+                color="k",
+                alpha=0.5,
+                arrow_length_ratio=0.05,
+            )
 
     lines = []
-    lines += ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.3)
-
-    colors = plt.get_cmap("tab20").colors
-    colors = [colors[2], colors[12], colors[13]]
+    lines += ax1.plot(
+        pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.2
+    )
     shifts = []
     for i, M in enumerate(history_medoids):
         c = colors[len(M) - 1]
         for j, x in enumerate(M):
-            line = ax1.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
+            line = ax1.plot(x[0], x[1], x[2], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
             if j == len(shifts):
                 shifts.append(line)
 
     lines += shifts
-    lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
+    lines += ax1.plot(Y[:, 0], Y[:, 1], Y[:, 2], "k*", mec="none", ms=8, alpha=0.9)
     counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
     lgnd = ax1.legend(
-        lines,
-        ["Pareto front"] + [f"{i + 1} shift(s): {k} points" for i, k in enumerate(counts)]
-        # + [r"$Y_{\mathrm{final}}$"],
-        + ["Y final"],
+        handles=lines,
+        labels=["Pareto front"]
+        + [f"{i + 1} shift(s): {k} medoids" for i, k in enumerate(counts)]
+        + [r"$Y_{\mathrm{final}}$"],
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=2,
+        fancybox=True,
     )
     for handle in lgnd.legend_handles:
-        handle.set_markersize(12)
+        handle.set_markersize(10)
 
     ax1.set_title("Objective space")
-    ax1.set_xlabel("f1")
-    ax1.set_ylabel("f2")
-    # ax1.set_xlabel(r"$f_1$")
-    # ax1.set_ylabel(r"$f_2$")
+    ax1.set_xlabel(r"$f_1$")
+    ax1.set_ylabel(r"$f_2$")
+    ax1.set_ylabel(r"$f_3$")
 
-    ax22 = ax2.twinx()
-    ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
-    ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
+    ax2 = fig.add_subplot(1, 3, 3, projection="3d")
+    ax2.set_box_aspect((1, 1, 1))
+    ax2.view_init(45, 45)
+    ax2.set_title("Before/After")
+    ax2.set_xlabel(r"$f_1$")
+    ax2.set_ylabel(r"$f_2$")
+    ax2.set_ylabel(r"$f_3$")
+    ax2.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=12, alpha=0.3)
+    ax2.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g+", ms=8, alpha=0.8)
+    lgnd = ax2.legend(
+        [r"$Y_0$", r"$Y_{\mathrm{final}}$"],
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=2,
+        fancybox=True,
+    )
+    for handle in lgnd.legend_handles:
+        handle.set_markersize(10)
+
+    # ax2 = fig.add_subplot(1, 3, 3)
+    # ax2.set_aspect("equal")
+    # ax22 = ax2.twinx()
+    # ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
+    # ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
     # ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
-    ax22.set_ylabel(r"R norm", color="g")
-    ax2.set_title("Performance")
-    ax2.set_xlabel("iteration")
-    ax2.set_xticks(range(1, max_iters + 1))
-    ax2.legend()
-    plt.tight_layout()
+    # ax2.set_title("Performance")
+    # ax2.set_xlabel("iteration")
+    # ax2.set_xticks(range(1, max_iters + 1))
+    # ax2.legend()
+    # plt.tight_layout()
+    plt.show()
     plt.savefig(fig_name, dpi=1000)
     plt.close(fig)
 
@@ -167,7 +216,7 @@ def execute(run: int):
             except:
                 continue
         # downsample the reference; otherwise, initial clustering take too long
-        ref[i] = np.array(random.sample(r.tolist(), 500)) if len(r) >= 500 else r
+        ref[i] = np.array(random.sample(r.tolist(), 700)) if len(r) >= 700 else r
         try:
             eta[i] = pd.read_csv(
                 f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
@@ -194,6 +243,7 @@ def execute(run: int):
     x0 = x0[idx]
     y0 = y0[idx]
     Y_label = Y_label[idx]
+    all_ref = np.vstack([r for r in ref.values()])
 
     # TODO: this is an ad-hoc solution. Maybe fix this special case in the `ReferenceSet` class
     # if the minimal number of points in the `ref` clusters is smaller than
@@ -209,6 +259,7 @@ def execute(run: int):
         if len(ref) < len(y0):
             n = len(ref)
             x0 = x0[:n]
+            y0 = y0[:n]
             Y_label = Y_label[:n]
 
     opt = DpN(
@@ -234,8 +285,8 @@ def execute(run: int):
     X, Y, _ = opt.run()
     # remove the dominated solution in Y
     Y = get_non_dominated(Y)
-    # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    fig_name = f"./plots/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
+    plot_3d(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
@@ -253,11 +304,12 @@ if problem_name == "DTLZ4" and emoa == "MOEAD":
 if problem_name == "IDTLZ4" and emoa == "NSGA-III":
     run_id = list(set(run_id) - set([12]))
 
-if 11 < 2:
+if 1 < 2:
     data = []
     for i in run_id:
         print(i)
         data.append(execute(i))
+        breakpoint()
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 

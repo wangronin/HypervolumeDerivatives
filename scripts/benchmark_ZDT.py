@@ -11,16 +11,13 @@ from joblib import Parallel, delayed
 from matplotlib import rcParams
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-
-# from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
 from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 
-plt.style.use("ggplot")
 rcParams["font.size"] = 17
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
-# rcParams["text.usetex"] = True
+rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
 rcParams["xtick.labelsize"] = 17
 rcParams["ytick.labelsize"] = 17
@@ -40,22 +37,24 @@ problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
 
 path = "./data-reference/ZDT/"
-emoa = "MOEAD"
-gen = 200
+emoa = "SMS-EMOA"
+gen = 300
 
 
-def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
+def plot_2d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
+    colors = plt.get_cmap("tab20").colors
+    colors = [colors[2], colors[12], colors[13], colors[17], colors[19]]
+    plt.style.use("ggplot")
     fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
     plt.subplots_adjust(right=0.93, left=0.05)
+
     ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
     ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
     ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
     ax0.set_title("Objective space (Initialization)")
-    # ax0.set_xlabel(r"$f_1$")
-    # ax0.set_ylabel(r"$f_2$")
-    ax0.set_xlabel("f1")
-    ax0.set_ylabel("f2")
-    lgnd = ax0.legend(["Pareto front", "Y0", "reference set", "matched points"])
+    ax0.set_xlabel(r"$f_1$")
+    ax0.set_ylabel(r"$f_2$")
+    lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
 
@@ -81,9 +80,6 @@ def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
 
     lines = []
     lines += ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.3)
-
-    colors = plt.get_cmap("tab20").colors
-    colors = [colors[2], colors[12], colors[13]]
     shifts = []
     for i, M in enumerate(history_medoids):
         c = colors[len(M) - 1]
@@ -97,29 +93,27 @@ def plot(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
     counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
     lgnd = ax1.legend(
         lines,
-        ["Pareto front"] + [f"{i + 1} shift(s): {k} points" for i, k in enumerate(counts)]
-        # + [r"$Y_{\mathrm{final}}$"],
-        + ["Y final"],
+        ["Pareto front"]
+        + [f"{i + 1} shift(s): {k} points" for i, k in enumerate(counts)]
+        + [r"$Y_{\mathrm{final}}$"],
     )
     for handle in lgnd.legend_handles:
         handle.set_markersize(12)
 
     ax1.set_title("Objective space")
-    ax1.set_xlabel("f1")
-    ax1.set_ylabel("f2")
-    # ax1.set_xlabel(r"$f_1$")
-    # ax1.set_ylabel(r"$f_2$")
+    ax1.set_xlabel(r"$f_1$")
+    ax1.set_ylabel(r"$f_2$")
 
     ax22 = ax2.twinx()
     ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
     ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
-    # ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
+    ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
     ax22.set_ylabel(r"R norm", color="g")
     ax2.set_title("Performance")
     ax2.set_xlabel("iteration")
     ax2.set_xticks(range(1, max_iters + 1))
     ax2.legend()
-    plt.tight_layout()
+    # plt.tight_layout()
     plt.savefig(fig_name, dpi=1000)
     plt.close(fig)
 
@@ -185,8 +179,8 @@ def execute(run: int):
         Y_label=Y_label,
     )
     X, Y, _ = opt.run()
-    # fig_name = f"./figure/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    # plot(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    fig_name = f"./plots/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
+    plot_2d(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
