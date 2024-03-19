@@ -685,11 +685,11 @@ class DpN:
     def _initialize(self, X0: np.ndarray):
         if X0 is not None:
             X0 = np.asarray(X0)
-            # NOTE: ad-hoc solution for CF2 problem since the Jacobian on the box boundary is not defined
-            # NOTE: this part won't work on ZDT6 and other CFs
             X0 = np.clip(X0, self.xl, self.xu)
-            # X0 = np.clip(X0 - self.xl, 1e-4, 1) + self.xl
-            # X0 = np.clip(X0 - self.xu, -1, -1e-4) + self.xu
+            # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is not defined
+            # on the decision boundary or the local Hessian is ill-conditioned.
+            # X0 = np.clip(X0 - self.xl, 1e-3, 1) + self.xl
+            # X0 = np.clip(X0 - self.xu, -1, -1e-3) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -963,7 +963,10 @@ class DpN:
         return step_size
 
     def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        if 11 < 2:
+        """The box-constraint handler projects the Newton step onto the box boundary, preventing the
+        algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
+        """
+        if 1 < 2:
             return step, np.ones(len(step))
 
         primal_vars = self.state.primal

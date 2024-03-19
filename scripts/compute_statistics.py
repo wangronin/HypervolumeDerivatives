@@ -79,8 +79,6 @@ for k, (n, m) in enumerate(stats):
         s = "$\\leftrightarrow$"
     stats[k] = [f"{n[0]:.4f}({n[1]:.4e}){s}", f"{m[0]:.4f}({m[1]:.4e})"]
 
-# Method = np.repeat(MOEAs, len(problems)).reshape(-1, 1)
-# Problem = np.tile(problems, len(MOEAs)).reshape(-1, 1)
 summary = ["+/$\\approx$/-", "", f"{win}/{tie}/{loose}", ""]
 data = pd.DataFrame(
     np.vstack([np.hstack([index, stats]), summary]),
@@ -88,6 +86,9 @@ data = pd.DataFrame(
 )
 pd.set_option("display.max_rows", None)
 print(data)
+with open(f"Newton-{gen}.txt", "w") as file:
+    print(data, file=file)
+
 caption = """Warmstarting the Newton method after 300 iterations of the MOEA, we show the IGD values 
 (median and 10\\% - 90\\% quantile range) of the final Pareto fronts, averaged over
 30 independent runs. The Newton method is executed for five iterations, and the corresponding MOEA terminates

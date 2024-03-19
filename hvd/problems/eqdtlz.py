@@ -18,13 +18,15 @@ class _DTLZ(MOOAnalytical):
 
     def get_pareto_set(self, N: int = 1000, kind="uniform") -> np.ndarray:
         M = self.n_obj
-        theta = (
-            np.sort(np.random.rand(N) * 2 * np.pi)
-            if kind == "uniform"
-            else np.r_[np.linspace(0, 2 * np.pi, N - 1), 0]
-        )
-        x = np.c_[np.cos(theta), np.sin(theta)] * 0.4
-        return np.c_[x + 0.5, np.tile(0.5, (N, self.n_var - M + 1))]
+        # theta = (
+        #     np.sort(np.random.rand(N) * 2 * np.pi)
+        #     if kind == "uniform"
+        #     else np.r_[np.linspace(0, 2 * np.pi, N - 1), 0]
+        # )
+        # x = np.c_[np.cos(theta), np.sin(theta)] * 0.4
+        # return np.c_[x + 0.5, np.tile(0.5, (N, self.n_var - M + 1))]
+        x = np.random.rand(N, 2)
+        return np.c_[x, np.tile(0.5, (N, self.n_var - M + 1))]
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
         x = self.get_pareto_set(N)

@@ -83,9 +83,9 @@ def get_algorithm(
     elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
         if n_objective == 2:
-            ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=pop_size - 1)
+            ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=pop_size - 20)
         elif n_objective == 3:
-            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=23)
+            ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=20)
         elif n_objective == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
         algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
@@ -126,7 +126,7 @@ for problem_name in [problem_names]:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ("SMS-EMOA",):
+    for algorithm_name in ("MOEAD",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
