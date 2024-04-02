@@ -3,6 +3,8 @@ import sys
 
 sys.path.insert(0, "./")
 
+import random
+
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
@@ -18,8 +20,24 @@ from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
-from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
-from hvd.problems.base import CONV42F, PymooProblemWrapper
+from hvd.problems import (
+    CF1,
+    CF2,
+    CF3,
+    CF4,
+    CF5,
+    CF6,
+    CF7,
+    CF8,
+    CF9,
+    CF10,
+    CONV4_2F,
+    IDTLZ1,
+    IDTLZ2,
+    IDTLZ3,
+    IDTLZ4,
+)
+from hvd.problems.base import PymooProblemWrapper
 
 # NOTE: this is a slightly faster implementation of SMS-EMOA
 from hvd.sms_emoa import SMSEMOA
@@ -88,6 +106,7 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=23)
         elif n_objective == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=13)
+
         algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
@@ -95,6 +114,9 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
             ref_dirs = get_reference_directions("uniform", 2, n_partitions=99)
         elif n_objective == 3:
             ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
+        elif n_objective == 4:
+            ref_dirs = get_reference_directions("uniform", 3, n_partitions=14)
+            ref_dirs = np.array(random.sample(ref_dirs.tolist(), pop_size))
         algorithm = MOEAD(ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7)
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=pop_size)
@@ -137,7 +159,7 @@ problems = [
     # IDTLZ2(),
     # IDTLZ3(),
     # IDTLZ4(),
-    CONV42F(),
+    CONV4_2F(),
 ]
 
 # idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
@@ -150,9 +172,10 @@ for problem in problems:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ["NSGA-III"]:
+    for algorithm_name in ["SMS-EMOA", "MOEAD"]:
+        print(algorithm_name)
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
-        # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
