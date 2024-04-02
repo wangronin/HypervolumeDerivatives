@@ -20,8 +20,24 @@ from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
-from hvd.problems.base import CONV42F, MOOAnalytical, PymooProblemWrapper
+from hvd.problems import (
+    CF1,
+    CF2,
+    CF3,
+    CF4,
+    CF5,
+    CF6,
+    CF7,
+    CF8,
+    CF9,
+    CF10,
+    CONV4_2F,
+    IDTLZ1,
+    IDTLZ2,
+    IDTLZ3,
+    IDTLZ4,
+)
+from hvd.problems.base import MOOAnalytical, PymooProblemWrapper
 from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([ind.F for ind in pop])
@@ -87,7 +103,7 @@ def get_algorithm(
         elif n_objective == 3:
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=20)
         elif n_objective == 4:
-            ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=11)
+            ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=13)
         algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
@@ -110,7 +126,7 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
 
 
 n_iter_newton = 6
-gen = 300
+gen = 400
 # NOTE: the following running budget is estimated with upper bounds of AD's theory
 # gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
 # NOTE: 1.836 is obtained on ZDTs
@@ -122,11 +138,16 @@ for problem_name in [problem_names]:
     print(problem_name)
     problem = locals()[problem_name]()
     problem = problem if isinstance(problem, PymooProblem) else PymooProblemWrapper(problem)
-    pop_size = 100 if problem.n_obj == 2 else 300
+    if problem.n_obj == 2:
+        pop_size = 100
+    elif problem.n_obj == 3:
+        pop_size = 300
+    elif problem.n_obj == 4:
+        pop_size = 600
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ("MOEAD",):
+    for algorithm_name in ("NSGA-III",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )

@@ -166,15 +166,15 @@ class CONV4(MOOAnalytical):
     pass
 
 
-class CONV42F(MOOAnalytical):
+class CONV4_2F(ConstrainedMOOAnalytical):
     """Convex Problem 4 with 2 disconnected Pareto fronts"""
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.n_obj = 4
         self.n_var = 4
         self.xl = -10 * np.ones(self.n_var)
         self.xu = 10 * np.ones(self.n_var)
-        super().__init__()
+        super().__init__(**kwargs)
 
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -186,10 +186,21 @@ class CONV42F(MOOAnalytical):
         z = x + deltaa
         y = jax.lax.select(
             jnp.all(x < 0),
-            jnp.array([jnp.sum((z - a[i]) ** 2) - 1.1 * deltay[i] for i in range(4)]),
+            jnp.array([jnp.sum((z - a[i]) ** 2) - 3.5 * deltay[i] for i in range(4)]),
             jnp.array([jnp.sum((x - a[i]) ** 2) for i in range(4)]),
         )
         return y
+
+    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
+        N1 = int(np.ceil(N / 2))
+        N2 = max(1, N - N1)
+        w1 = np.random.rand(N1, 4)
+        w1 /= w1.sum(axis=1).reshape(-1, 1)
+        w2 = np.random.rand(N2, 4)
+        w2 /= w2.sum(axis=1).reshape(-1, 1)
+        X_1 = w1 @ np.eye(self.n_var)  # the positive part
+        X_2 = w2 @ (np.eye(self.n_var) - np.ones((self.n_var, self.n_var)))  # the negative part
+        return np.array([self._objective(x) for x in np.vstack([X_1, X_2])])
 
 
 class UF7(MOOAnalytical):
