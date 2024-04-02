@@ -19,7 +19,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
 from hvd.problems import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
-from hvd.problems.base import PymooProblemWrapper
+from hvd.problems.base import CONV42F, PymooProblemWrapper
 
 # NOTE: this is a slightly faster implementation of SMS-EMOA
 from hvd.sms_emoa import SMSEMOA
@@ -133,10 +133,11 @@ problems = [
     # Eq1IDTLZ2(),
     # Eq1IDTLZ3(),
     # Eq1IDTLZ4(),
-    IDTLZ1(),
-    IDTLZ2(),
-    IDTLZ3(),
-    IDTLZ4(),
+    # IDTLZ1(),
+    # IDTLZ2(),
+    # IDTLZ3(),
+    # IDTLZ4(),
+    CONV42F(),
 ]
 
 # idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
@@ -149,7 +150,7 @@ for problem in problems:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ["NSGA-II"]:
+    for algorithm_name in ["NSGA-III"]:
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
         # data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
