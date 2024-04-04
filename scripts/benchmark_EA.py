@@ -3,7 +3,8 @@ import sys
 
 sys.path.insert(0, "./")
 
-import matplotlib.pyplot as plt
+import random
+
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
@@ -20,6 +21,7 @@ from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
+from hvd.hypervolume import hypervolume
 from hvd.problems import (
     CF1,
     CF2,
@@ -43,6 +45,9 @@ from hvd.sms_emoa import SMSEMOA
 pop_to_numpy = lambda pop: np.array([ind.F for ind in pop])
 
 
+reference_points = {"CONV4_2F": np.array([2, 2, 2, 10])}
+
+
 def minimize(
     problem,
     algorithm,
@@ -51,6 +56,7 @@ def minimize(
     copy_algorithm=True,
     copy_termination=True,
     run_id=None,
+    reference_point=None,
     **kwargs,
 ):
     # create a copy of the algorithm object to ensure no side-effects
@@ -88,7 +94,8 @@ def minimize(
     else:
         gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
         igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
-    return np.array([igd_value, gd_value])
+        hv_value = hypervolume(res.F, reference_point)
+    return np.array([igd_value, gd_value, hv_value])
 
 
 def get_algorithm(
@@ -111,6 +118,9 @@ def get_algorithm(
             ref_dirs = get_reference_directions("uniform", 2, n_partitions=80)
         elif n_objective == 3:
             ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
+        elif n_objective == 4:
+            ref_dirs = get_reference_directions("uniform", 4, n_partitions=14)
+            ref_dirs = np.array(random.sample(ref_dirs.tolist(), pop_size))
         algorithm = MOEAD(ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7)
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=pop_size)
@@ -119,6 +129,10 @@ def get_algorithm(
         if algorithm_name != "MOEAD":
             algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
     return algorithm
+
+
+def get_reference_point(problem_name: str) -> np.ndarray:
+    return reference_points[problem_name]
 
 
 def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
@@ -138,32 +152,42 @@ for problem_name in [problem_names]:
     print(problem_name)
     problem = locals()[problem_name]()
     problem = problem if isinstance(problem, PymooProblem) else PymooProblemWrapper(problem)
+
     if problem.n_obj == 2:
         pop_size = 100
     elif problem.n_obj == 3:
         pop_size = 300
     elif problem.n_obj == 4:
         pop_size = 600
+
+    reference_point = get_reference_point(problem_name)
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ("NSGA-III",):
+    for algorithm_name in ("NSGA-II",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
         termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
-        # minimize(problem, algorithm, algorithm_name, termination, run_id=1, seed=1, verbose=True)
+        # minimize(problem, algorithm, algorithm_name, termination, run_id=1, seed=1, reference_point=reference_point, verbose=True)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(
-                problem, algorithm, algorithm_name, termination, run_id=i + 1, seed=i + 1, verbose=False
+                problem,
+                algorithm,
+                algorithm_name,
+                termination,
+                run_id=i + 1,
+                seed=i + 1,
+                verbose=False,
+                reference_point=reference_point,
             )
             for i in range(N)
         )
         # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
         data = np.array(data)
         data = data[~np.any(np.isnan(data), axis=1)]
-        df = pd.DataFrame(data, columns=["IGD", "GD"])
+        df = pd.DataFrame(data, columns=["IGD", "GD", "HV"])
         df.to_csv(f"results/{problem_name}-{algorithm_name}-{gen}.csv", index=False)
         # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
