@@ -139,8 +139,8 @@ class PymooProblemWithAD:
         return self._problem._calc_pareto_front(*args, **kwargs)
 
 
-class CONV3(MOOAnalytical):
-    def __init__(self):
+class CONV3(ConstrainedMOOAnalytical):
+    def __init__(self, **kwargs):
         self.n_obj = 3
         self.n_var = 3
         self.xl = -3 * np.ones(self.n_var)
@@ -148,7 +148,7 @@ class CONV3(MOOAnalytical):
         self.a1 = -1 * np.ones(self.n_var)
         self.a2 = np.ones(self.n_var)
         self.a3 = np.r_[-1 * np.ones(self.n_var - 1), 1]
-        super().__init__()
+        super().__init__(**kwargs)
 
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -162,8 +162,26 @@ class CONV3(MOOAnalytical):
         return np.array([self._objective(x) for x in X])
 
 
-class CONV4(MOOAnalytical):
-    pass
+class CONV4(ConstrainedMOOAnalytical):
+    """Convex Problem 4"""
+
+    def __init__(self, **kwargs):
+        self.n_obj = 4
+        self.n_var = 4
+        self.xl = -10 * np.ones(self.n_var)
+        self.xu = 10 * np.ones(self.n_var)
+        self.centers = np.eye(self.n_var)
+        super().__init__(**kwargs)
+
+    @timeit
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+        return jnp.array([jnp.sum((x - self.centers[i]) ** 2) for i in range(self.n_var)])
+
+    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
+        w = np.random.rand(N, 4)
+        w /= w.sum(axis=1).reshape(-1, 1)
+        X = w @ np.eye(self.n_var)  # the positive part
+        return np.array([self._objective(x) for x in X])
 
 
 # class CONV4_2F(ConstrainedMOOAnalytical):
