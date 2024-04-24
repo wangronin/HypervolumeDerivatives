@@ -55,7 +55,12 @@ class GenerationalDistance:
         return np.mean(self.D[np.arange(len(Y)), self.indices] ** self.p) ** (1 / self.p)
 
     def compute_derivatives(
-        self, X: np.ndarray, Y: np.ndarray = None, compute_hessian: bool = True, Jacobian: np.ndarray = None, **kwargs,
+        self,
+        X: np.ndarray,
+        Y: np.ndarray = None,
+        compute_hessian: bool = True,
+        Jacobian: np.ndarray = None,
+        **kwargs,
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """compute the derivatives of the generational distance^p
 
@@ -112,13 +117,13 @@ class GenerationalDistance:
 # TODO: think of a better abstraction here.
 class ReferenceSet:
     def __init__(self, ref: np.ndarray, p: float = 2) -> None:
-        self._ref = {0: ref} if isinstance(ref, np.ndarray) else ref
+        self._ref: Dict[int, np.ndarray] = {0: ref} if isinstance(ref, np.ndarray) else ref
         assert isinstance(self._ref, dict)
-        self.n_components = len(self._ref)
-        self.p = p
-        self.dim = self._ref[0].shape[1]
-        self.N = len(self.reference_set)
-        self._medoids = {i: None for i in range(self.n_components)}
+        self.n_components: int = len(self._ref)
+        self.p: float = p
+        self.dim: int = self._ref[0].shape[1]
+        self.N: int = len(self.reference_set)
+        self._medoids: Dict[int, np.ndarray] = {i: None for i in range(self.n_components)}
 
     @property
     def reference_set(self) -> np.ndarray:
@@ -153,6 +158,10 @@ class ReferenceSet:
         self._medoids[c][idx] = medroid
 
     def _check_Y(self, Y: Union[dict, np.ndarray], Y_idx: Union[List, None]) -> Tuple[np.ndarray, np.ndarray]:
+        # idx = []
+        # for y in Y:
+        #     idx.append(np.argmin([directed_hausdorff(ref[i], np.atleast_2d(y))[0] for i in range(len(ref))]))
+        # return np.array(idx)
         Y = [Y] if isinstance(Y, np.ndarray) else Y
         Y_idx = [list(range(len(Y[0])))] if Y_idx is None else Y_idx
         return Y, Y_idx
@@ -171,18 +180,19 @@ class ReferenceSet:
         return idx
 
     def _cluster(self, X: np.ndarray, N: int, Y) -> np.ndarray:
+        """cluster the reference set with K-medoids method"""
         # TODO: figure out why pam is really slow; it seems to be quite okay in Matlab
         # method = "pam" if len(X) <= 3000 else "alternate"
         # always keep the extreme points in 2D cases
         flag = Y.shape[1] == 2 and N > 2
-        if flag:
+        if 11 < 2 and flag:
             Y_ = Y[Y[:, 0].argsort()]
             m0, m1 = Y_[0], Y_[-1]
             N -= 2
         method = "alternate"
         km = KMedoids(n_clusters=N, method=method, random_state=0, init="k-medoids++").fit(X)
-        return np.vstack([m0, m1, X[km.medoid_indices_]]) if flag else X[km.medoid_indices_]
-        # return X[km.medoid_indices_]
+        # return np.vstack([m0, m1, X[km.medoid_indices_]]) if flag else X[km.medoid_indices_]
+        return X[km.medoid_indices_]
 
     def _match(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
         cost = cdist(Y, X, metric="minkowski", p=self.p)

@@ -140,7 +140,7 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
 
 
 n_iter_newton = 6
-gen = 400
+gen = 600
 # NOTE: the following running budget is estimated with upper bounds of AD's theory
 # gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
 # NOTE: 1.836 is obtained on ZDTs
@@ -164,7 +164,7 @@ for problem_name in [problem_names]:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ("NSGA-II",):
+    for algorithm_name in ("SMS-EMOA",):
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )

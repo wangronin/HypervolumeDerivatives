@@ -41,6 +41,7 @@ problems = [
     "IDTLZ2",
     "IDTLZ3",
     "IDTLZ4",
+    "CONV4_2F",
 ]
 
 for moea in MOEAs:
