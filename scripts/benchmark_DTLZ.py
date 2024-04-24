@@ -13,6 +13,7 @@ from matplotlib import rcParams
 from pymoo.core.problem import Problem as PymooProblem
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
+from hvd.hypervolume import hypervolume
 from hvd.newton import DpN
 from hvd.problems import (
     DTLZ1,
@@ -31,13 +32,13 @@ from hvd.problems import (
 from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
-rcParams["font.size"] = 17
+rcParams["font.size"] = 12
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
 # rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 17
-rcParams["ytick.labelsize"] = 17
+rcParams["xtick.labelsize"] = 12
+rcParams["ytick.labelsize"] = 12
 rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
@@ -45,7 +46,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 6
+max_iters = 5
 n_jobs = 30
 problem_name = sys.argv[1]
 gen = 300
@@ -60,6 +61,11 @@ elif problem_name.startswith("DTLZ"):
 
 problem = PymooProblemWithAD(problem) if isinstance(problem, PymooProblem) else problem
 pareto_front = problem.get_pareto_front()
+reference_point = {
+    "DTLZ[1-6]": np.array([1, 1, 1]),
+    "DTLZ7": np.array([1, 1, 6]),
+    "IDTLZ1[1-4]": np.array([1, 1, 1]),
+}
 
 
 def plot_3d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name):
@@ -67,12 +73,15 @@ def plot_3d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name
     colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
     medoids0 = np.array([h[0] for h in history_medoids])
 
-    fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
-    plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
-    ax0 = fig.add_subplot(1, 3, 1, projection="3d")
+    # fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
+    # plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
+    # ax0 = fig.add_subplot(1, 3, 1, projection="3d")
+    fig = plt.figure(figsize=plt.figaspect(1 / 1.0))
+    plt.subplots_adjust(bottom=0.1, top=0.9, right=0.9, left=0.1)
+    ax0 = fig.add_subplot(1, 1, 1, projection="3d")
     ax0.set_box_aspect((1, 1, 1))
     ax0.view_init(45, 45)
-    ax0.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=12, alpha=0.3)
+    ax0.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=8, alpha=0.6)
     # ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.4)
     # ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "b.", mec="none", ms=5, alpha=0.2)
     ax0.plot(
@@ -83,29 +92,35 @@ def plot_3d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name
         ls="none",
         marker="^",
         mec="none",
-        ms=7,
+        ms=5,
         alpha=0.8,
     )
 
-    ax0.set_title("Objective space (Initialization)")
+    ax0.set_title("Initialization")
     ax0.set_xlabel(r"$f_1$")
     ax0.set_ylabel(r"$f_2$")
     ax0.set_zlabel(r"$f_3$")
     lgnd = ax0.legend(
         # [r"$Y_0$", "Pareto front", "medoids"],
-        [r"$Y_0$", "medoids"],
+        [r"$Y_0$", "reference set"],
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.14),
+        bbox_to_anchor=(0.5, 0.1),
         ncol=2,
         fancybox=True,
     )
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
+    plt.savefig(fig_name + "_1.pdf", dpi=1000)
 
-    for i in range(len(y0)):
-        ax0.plot((medoids0[i, 0], y0[i, 0]), (medoids0[i, 1], y0[i, 1]), (medoids0[i, 2], y0[i, 2]), "k-")
+    # for i in range(len(y0)):
+    # ax0.plot((medoids0[i, 0], y0[i, 0]), (medoids0[i, 1], y0[i, 1]), (medoids0[i, 2], y0[i, 2]), "k-")
 
-    ax1 = fig.add_subplot(1, 3, 2, projection="3d")
+    fig = plt.figure(figsize=plt.figaspect(1 / 1.0))
+    # plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
+    plt.subplots_adjust(bottom=0.1, top=0.9, right=0.9, left=0.1)
+    ax1 = fig.add_subplot(1, 1, 1, projection="3d")
+
+    # ax1 = fig.add_subplot(1, 3, 2, projection="3d")
     ax1.set_box_aspect((1, 1, 1))
     ax1.view_init(45, 45)
     if 11 < 2:
@@ -125,9 +140,9 @@ def plot_3d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name
             )
 
     lines = []
-    lines += ax1.plot(
-        pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.2
-    )
+    # lines += ax1.plot(
+    #     pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.2
+    # )
     shifts = []
     for i, M in enumerate(history_medoids):
         c = colors[len(M) - 1]
@@ -141,54 +156,58 @@ def plot_3d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name
     counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
     lgnd = ax1.legend(
         handles=lines,
-        labels=["Pareto front"]
-        + [f"{i + 1} shift(s): {k} medoids" for i, k in enumerate(counts)]
-        + [r"$Y_{\mathrm{final}}$"],
+        # labels=[f"{i + 1} shift(s): {k} medoids" for i, k in enumerate(counts)]  # ["Pareto front"]
+        labels=["reference set"] + [r"$Y_{\mathrm{final}}$"],
         loc="lower center",
-        bbox_to_anchor=(0.5, -0.14),
+        bbox_to_anchor=(0.5, 0.1),
         ncol=2,
         fancybox=True,
     )
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
 
-    ax1.set_title("Objective space")
+    ax1.set_title("Final population")
     ax1.set_xlabel(r"$f_1$")
     ax1.set_ylabel(r"$f_2$")
     ax1.set_ylabel(r"$f_3$")
+    plt.savefig(fig_name + "_2.pdf", dpi=1000)
 
-    ax2 = fig.add_subplot(1, 3, 3, projection="3d")
-    ax2.set_box_aspect((1, 1, 1))
-    ax2.view_init(45, 45)
-    ax2.set_title("Before/After")
-    ax2.set_xlabel(r"$f_1$")
-    ax2.set_ylabel(r"$f_2$")
-    ax2.set_ylabel(r"$f_3$")
-    ax2.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=12, alpha=0.3)
-    ax2.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g+", ms=8, alpha=0.8)
-    lgnd = ax2.legend(
-        [r"$Y_0$", r"$Y_{\mathrm{final}}$"],
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.14),
-        ncol=2,
-        fancybox=True,
-    )
-    for handle in lgnd.legend_handles:
-        handle.set_markersize(10)
+    # ax2 = fig.add_subplot(1, 3, 3, projection="3d")
+    # ax2.set_box_aspect((1, 1, 1))
+    # ax2.view_init(45, 45)
+    # ax2.set_title("Before/After")
+    # ax2.set_xlabel(r"$f_1$")
+    # ax2.set_ylabel(r"$f_2$")
+    # ax2.set_ylabel(r"$f_3$")
+    # ax2.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=12, alpha=0.3)
+    # ax2.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g+", ms=8, alpha=0.8)
+    # lgnd = ax2.legend(
+    #     [r"$Y_0$", r"$Y_{\mathrm{final}}$"],
+    #     loc="lower center",
+    #     bbox_to_anchor=(0.5, -0.25),
+    #     ncol=2,
+    #     fancybox=True,
+    # )
+    # for handle in lgnd.legend_handles:
+    #     handle.set_markersize(10)
 
-    # ax2 = fig.add_subplot(1, 3, 3)
-    # ax2.set_aspect("equal")
-    # ax22 = ax2.twinx()
-    # ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
-    # ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
-    # ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
-    # ax2.set_title("Performance")
-    # ax2.set_xlabel("iteration")
-    # ax2.set_xticks(range(1, max_iters + 1))
-    # ax2.legend()
+    fig, ax2 = plt.subplots(1, 1, figsize=(8, 6.5))
+    plt.subplots_adjust(right=0.85, left=0.2)
+
+    ax22 = ax2.twinx()
+    ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
+    ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
+    ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
+    ax2.set_ylabel("IGD", color="r")
+    # ax22.set_ylabel(r"R norm", color="g")
+    ax2.set_title("Performance")
+    ax2.set_xlabel("iteration")
+    ax2.set_xticks(range(1, max_iters + 1))
+    ax2.legend()
     # plt.tight_layout()
-    plt.show()
-    plt.savefig(fig_name, dpi=1000)
+    plt.savefig(fig_name + "_3.pdf", dpi=1000)
+
+    # plt.savefig(fig_name, dpi=1000)
     plt.close(fig)
 
 
@@ -216,7 +235,7 @@ def execute(run: int):
             except:
                 continue
         # downsample the reference; otherwise, initial clustering take too long
-        ref[i] = np.array(random.sample(r.tolist(), 700)) if len(r) >= 700 else r
+        ref[i] = np.array(random.sample(r.tolist(), 3000)) if len(r) >= 3000 else r
         try:
             eta[i] = pd.read_csv(
                 f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
@@ -285,10 +304,18 @@ def execute(run: int):
     X, Y, _ = opt.run()
     # remove the dominated solution in Y
     Y = get_non_dominated(Y)
-    fig_name = f"./plots/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
-    plot_3d(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    if 1 < 2:  # plotting the final approximation set
+        fig_name = f"./plots/{problem_name}_DpN_{emoa}_run{run}_{gen}"
+        plot_3d(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    if 1 < 2:  # save the final approximation set
+        df = pd.DataFrame(Y, columns=[f"f{i}" for i in range(1, Y.shape[1] + 1)])
+        df.to_csv(f"{problem_name}_DpN_{emoa}_run{run}_{gen}_y.csv", index=False)
+        df_y0 = pd.DataFrame(y0, columns=[f"f{i}" for i in range(1, y0.shape[1] + 1)])
+        df_y0.to_csv(f"{problem_name}_DpN_{emoa}_run{run}_{gen}_y0.csv", index=False)
+
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
+    # hv_value = hypervolume(Y, ref)
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
 
 
@@ -306,12 +333,11 @@ if problem_name == "IDTLZ4" and emoa == "NSGA-III":
 
 if 1 < 2:
     data = []
-    for i in run_id:
+    for i in [19]:
         print(i)
         data.append(execute(i))
-        breakpoint()
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 
 df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "Jac_calls"])
-df.to_csv(f"results/{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
+# df.to_csv(f"results/{problem_name}-Dp/N-{emoa}-{gen}.csv", index=False)

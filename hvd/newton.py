@@ -688,8 +688,8 @@ class DpN:
             X0 = np.clip(X0, self.xl, self.xu)
             # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is not defined
             # on the decision boundary or the local Hessian is ill-conditioned.
-            # X0 = np.clip(X0 - self.xl, 1e-3, 1) + self.xl
-            # X0 = np.clip(X0 - self.xu, -1, -1e-3) + self.xu
+            # X0 = np.clip(X0 - self.xl, 1e-5, 1) + self.xl
+            # X0 = np.clip(X0 - self.xu, -1, -1e-5) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -792,7 +792,7 @@ class DpN:
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"GD/IGD: {self.GD_value, igd_value}")
-            self.logger.info(f"step size: {self.step_size.ravel()}")
+            # self.logger.info(f"step size: {self.step_size.ravel()}")
             self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
 
     def terminate(self) -> bool:
@@ -855,7 +855,7 @@ class DpN:
             dh = np.array([]) if dH is None else dH[r]
             Z = np.zeros((len(dh), len(dh)))
             # pre-condition indicator's Hessian if needed, e.g., on ZDT6, CF1, CF7
-            Hessian[r] = precondition_hessian(Hessian[r])
+            # Hessian[r] = precondition_hessian(Hessian[r])
             # derivative of the root-finding problem
             DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             R[r, c] = R_list[r]
@@ -890,7 +890,7 @@ class DpN:
 
         if self._eta is None:
             self._eta = dict()
-            # compute the shift direction
+            # compute the shift direction with CHIM
             for i in range(self.n_cluster):
                 Y = self.state.Y[self.Y_idx[i]]
                 idx = non_domin_sort(Y, only_front_indices=True)[0]
@@ -902,7 +902,7 @@ class DpN:
             # NOTE: initial shift CF1: 0.6, CF2/3: 0.2
             # DTLZ4: 0.08 seems to work a bit better
             # TODO: create a configuration class to set those hyperparameter of this method, e.g., shift amount
-            v = 0.05 * n if self.iter_count > 0 else 0.2 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.06 * n  # the initial shift is a bit larger
             self._igd.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids

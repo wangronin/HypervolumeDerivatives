@@ -28,7 +28,7 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 6
+max_iters = 5
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
@@ -45,9 +45,11 @@ def plot_2d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name
     colors = plt.get_cmap("tab20").colors
     colors = [colors[2], colors[12], colors[13], colors[17], colors[19]]
     plt.style.use("ggplot")
-    fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
-    plt.subplots_adjust(right=0.93, left=0.05)
+    # fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
+    # plt.subplots_adjust(right=0.93, left=0.05)
 
+    fig, ax0 = plt.subplots(1, 1, figsize=(8, 6.5))
+    plt.subplots_adjust(right=0.9, left=0.1)
     ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
     ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
     ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
@@ -58,8 +60,13 @@ def plot_2d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
 
+    plt.savefig(fig_name + "_1.pdf", dpi=1000)
+
+    fig, ax1 = plt.subplots(1, 1, figsize=(8, 6.5))
+    plt.subplots_adjust(right=0.9, left=0.1)
+
     N = len(y0)
-    if 1 < 2:
+    if 11 < 2:
         trajectory = np.array([y0] + hist_Y)
         for i in range(N):
             x, y = trajectory[:, i, 0], trajectory[:, i, 1]
@@ -103,6 +110,10 @@ def plot_2d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name
     ax1.set_title("Objective space")
     ax1.set_xlabel(r"$f_1$")
     ax1.set_ylabel(r"$f_2$")
+    plt.savefig(fig_name + "_2.pdf", dpi=1000)
+
+    fig, ax2 = plt.subplots(1, 1, figsize=(8, 6.5))
+    plt.subplots_adjust(right=0.85, left=0.2)
 
     ax22 = ax2.twinx()
     ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
@@ -114,7 +125,8 @@ def plot_2d(y0, Y, ref, hist_Y, history_medoids, hist_IGD, hist_R_norm, fig_name
     ax2.set_xticks(range(1, max_iters + 1))
     ax2.legend()
     # plt.tight_layout()
-    plt.savefig(fig_name, dpi=1000)
+    plt.savefig(fig_name + "_3.pdf", dpi=1000)
+    # plt.savefig(fig_name, dpi=1000)
     plt.close(fig)
 
 
@@ -127,6 +139,9 @@ def execute(run: int):
     eta = dict()
     # load the reference set
     for i in range(n_cluster):
+        # ref[i] = pd.read_csv(
+        #     f"{path}/{problem_name}_{emoa}_run_{run}_ref_{i+1}_gen{gen}.csv", header=None
+        # ).values
         ref[i] = pd.read_csv(
             f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
         ).values
@@ -179,8 +194,13 @@ def execute(run: int):
         Y_label=Y_label,
     )
     X, Y, _ = opt.run()
-    fig_name = f"./plots/{problem_name}_DpN_{emoa}_run{run}_{gen}.pdf"
+    fig_name = f"./plots/{problem_name}_DpN_{emoa}_run{run}_{gen}"
     plot_2d(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+    # save the data
+    df = pd.DataFrame(Y, columns=[f"f{i}" for i in range(1, Y.shape[1] + 1)])
+    df.to_csv(f"{problem_name}_DpN_{emoa}_run{run}_{gen}_y.csv", index=False)
+    df_y0 = pd.DataFrame(y0, columns=[f"f{i}" for i in range(1, y0.shape[1] + 1)])
+    df_y0.to_csv(f"{problem_name}_DpN_{emoa}_run{run}_{gen}_y0.csv", index=False)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
@@ -195,10 +215,11 @@ if problem_name == "ZDT2" and emoa == "NSGA-III":
     run_id = list(set(run_id) - set([24]))
 
 if 11 < 2:
-    for i in run_id:
+    for i in [12]:
         execute(i)
+        # breakpoint()
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
     df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "Jac_calls"])
     # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
-    df.to_csv(f"results/{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
+    # df.to_csv(f"results/{problem_name}-DpN-{emoa}-{gen}.csv", index=False)
