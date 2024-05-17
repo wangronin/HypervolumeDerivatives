@@ -183,7 +183,7 @@ def execute(run: int):
         g=problem.ieq_constraint,
         g_jac=problem.ieq_jacobian,
         N=len(x0),
-        x0=x0,
+        X0=x0,
         xl=problem.xl,
         xu=problem.xu,
         max_iters=max_iters,
