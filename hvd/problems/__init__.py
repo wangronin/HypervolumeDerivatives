@@ -1,4 +1,4 @@
-from .base import CONV3, CONV4, CONV4_2F, UF7, UF8, PymooProblemWithAD
+from .base import PymooProblemWithAD
 from .cf import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from .dtlz import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
 from .eqdtlz import (
@@ -15,6 +15,7 @@ from .eqdtlz import (
     Eq1IDTLZ3,
     Eq1IDTLZ4,
 )
+from .misc import CONV3, CONV4, CONV4_2F, UF7, UF8
 from .zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 
 __all__ = [

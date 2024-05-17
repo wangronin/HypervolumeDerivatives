@@ -68,7 +68,7 @@ opt = DpN(
     N=N,
     xl=0,
     xu=1,
-    x0=x0,
+    X0=x0,
     max_iters=max_iters,
     verbose=True,
 )
