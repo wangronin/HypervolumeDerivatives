@@ -4,7 +4,8 @@ import numpy as np
 from jax.numpy import pi
 
 from ..utils import timeit
-from .base import UF8, ConstrainedMOOAnalytical
+from .base import ConstrainedMOOAnalytical
+from .misc import UF8
 
 
 class CF1(ConstrainedMOOAnalytical):
