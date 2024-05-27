@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
+from scipy.linalg import solve
 
 plt.style.use("ggplot")
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
@@ -42,7 +43,7 @@ def MOP1_Hessian(x):
 
 
 # the index of the point that will vary
-index = 15
+index = 0
 
 
 def func(x):
@@ -53,7 +54,7 @@ def func(x):
 
 def func2(x):
     X[index] = x
-    return mmd.compute_gradient(X)["MMDdX"][index] * 20
+    return mmd.compute_gradient(X)["MMDdX"][index] * 10
 
 
 best_from_angel = pd.read_csv("MOP1_n=30.csv", header=None).values
@@ -73,8 +74,13 @@ dim = Y.shape[1]
 
 theta = 1 / mu
 kernel = rbf
-mmd = MMD(2, 2, ref=ref, func=MOP1, jac=MOP1_Jacobian, kernel=kernel, theta=theta)
-g = mmd.compute_gradient(X)["MMDdX"][index]
+mmd = MMD(2, 2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian, kernel=kernel, theta=theta)
+out = mmd.compute_hessian(X)
+g = out["MMDdX"][index]
+H = out["MMDdX2"][index * 2 : (index + 1) * 2, index * 2 : (index + 1) * 2]
+# the Newton direction w/o pre-conditioning
+newton_step = -1 * solve(H, g.reshape(-1, 1)).ravel()
+g /= 5 * np.linalg.norm(g)
 # generate a fine grained Pareto front for measuring the final metrics
 p = np.linspace(-1, 1, 500)
 pareto_set = np.c_[p, p]
@@ -87,21 +93,39 @@ ax0_handles = []
 ax0_handles += ax0.plot(pareto_set[:, 0], pareto_set[:, 1], "m-", alpha=0.5)
 ax0_handles += ax0.plot(X[:, 0], X[:, 1], "g.", ms=5, clip_on=False)
 ax0.plot(X[index, 0], X[index, 1], "r.", ms=5, clip_on=False)
-ax0.quiver(
-    X[index, 0],
-    X[index, 1],
-    g[0],
-    g[1],
-    scale_units="xy",
-    angles="xy",
-    scale=1,
-    color="k",
-    width=0.005,
-    alpha=0.5,
-    headlength=3,
-    headwidth=1.7,
+ax0_handles.append(
+    ax0.quiver(
+        X[index, 0],
+        X[index, 1],
+        -1 * g[0],
+        -1 * g[1],
+        scale_units="xy",
+        angles="xy",
+        scale=1,
+        color="k",
+        width=0.005,
+        alpha=0.5,
+        headlength=3,
+        headwidth=1.7,
+    )
 )
-ax0.set_title("w/o reference set shifting")
+ax0_handles.append(
+    ax0.quiver(
+        X[index, 0],
+        X[index, 1],
+        newton_step[0],
+        newton_step[1],
+        scale_units="xy",
+        angles="xy",
+        scale=1,
+        color="r",
+        width=0.005,
+        alpha=0.5,
+        headlength=3,
+        headwidth=1.7,
+    )
+)
+ax0.set_title(rf"w/o reference set shifting, $\sigma^2={0.5/theta}$")
 ax0.set_xlabel(r"$x_1$")
 ax0.set_ylabel(r"$x_2$")
 
@@ -115,10 +139,13 @@ CS = ax0.contour(X1, X2, Z, 30, cmap=plt.cm.jet, linewidths=0.8, alpha=0.6)
 fig.colorbar(CS)
 ax0.clabel(CS, inline=True, fontsize=10)
 # plot the gradient field of MMD
+# n_per_axis = 20
+# x = np.linspace(-2, 2, n_per_axis)
+# X1, X2 = np.meshgrid(x, x)
 # G = np.array([func2(p) for p in np.array([X1.flatten(), X2.flatten()]).T])
 # U = G[:, 0].reshape(-1, len(x))
 # V = G[:, 1].reshape(-1, len(x))
-# Q = ax0.quiver(X1, X2, U, V, scale=1, color="k", width=0.005, alpha=0.5, headlength=2, headwidth=1.7)
+# Q = ax0.quiver(X1, X2, U, V, scale=1, color="k", width=0.003, alpha=0.5, headlength=3, headwidth=1.7)
 
-ax0.legend(ax0_handles, ["efficient set", r"$Y_0$"])
+ax0.legend(ax0_handles, ["efficient set", r"$Y_0$", r"$-\nabla \text{MMD}$", "Newton"])
 plt.savefig(f"MOP1_Newton_{kernel.__name__}_sigma2={0.5/theta:.2f}_landscape_{index}_no_shifting.pdf")
