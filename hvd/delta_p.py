@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -116,26 +116,21 @@ class GenerationalDistance:
 
 # TODO: think of a better abstraction here.
 class ReferenceSet:
-    def __init__(self, ref: np.ndarray, p: float = 2, Y_idx: Optional[np.ndarray] = None) -> None:
+    def __init__(self, ref: np.ndarray, p: float = 2) -> None:
         self._ref: Dict[int, np.ndarray] = {0: ref} if isinstance(ref, np.ndarray) else ref
         assert isinstance(self._ref, dict)
-        self.n_components: int = len(self._ref)  # the number of connected components of the reference set
+        self.n_components: int = len(self._ref)
         self.p: float = p
         self.dim: int = self._ref[0].shape[1]
         self.N: int = len(self.reference_set)
-        self.Y_idx = Y_idx
         self._medoids: Dict[int, np.ndarray] = {i: None for i in range(self.n_components)}
 
     @property
     def reference_set(self) -> np.ndarray:
         return np.concatenate(list(self._ref.values()), axis=0)
 
-    @property
-    def medoids(self) -> np.ndarray:
-        return self._matched_medoids
-
-    def match(self, Y: Union[dict, np.ndarray]) -> np.ndarray:
-        Y = self._check_Y(Y)
+    def match(self, Y: Union[dict, np.ndarray], Y_idx: Union[List, None] = None) -> np.ndarray:
+        Y, Y_idx = self._check_Y(Y, Y_idx)
         N = sum([len(y) for y in Y])
         # match the components of the reference set and `Y`
         idx = self._match_components(Y)
@@ -155,21 +150,14 @@ class ReferenceSet:
             for i, j in enumerate(Y_idx[v]):
                 self._medoids_idx[j] = (k, i)
         # TODO: make `out` a property
-        self._matched_medoids = out
-        # return out
+        return out
 
     def set_medoids(self, medroid: np.ndarray, k: int):
         # update the medoids
         c, idx = self._medoids_idx[k]
         self._medoids[c][idx] = medroid
 
-    def _check_Y(self, Y: Union[dict, np.ndarray], Y_idx: Optional[List]) -> Tuple[np.ndarray, np.ndarray]:
-        if self.n_components == 1:
-            if isinstance(Y, np.ndarray):
-                Y = [Y]
-            assert len(Y) == 1
-            if self.Y_idx is None:
-                Y = [Y]
+    def _check_Y(self, Y: Union[dict, np.ndarray], Y_idx: Union[List, None]) -> Tuple[np.ndarray, np.ndarray]:
         # idx = []
         # for y in Y:
         #     idx.append(np.argmin([directed_hausdorff(ref[i], np.atleast_2d(y))[0] for i in range(len(ref))]))
