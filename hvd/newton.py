@@ -9,6 +9,7 @@ from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
 
+from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
@@ -484,97 +485,6 @@ class HVN:
         return bool(self.stop_dict)
 
 
-class State:
-    def __init__(
-        self,
-        dim_p: int,
-        n_eq: int,
-        n_ieq: int,
-        func: callable,
-        jac: callable,
-        h: callable = None,
-        h_jac: callable = None,
-        g: callable = None,
-        g_jac: callable = None,
-    ) -> None:
-        self.dim_p = dim_p
-        self.n_eq = n_eq
-        self.n_ieq = n_ieq
-        self.func = func
-        self._jac = jac
-        self.h = h
-        self.h_jac = h_jac
-        self.g = g
-        self.g_jac = g_jac
-        self._constrained = self.g is not None or self.h is not None
-        self.n_jac_evals = 0
-
-    def jac(self, x: np.ndarray) -> np.ndarray:
-        """Jacobian of the objective function"""
-        self.n_jac_evals += 1
-        return self._jac(x)
-
-    def update(self, X: np.ndarray, compute_gradient: bool = True):
-        self.X = X
-        primal_vars = self.primal
-        self.Y = np.array([self.func(x) for x in primal_vars])
-        self.J = np.array([self.jac(x) for x in primal_vars]) if compute_gradient else None
-        if self._constrained:
-            eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=compute_gradient)
-            ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=compute_gradient)
-            cstr_value, active_indices, dH = merge_lists(eq, ieq)
-            self.cstr_value = cstr_value
-            self.active_indices = active_indices
-            self.dH = dH
-
-    def update_one(self, x: np.ndarray, k: int):
-        self.X[k] = x
-        x = np.atleast_2d(x)
-        primal_vars = x[:, : self.dim_p]
-        self.Y[k] = self.func(primal_vars[0])
-        self.J[k] = self.jac(primal_vars[0])
-        if self._constrained:
-            eq = self._evaluate_constraints(primal_vars, type="eq", compute_gradient=True)
-            ieq = self._evaluate_constraints(primal_vars, type="ieq", compute_gradient=True)
-            cstr_value, active_indices, dH = merge_lists(eq, ieq)
-            self.cstr_value[k] = cstr_value
-            self.active_indices[k] = active_indices
-            self.dH[k] = dH
-
-    @property
-    def primal(self) -> np.ndarray:
-        """Primal variables"""
-        return self.X[:, : self.dim_p]
-
-    @property
-    def dual(self) -> np.ndarray:
-        """Langranian dual variables"""
-        return self.X[:, self.dim_p :]
-
-    @property
-    def H(self) -> np.ndarray:
-        """Equality constraint values"""
-        return self.cstr_value[:, : self.n_eq]
-
-    @property
-    def G(self) -> np.ndarray:
-        """Inequality constraint values"""
-        return self.cstr_value[:, self.n_eq :]
-
-    def _evaluate_constraints(self, primal_vars: np.ndarray, type: str = "eq", compute_gradient: bool = True):
-        N = len(primal_vars)
-        func = self.h if type == "eq" else self.g
-        jac = self.h_jac if type == "eq" else self.g_jac
-        if func is None:
-            return None
-        value = np.array([func(x) for x in primal_vars]).reshape(N, -1)
-        active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-4 for v in value]
-        active_indices = np.array(active_indices)
-        if compute_gradient:
-            H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
-        return (value, active_indices, H) if compute_gradient else (value, active_indices)
-
-
 class DpN:
     """Delta_p Newton method with constraint handling
 
@@ -884,6 +794,17 @@ class DpN:
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_p], axis=1), 0),
             )
         )
+        import matplotlib.pyplot as plt
+
+        # fig, ax = plt.subplots(1, 1, figsize=(25, 6.5))
+        # plt.subplots_adjust(right=0.93, left=0.05)
+        # medoids = self._igd._medoids
+        # ax.plot(medoids[:, 0], medoids[:, 1], "k.", alpha=0.5)
+        # ax.plot(self.state.Y[:, 0], self.state.Y[:, 1], "k+", alpha=0.5)
+        # for i, m in enumerate(medoids):
+        #     ax.plot((m[0], self.state.Y[i, 0]), (m[1], self.state.Y[i, 1]), "r--", alpha=0.5)
+        # plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
+
         indices = np.nonzero(masks)[0]
         if len(indices) == 0:
             return
@@ -902,7 +823,7 @@ class DpN:
             # NOTE: initial shift CF1: 0.6, CF2/3: 0.2
             # DTLZ4: 0.08 seems to work a bit better
             # TODO: create a configuration class to set those hyperparameter of this method, e.g., shift amount
-            v = 0.05 * n if self.iter_count > 0 else 0.06 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.05 * n  # the initial shift is a bit larger
             self._igd.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
@@ -966,7 +887,7 @@ class DpN:
         """The box-constraint handler projects the Newton step onto the box boundary, preventing the
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         """
-        if 1 < 2:
+        if 11 < 2:
             return step, np.ones(len(step))
 
         primal_vars = self.state.primal

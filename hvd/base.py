@@ -3,11 +3,10 @@ import numpy as np
 from .utils import merge_lists
 
 
-# TODO: add Hessian
 class State:
     def __init__(
         self,
-        dim_p: int,
+        n_var: int,
         n_eq: int,
         n_ieq: int,
         func: callable,
@@ -17,17 +16,17 @@ class State:
         g: callable = None,
         g_jac: callable = None,
     ) -> None:
-        self.dim_p = dim_p
-        self.n_eq = n_eq
-        self.n_ieq = n_ieq
-        self.func = func
-        self._jac = jac
-        self.h = h
-        self.h_jac = h_jac
-        self.g = g
-        self.g_jac = g_jac
-        self._constrained = self.g is not None or self.h is not None
-        self.n_jac_evals = 0
+        self.n_var: int = n_var  # the number of the primal variables
+        self.n_eq: int = n_eq
+        self.n_ieq: int = n_ieq
+        self.func: callable = func
+        self._jac: callable = jac
+        self.h: callable = h
+        self.h_jac: callable = h_jac
+        self.g: callable = g
+        self.g_jac: callable = g_jac
+        self._constrained: bool = self.g is not None or self.h is not None
+        self.n_jac_evals: int = 0
 
     def jac(self, x: np.ndarray) -> np.ndarray:
         """Jacobian of the objective function"""
@@ -50,7 +49,7 @@ class State:
     def update_one(self, x: np.ndarray, k: int):
         self.X[k] = x
         x = np.atleast_2d(x)
-        primal_vars = x[:, : self.dim_p]
+        primal_vars = x[:, : self.n_var]
         self.Y[k] = self.func(primal_vars[0])
         self.J[k] = self.jac(primal_vars[0])
         if self._constrained:
@@ -64,12 +63,12 @@ class State:
     @property
     def primal(self) -> np.ndarray:
         """Primal variables"""
-        return self.X[:, : self.dim_p]
+        return self.X[:, : self.n_var]
 
     @property
     def dual(self) -> np.ndarray:
         """Langranian dual variables"""
-        return self.X[:, self.dim_p :]
+        return self.X[:, self.n_var :]
 
     @property
     def H(self) -> np.ndarray:
@@ -91,5 +90,5 @@ class State:
         active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-4 for v in value]
         active_indices = np.array(active_indices)
         if compute_gradient:
-            H = np.array([jac(x).reshape(-1, self.dim_p) for x in primal_vars])
+            H = np.array([jac(x).reshape(-1, self.n_var) for x in primal_vars])
         return (value, active_indices, H) if compute_gradient else (value, active_indices)

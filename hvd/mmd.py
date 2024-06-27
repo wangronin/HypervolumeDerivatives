@@ -228,7 +228,6 @@ class MMDMatching:
         Y: np.ndarray = None,
         compute_hessian: bool = True,
         jacobian: np.ndarray = None,
-        hessian: np.ndarray = None,
     ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
         """compute the derivatives of the inverted generational distance^p
 
@@ -236,19 +235,21 @@ class MMDMatching:
             X (np.ndarray): the decision points of shape (N, dim).
             Y (np.ndarray, optional): the objective points of shape (N, n_objective). Defaults to None.
             compute_hessian (bool, optional): whether the Hessian is computed. Defaults to True.
+            jacobian (np.ndarray, optional): Jacobian of the objective function at `X`. Defaults to None.
 
         Returns:
             Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
                 if `compute_hessian` = True, it returns (gradient, Hessian)
                 otherwise, it returns (gradient, )
         """
-        # TODO: pass in the objective Jacobian and Hessian. `jacobian` and `hessian` should be used
-        grad = self.compute_gradient(X, Y)["MMDdX"]
+        grad = self.compute_gradient(X, Y, jacobian)["MMDdX"]
         if compute_hessian:
             hessian = self.compute_hessian(X, Y)["MMDdX2"]
         return (grad, hessian) if compute_hessian else grad
 
-    def compute_gradient(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
+    def compute_gradient(
+        self, X: np.ndarray, Y: np.ndarray = None, jacobian: np.ndarray = None
+    ) -> Dict[str, np.ndarray]:
         """compute the gradient of the MMD indicator w.r.t. objective points
 
         Args:
@@ -258,7 +259,7 @@ class MMDMatching:
             np.ndarray: the gradient of shape (`N`, `self.n_objective`)
         """
         X = self._check_X(X)
-        Y, YdX, YdX2 = self._compute_objective_derivatives(X, Y)
+        Y, YdX, YdX2 = self._compute_objective_derivatives(X, Y, jacobian)
         self.ref.match(Y)  # matching `Y` to the medoids of the reference set
         N = Y.shape[0]
         MMDdY = np.zeros((N, self.n_objective))
@@ -312,14 +313,15 @@ class MMDMatching:
         return X
 
     def _compute_objective_derivatives(
-        self, X: np.ndarray, Y: np.ndarray = None
+        self, X: np.ndarray, Y: np.ndarray = None, jacobian: np.ndarray = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """compute the objective function value, the Jacobian, and Hessian tensor"""
         if Y is None:
             Y = np.array([self.func(x) for x in X])  # `(N, n_objective)`
         assert Y.shape[1] == self.n_objective
         # Jacobians of the objective function
-        YdX = np.array([self.jac(x) for x in X])  # `(N, n_objective, n_decision_var)`
+        #  of shape `(N, n_objective, n_decision_var)`
+        YdX = np.array([self.jac(x) for x in X]) if jacobian is None else jacobian
         # Hessians of the objective function
         YdX2 = np.array([self.hessian(x) for x in X])  # `(N, n_objective, n_decision_var, n_decision_var)`
         return Y, YdX, YdX2
