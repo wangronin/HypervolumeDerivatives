@@ -7,11 +7,62 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import numpy as np
+import pandas as pd
 from jax import jit
 from scipy.linalg import cholesky, qr
 from sklearn.neighbors import LocalOutlierFactor
 
 __author__ = "Hao Wang"
+
+
+def read_reference_set_data(
+    path: str, problem_name: str, emoa: str, run: int, gen: int
+) -> Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray], List[int]]:
+    # TODO: create a helper function for this snippet
+    ref_label = pd.read_csv(
+        f"{path}/{problem_name}_{emoa}_run_{run}_component_id_gen{gen}.csv", header=None
+    ).values[0]
+    n_cluster = len(np.unique(ref_label))
+    ref = dict()
+    eta = dict()
+    # load the reference set
+    for i in range(n_cluster):
+        # ref[i] = pd.read_csv(
+        #     f"{path}/{problem_name}_{emoa}_run_{run}_ref_{i+1}_gen{gen}.csv", header=None
+        # ).values
+        ref[i] = pd.read_csv(
+            f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
+        ).values
+        eta[i] = pd.read_csv(
+            f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
+        ).values.ravel()
+
+    all_ref = np.concatenate([v for v in ref.values()], axis=0)
+    # sometimes the precomputed `eta` value can be `nan`
+    if np.any([np.any(np.isnan(_eta)) for _eta in eta.values()]):
+        eta = None
+
+    # the load the final population from an EMOA
+    X0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_x_gen{gen}.csv", header=None).values
+    Y0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_y_gen{gen}.csv", header=None).values
+    Y_label = pd.read_csv(
+        f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_labels_gen{gen}.csv", header=None
+    ).values.ravel()
+    Y_label = Y_label - 1
+    idx = Y_label != -2  # outliers
+    X0 = X0[idx]
+    Y0 = Y0[idx]
+    Y_label = Y_label[idx]
+    # Y0 = np.array([problem.objective(_) for _ in X0])
+    # if the number of clusters of `Y` is more than that of the reference set
+    if len(np.unique(Y_label)) > len(ref):
+        ref = np.vstack([r for r in ref.values()])
+        Y_label = np.zeros(len(Y0))
+        eta = None
+
+    n_cluster = len(np.unique(Y_label))
+    Y_idx = [np.nonzero(Y_label == i)[0] for i in range(n_cluster)]
+    return ref, eta, X0, Y0, Y_idx
 
 
 def merge_lists(x, y):

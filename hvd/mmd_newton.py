@@ -43,6 +43,7 @@ class MMDNewton:
         xtol: float = 0,
         verbose: bool = True,
         metrics: Dict[str, Callable] = dict(),
+        **kwargs,
     ):
         """
         Args:
@@ -83,7 +84,7 @@ class MMDNewton:
         self._check_constraints(h, g)
         self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
         self.indicator = MMDMatching(
-            self.dim_p, self.n_obj, ref=self.ref, func=func, jac=jac, hessian=hessian, theta=1.0
+            self.dim_p, self.n_obj, ref=self.ref, func=func, jac=jac, hessian=hessian, theta=1.0, beta=0.5
         )
         self._initialize(X0)
         self._set_logging(verbose)
@@ -180,7 +181,7 @@ class MMDNewton:
         self.history_indicator_value += [self.curr_indicator_value]
         self.history_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
         for name, func in self.metrics.items():  # compute the performance metrics
-            self.history_metrics[name] = func.compute(Y=self.state.Y)
+            self.history_metrics[name].append(func.compute(Y=self.state.Y))
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"{self.indicator.__class__.__name__}: {self.curr_indicator_value}")
@@ -319,7 +320,7 @@ class MMDNewton:
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         NOTE: this function is experimental
         """
-        if 1 < 2:
+        if 11 < 2:
             return step, np.ones(len(step))
 
         primal_vars = self.state.primal

@@ -6,6 +6,8 @@ from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist, directed_hausdorff
 from sklearn_extra.cluster import KMedoids
 
+from .utils import compute_chim
+
 __authors__ = ["Hao Wang"]
 
 
@@ -21,17 +23,26 @@ class ClusteredReferenceSet:
     def __init__(
         self,
         ref: Union[Dict[int, np.ndarray], np.ndarray],
-        eta: np.ndarray = None,
+        eta: Union[Dict[int, np.ndarray], np.ndarray] = None,
         Y_idx: Optional[np.ndarray] = None,
     ) -> None:
+        """Clustered Reference Set
+
+        Args:
+            ref (Union[Dict[int, np.ndarray], np.ndarray]): _description_
+            eta (Union[Dict[int, np.ndarray], np.ndarray], optional): _description_. Defaults to None.
+            Y_idx (Optional[np.ndarray], optional): _description_. Defaults to None.
+        """
         self._ref: Dict[int, np.ndarray] = {0: ref} if isinstance(ref, np.ndarray) else ref
         assert isinstance(self._ref, dict)
         self.n_components: int = len(self._ref)  # the number of connected components of the reference set
-        self.dim: int = self._ref[0].shape[1]
+        self.n_obj: int = self._ref[0].shape[1]
         self.Y_idx: List[np.ndarray] = Y_idx  # list of indices of clusters of the approximation set
-        self._medoids: Dict[int, np.ndarray] = {i: None for i in range(self.n_components)}
         self.re_match: bool = True
-        self.eta = eta
+        self.eta: Dict[int, np.ndarray] = eta
+        if self.eta is None:
+            self._compute_shift_direction()
+        self._medoids: Dict[int, np.ndarray] = {i: None for i in range(self.n_components)}
 
     @cached_property
     def N(self) -> np.ndarray:
@@ -52,7 +63,7 @@ class ClusteredReferenceSet:
         N = sum([len(y) for y in Y])
         # match the components of the reference set and `Y`
         idx = self._match_components(Y)
-        out = np.zeros((N, self.dim))
+        out = np.zeros((N, self.n_obj))
         self._medoids_idx = np.empty(N, dtype=object)
         for k, v in enumerate(idx):
             Y_ = Y[v]
@@ -71,6 +82,7 @@ class ClusteredReferenceSet:
 
     def shift(self, c: float = 0.05, indices: np.ndarray = None):
         # shift the medoids
+        # TODO: also shift each component of the reference set
         if indices is None:
             indices = np.arange(len(self._matched_medoids))
         for k in indices:
@@ -79,10 +91,10 @@ class ClusteredReferenceSet:
             self._matched_medoids[k] += v
             self.set_medoids(self._matched_medoids[k], k)
 
-    def set_medoids(self, medroid: np.ndarray, k: int):
+    def set_medoids(self, medoid: np.ndarray, k: int):
         # update the medoids
         c, idx = self._medoids_idx[k]
-        self._medoids[c][idx] = medroid
+        self._medoids[c][idx] = medoid
 
     def _partition_Y(self, Y: np.ndarray) -> List[np.ndarray]:
         """partition the approximation set `Y`. We consider the following scenarios:
@@ -144,3 +156,6 @@ class ClusteredReferenceSet:
         cost = cdist(Y, X)
         idx = linear_sum_assignment(cost)[1]  # min-weight assignment in a bipartite graph
         return X[idx]
+
+    def _compute_shift_direction(self):
+        self.eta = {k: compute_chim(component) for k, component in self._ref.items()}
