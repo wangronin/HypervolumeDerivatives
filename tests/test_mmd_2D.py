@@ -67,8 +67,8 @@ ref = np.array([MOP1(_) for _ in ref_X])
 
 
 def test_2D_objective_space_against_ad():
-    mmd = MMD(n_decision_var=2, n_objective=2, ref=ref)
-    value = mmd.compute(Y)
+    mmd = MMD(n_var=2, n_obj=2, ref=ref)
+    value = mmd.compute(Y=Y)
     grad = mmd.compute_gradient(Y)["MMDdX"]
     H = mmd.compute_hessian(Y)["MMDdX2"]
     f = distance(ref)
@@ -87,8 +87,8 @@ def test_2D_objective_space_against_ad():
 
 
 def test_2D_decision_space_against_ad():
-    mmd = MMD(n_decision_var=dim, n_objective=2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian)
-    value = mmd.compute(Y)
+    mmd = MMD(n_var=dim, n_obj=2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian)
+    value = mmd.compute(Y=Y)
     grad = mmd.compute_gradient(X)["MMDdX"]
     H = mmd.compute_hessian(X)["MMDdX2"]
     f = distance2(MOP1, ref)
