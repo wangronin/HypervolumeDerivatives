@@ -37,8 +37,8 @@ class MMD:
 
     def __init__(
         self,
-        n_decision_var: int,
-        n_objective: int,
+        n_var: int,
+        n_obj: int,
         ref: np.ndarray,
         func: callable = None,
         jac: callable = None,
@@ -61,8 +61,8 @@ class MMD:
         self.func = func if func is not None else lambda x: x
         self.jac = jac if jac is not None else lambda x: np.diag(np.ones(len(x)))
         self.hessian = hessian if hessian is not None else lambda x: np.zeros((len(x), len(x), len(x)))
-        self.n_decision_var = int(n_decision_var)
-        self.n_objective = int(n_objective)
+        self.n_var = int(n_var)
+        self.n_obj = int(n_obj)
         self.theta: float = theta  # kernel's length-scale
         self.ref = ref
         self.N = self.ref.shape[0]
@@ -72,15 +72,21 @@ class MMD:
         self.k_dx2 = jit(jacfwd(jacrev(self.k)))
         self.k_dxdy = jit(jacfwd(jacrev(self.k), argnums=1))  # cross second-order derivatives of the kernel
 
-    def compute(self, Y: np.ndarray) -> float:
+    def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
         """Compute the indicator value
 
         Args:
-            Y (np.ndarray): the Pareto front approximate set of shape (`N`, `self.n_objective`)
+            X (np.ndarray, optional): the decision points of shape (N, dim). Defaults to None.
+            Y (np.ndarray): the Pareto front approximate set of shape (`N`, `self.n_objective`).
+                Defaults to None.
 
         Returns:
             float: MMD value between `Y` and `self.ref`
         """
+        if Y is None:
+            assert X is not None
+            assert self.func is not None
+            Y = np.array([self.func(x) for x in X])
         RR = cdist(self.ref, self.ref, metric=self.k)
         YY = cdist(Y, Y, metric=self.k)
         RY = cdist(self.ref, Y, metric=self.k)
@@ -98,7 +104,7 @@ class MMD:
         X = self._check_X(X)
         Y, YdX, YdX2 = self._compute_objective_derivatives(X, Y)
         N = Y.shape[0]
-        MMDdY = np.zeros((N, self.n_objective))
+        MMDdY = np.zeros((N, self.n_obj))
         for l, y in enumerate(Y):
             # TODO: `term1` is only correct for stationary kernels
             term1 = np.sum([self.k_dx(y, Y[i]) for i in range(N) if i != l], axis=0)
@@ -119,7 +125,7 @@ class MMD:
         out = self.compute_gradient(X, Y)
         Y, YdX, YdX2, MMDdY, MMDdX = out["Y"], out["YdX"], out["YdX2"], out["MMDdY"], out["MMDdX"]
         N, dim_y = Y.shape
-        dim_x = self.n_decision_var
+        dim_x = self.n_var
         MMDdY2 = np.zeros((N * dim_y, N * dim_y))
         MMDdX2 = np.zeros((N * dim_x, N * dim_x))
         for l in range(N):
@@ -144,7 +150,7 @@ class MMD:
     def _check_X(self, X: Union[np.ndarray, List]) -> np.ndarray:
         if not isinstance(X, np.ndarray):
             X = np.asarray(X)
-        if X.shape[1] != self.n_decision_var:
+        if X.shape[1] != self.n_var:
             X = X.T
         return X
 
@@ -154,7 +160,7 @@ class MMD:
         """compute the objective function value, the Jacobian, and Hessian tensor"""
         if Y is None:
             Y = np.array([self.func(x) for x in X])  # `(N, n_objective)`
-        assert Y.shape[1] == self.n_objective
+        assert Y.shape[1] == self.n_obj
         # Jacobians of the objective function
         YdX = np.array([self.jac(x) for x in X])  # `(N, n_objective, n_decision_var)`
         # Hessians of the objective function
@@ -207,15 +213,21 @@ class MMDMatching:
         self.k_dxdy = jit(jacfwd(jacrev(self.k), argnums=1))  # cross second-order derivatives of the kernel
         self.beta = beta  # the weight to scale the spread term, RKHS norm of images of `Y`
 
-    def compute(self, Y: np.ndarray) -> float:
+    def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
         """Compute the indicator value
 
         Args:
-            Y (np.ndarray): the Pareto front approximate set of shape (`N`, `self.n_objective`)
+            X (np.ndarray, optional): the decision points of shape (N, dim). Defaults to None.
+            Y (np.ndarray): the Pareto front approximate set of shape (`N`, `self.n_objective`).
+                Defaults to None.
 
         Returns:
             float: MMD value between `Y` and `self.ref`
         """
+        if Y is None:
+            assert X is not None
+            assert self.func is not None
+            Y = np.array([self.func(x) for x in X])
         self.ref.match(Y)
         return (
             self.beta * cdist(Y, Y, metric=self.k).mean()
