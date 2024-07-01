@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import solve
+from scipy.linalg import block_diag, solve
 
 from .base import State
 from .mmd import MMDMatching
@@ -15,6 +15,21 @@ from .utils import get_logger, precondition_hessian, set_bounds
 np.seterr(divide="ignore", invalid="ignore")
 
 __authors__ = ["Hao Wang"]
+
+
+def Nd_vector_to_matrix(
+    x: np.ndarray, N: int, dim: int, dim_primal: int, active_indices: np.ndarray
+) -> np.ndarray:
+    if dim == dim_primal:  # the unconstrained case
+        return x.reshape(N, -1)
+    X = np.zeros((N, dim))  # Netwon steps
+    D = int(N * dim_primal)
+    a, b = x[:D].reshape(N, -1), x[D:]
+    idx = np.r_[0, np.cumsum([sum(k) - dim_primal for k in active_indices])]
+    b = [b[idx[i] : idx[i + 1]] for i in range(len(idx) - 1)]
+    for i, idx in enumerate(active_indices):
+        X[i, idx] = np.r_[a[i], b[i]]
+    return X
 
 
 class MMDNewton:
@@ -80,11 +95,19 @@ class MMDNewton:
         self.N = N
         self.xl = xl
         self.xu = xu
-        self.ref = ref
+        self.ref = ref  # TODO: we should pass ref to the indicator directly
         self._check_constraints(h, g)
         self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
+        # TODO: move indicator out of this class
         self.indicator = MMDMatching(
-            self.dim_p, self.n_obj, ref=self.ref, func=func, jac=jac, hessian=hessian, theta=1.0, beta=0.5
+            self.dim_p,
+            self.n_obj,
+            ref=self.ref,
+            func=func,
+            jac=jac,
+            hessian=hessian,
+            theta=1.0 / 28,
+            beta=0.3,
         )
         self._initialize(X0)
         self._set_logging(verbose)
@@ -114,8 +137,8 @@ class MMDNewton:
             X0 = np.clip(X0, self.xl, self.xu)
             # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is not defined
             # on the decision boundary or the local Hessian is ill-conditioned.
-            # X0 = np.clip(X0 - self.xl, 1e-5, 1) + self.xl
-            # X0 = np.clip(X0 - self.xu, -1, -1e-5) + self.xu
+            X0 = np.clip(X0 - self.xl, 1e-2, 1) + self.xl
+            X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -202,9 +225,9 @@ class MMDNewton:
         """compute the root-finding problem R
         Returns:
             Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
-                (R, H, idx) -> the rooting-finding problem,
+                (R, H, active_indices) -> the rooting-finding problem,
                 the Jacobian of the equality constraints, and
-                the indices that are active among primal-dual variables
+                the indices of the active primal-dual variables
         """
         primal_vars, dual_vars = state.primal, state.dual
         if grad is None:
@@ -212,37 +235,39 @@ class MMDNewton:
                 X=primal_vars, Y=state.Y, compute_hessian=False, jacobian=state.J
             )
         R = grad  # the unconstrained case
-        dH, idx = None, None
+        dH, active_indices = None, np.array([[True] * state.n_var] * state.N)
         if self._constrained:
+            R = np.zeros((state.N, self.dim))  # the root-finding problem
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
-            v, idx, dH = state.cstr_value, state.active_indices, state.dH
-            dH = [dH[i][idx, :] for i, idx in enumerate(idx)]
-            R = [np.r_[func(grad[i], dual_vars[i, k], dH[i]), v[i, k]] for i, k in enumerate(idx)]
-        return R, dH, idx
+            cstr_value, idx, dH = state.cstr_value, state.active_indices, state.dH
+            dH = [dH[i, idx, :] for i, idx in enumerate(idx)]  # only take Jacobian of the active constraints
+            active_indices = np.c_[active_indices, idx]
+            for i, k in enumerate(active_indices):
+                R[i, k] = np.r_[func(grad[i], dual_vars[i, idx[i]], dH[i]), cstr_value[i, idx[i]]]
+        return R, dH, active_indices
 
     def _compute_netwon_step(self) -> Tuple[np.ndarray, np.ndarray]:
-        primal_vars = self.state.primal
-        newton_step = np.zeros((self.N, self.dim))  # Netwon steps
-        R = np.zeros((self.N, self.dim))  # the root-finding problem
-        # gradient and Hessian of the incumbent indicator
         grad, Hessian = self.indicator.compute_derivatives(
-            X=primal_vars,
-            Y=self.state.Y,
-            jacobian=self.state.J,
+            X=self.state.primal, Y=self.state.Y, jacobian=self.state.J
         )
-        # the root-finding problem and the gradient of the active constraints
-        R_list, dH, active_indices = self._compute_R(self.state, grad=grad)
-        Hessian = precondition_hessian(Hessian)
-        DR, R = Hessian, grad
-        # TODO: implement the constrained case
+        R, dH, active_indices = self._compute_R(self.state, grad=grad)
+        # DR = precondition_hessian(Hessian)
+        DR = Hessian
+        if self._constrained:
+            dH = block_diag(*dH)  # (N * p, N * dim), `p` is the number of active constraints
+            Z = np.zeros((len(dH), len(dH)))
+            DR = np.r_[np.c_[DR, dH.T], np.c_[dH, Z]]
+        # the vector-format of R
+        idx = active_indices[:, self.dim_p :]
+        R_ = np.r_[R[:, : self.dim_p].reshape(-1, 1), R[:, self.dim_p :][idx].reshape(-1, 1)]
         with warnings.catch_warnings():
             warnings.filterwarnings("error")
             try:
-                # TODO: use the sparse matrix representation to save some time here
-                newton_step = -1 * solve(DR, R.reshape(-1, 1)).reshape(self.N, -1)
-            except:
-                # if DR is singular, then use the pseudoinverse.
-                newton_step = -1 * np.linalg.lstsq(DR, R.reshape(-1, 1), rcond=None)[0].reshape(self.N, -1)
+                newton_step_ = -1 * solve(DR, R_)
+            except:  # if DR is singular, then use the pseudoinverse.
+                newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
+        # convert the vector-format of the newton step to matrix format
+        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), self.N, self.dim, self.dim_p, active_indices)
         return newton_step, R
 
     def _shift_reference_set(self):
@@ -250,25 +275,23 @@ class MMDNewton:
         1. always shift the first reference set (`self.iter_count == 0`); Otherwise, weird matching can happen
         2. if at least one approximation point is close to its matched target and the Newton step is not zero.
         """
-        distance = np.linalg.norm(self.state.Y - self.ref.medoids, axis=1)
         if self.iter_count == 0:
             masks = np.array([True] * self.N)
         else:
-            masks = np.bitwise_and(
-                np.isclose(distance, 0),
-                np.isclose(np.linalg.norm(self.step[:, : self.dim_p], axis=1), 0),
-            )
+            distance = np.linalg.norm(self.state.Y - self.ref.medoids, axis=1)
+            step_len = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
+            masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_len, 0))
         indices = np.nonzero(masks)[0]
-        self.ref.shift(0.05, indices)
+        self.ref.shift(0.15, indices)
         self.indicator.ref = self.ref  # TODO: check if this is needed
-        # log the updated medoids
-        for k in indices:
+        for k in indices:  # log the updated medoids
             self.history_medoids[k].append(self.ref.medoids[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
 
     def _backtracking_line_search(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> float:
+        # TODO: use the backtracking line search in scipy
         """backtracking line search with Armijo's condition"""
         c1 = 1e-4
         if np.all(np.isclose(step, 0)):
@@ -320,7 +343,7 @@ class MMDNewton:
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         NOTE: this function is experimental
         """
-        if 11 < 2:
+        if 1 < 2:
             return step, np.ones(len(step))
 
         primal_vars = self.state.primal
