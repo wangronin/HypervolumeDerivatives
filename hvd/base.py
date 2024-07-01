@@ -28,6 +28,10 @@ class State:
         self._constrained: bool = self.g is not None or self.h is not None
         self.n_jac_evals: int = 0
 
+    @property
+    def N(self):
+        return len(self.X)
+
     def jac(self, x: np.ndarray) -> np.ndarray:
         """Jacobian of the objective function"""
         self.n_jac_evals += 1
@@ -90,5 +94,5 @@ class State:
         active_indices = [[True] * self.n_eq] * N if type == "eq" else [v >= -1e-4 for v in value]
         active_indices = np.array(active_indices)
         if compute_gradient:
-            H = np.array([jac(x).reshape(-1, self.n_var) for x in primal_vars])
-        return (value, active_indices, H) if compute_gradient else (value, active_indices)
+            dH = np.array([jac(x).reshape(-1, self.n_var) for x in primal_vars])
+        return (value, active_indices, dH) if compute_gradient else (value, active_indices)

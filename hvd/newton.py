@@ -13,15 +13,8 @@ from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import (
-    compute_chim,
-    get_logger,
-    get_non_dominated,
-    merge_lists,
-    non_domin_sort,
-    precondition_hessian,
-    set_bounds,
-)
+from .utils import (compute_chim, get_logger, get_non_dominated, merge_lists,
+                    non_domin_sort, precondition_hessian, set_bounds)
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -598,8 +591,8 @@ class DpN:
             X0 = np.clip(X0, self.xl, self.xu)
             # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is not defined
             # on the decision boundary or the local Hessian is ill-conditioned.
-            # X0 = np.clip(X0 - self.xl, 1e-5, 1) + self.xl
-            # X0 = np.clip(X0 - self.xu, -1, -1e-5) + self.xu
+            X0 = np.clip(X0 - self.xl, 1e-2, 1) + self.xl
+            X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -794,7 +787,7 @@ class DpN:
                 np.isclose(np.linalg.norm(self.step[:, : self.dim_p], axis=1), 0),
             )
         )
-        import matplotlib.pyplot as plt
+        # import matplotlib.pyplot as plt
 
         # fig, ax = plt.subplots(1, 1, figsize=(25, 6.5))
         # plt.subplots_adjust(right=0.93, left=0.05)
@@ -823,7 +816,7 @@ class DpN:
             # NOTE: initial shift CF1: 0.6, CF2/3: 0.2
             # DTLZ4: 0.08 seems to work a bit better
             # TODO: create a configuration class to set those hyperparameter of this method, e.g., shift amount
-            v = 0.05 * n if self.iter_count > 0 else 0.05 * n  # the initial shift is a bit larger
+            v = 0.05 * n if self.iter_count > 0 else 0.15 * n  # the initial shift is a bit larger
             self._igd.shift_medoids(v, k)
 
         if self.iter_count == 0:  # record the initial medoids
@@ -887,7 +880,7 @@ class DpN:
         """The box-constraint handler projects the Newton step onto the box boundary, preventing the
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         """
-        if 11 < 2:
+        if 1 < 2:
             return step, np.ones(len(step))
 
         primal_vars = self.state.primal

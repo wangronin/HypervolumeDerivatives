@@ -6,7 +6,6 @@ import jax.numpy as jnp
 import numpy as np
 from jax import jacfwd, jacrev, jit
 from scipy.linalg import block_diag
-from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 
 from .reference_set import ClusteredReferenceSet
@@ -179,7 +178,7 @@ class MMDMatching:
         func: callable = None,
         jac: callable = None,
         hessian: callable = None,
-        kernel: callable = rational_quadratic,
+        kernel: callable = rbf,
         theta: float = 1.0,
         beta: float = 0.5,
     ) -> None:

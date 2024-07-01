@@ -30,11 +30,12 @@ problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front(1000)
 
 # load the reference set
-ref = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Filling.csv", header=None).values
-medoids = pd.read_csv("./ZDT/ZDT1/ZDT1_REF_Match_30points.csv", header=None).values
+ref = pd.read_csv("./ZDT1/ZDT1_REF_Filling.csv", header=None).values
+medoids = pd.read_csv("./ZDT1/ZDT1_REF_Match_30points.csv", header=None).values
 # the load the final population from an EMOA
-x0 = pd.read_csv("./ZDT/ZDT1/ZDT1_Pop_x.csv", header=None).values
-y0 = pd.read_csv("./ZDT/ZDT1/ZDT1_Pop_y.csv", header=None).values
+x0 = pd.read_csv("./ZDT1/ZDT1_Pop_x.csv", header=None).values
+y0 = pd.read_csv("./ZDT1/ZDT1_Pop_y.csv", header=None).values
+eta = {0: pd.read_csv("./ZDT1/ZDT1_eta.csv", header=None).values.ravel()}
 N = len(x0)
 
 opt = DpN(
@@ -47,12 +48,13 @@ opt = DpN(
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
     N=N,
-    X0=x0,
+    x0=x0,
     xl=problem.xl,
     xu=problem.xu,
     max_iters=max_iters,
     type="igd",
     verbose=True,
+    eta=eta,
     pareto_front=pareto_front,
 )
 X, Y, _ = opt.run()
