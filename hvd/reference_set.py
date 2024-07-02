@@ -13,6 +13,7 @@ __authors__ = ["Hao Wang"]
 
 # TODO: I am still not happy with the design here
 # TODO: abstract medoids from reference set
+# TODO: test the correctness of the code for multiple shifting of the same medoid
 class Medoids:
     def __init__(self) -> None:
         self._medoids = None
