@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.linalg import block_diag, solve
+from scipy.optimize import line_search
 
 from .base import State
 from .mmd import MMDMatching
@@ -58,6 +59,7 @@ class MMDNewton:
         xtol: float = 0,
         verbose: bool = True,
         metrics: Dict[str, Callable] = dict(),
+        preconditioning: bool = False,
         **kwargs,
     ):
         """
@@ -90,14 +92,14 @@ class MMDNewton:
                 that is used to determine convergence. Defaults to 1e-3.
             verbose (bool, optional): verbosity of the output. Defaults to True.
         """
-        self.dim_p = n_var
-        self.n_obj = n_obj
-        self.N = N
-        self.xl = xl
-        self.xu = xu
-        self.ref = ref  # TODO: we should pass ref to the indicator directly
+        self.dim_p: int = n_var
+        self.n_obj: int = n_obj
+        self.N: int = N
+        self.xl: np.ndarray = xl
+        self.xu: np.ndarray = xu
+        self.ref: ClusteredReferenceSet = ref  # TODO: we should pass ref to the indicator directly
         self._check_constraints(h, g)
-        self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
+        self.state: State = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
         # TODO: move indicator out of this class
         self.indicator = MMDMatching(
             self.dim_p,
@@ -106,16 +108,17 @@ class MMDNewton:
             func=func,
             jac=jac,
             hessian=hessian,
-            theta=1.0 / 28,
+            theta=1.0 / N,
             beta=0.3,
         )
         self._initialize(X0)
         self._set_logging(verbose)
-        # parameters controlling stop criteria
-        self.xtol = xtol
+        # parameters of the stop criteria
+        self.xtol: float = xtol
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
-        self.stop_dict: Dict = {}
+        self.stop_dict: Dict[str, float] = {}
         self.metrics = metrics
+        self.preconditioning: bool = preconditioning
 
     def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables
@@ -250,8 +253,9 @@ class MMDNewton:
         grad, Hessian = self.indicator.compute_derivatives(
             X=self.state.primal, Y=self.state.Y, jacobian=self.state.J
         )
+        if self.preconditioning:  # sometimes the Hessian is not PSD
+            Hessian = precondition_hessian(Hessian)
         R, dH, active_indices = self._compute_R(self.state, grad=grad)
-        # DR = precondition_hessian(Hessian)
         DR = Hessian
         if self._constrained:
             dH = block_diag(*dH)  # (N * p, N * dim), `p` is the number of active constraints
@@ -264,7 +268,7 @@ class MMDNewton:
             warnings.filterwarnings("error")
             try:
                 newton_step_ = -1 * solve(DR, R_)
-            except:  # if DR is singular, then use the pseudoinverse.
+            except:  # if DR is singular, then use the pseudoinverse
                 newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
         # convert the vector-format of the newton step to matrix format
         newton_step = Nd_vector_to_matrix(newton_step_.ravel(), self.N, self.dim, self.dim_p, active_indices)
@@ -282,11 +286,14 @@ class MMDNewton:
             step_len = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_len, 0))
         indices = np.nonzero(masks)[0]
-        self.ref.shift(0.15, indices)
+        self.ref.shift(0.08, indices)
         self.indicator.ref = self.ref  # TODO: check if this is needed
         for k in indices:  # log the updated medoids
             self.history_medoids[k].append(self.ref.medoids[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
+
+    def _backtracking_line_search_scipy(self):
+        pass
 
     def _backtracking_line_search(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
