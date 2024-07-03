@@ -1,7 +1,6 @@
 import sys
 
 sys.path.insert(0, "./")
-import random
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +9,7 @@ from matplotlib import rcParams
 from sklearn_extra.cluster import KMedoids
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton
+from hvd.mmd_newton import MMDNewton, bootstrap_reference_set
 from hvd.newton import DpN
 from hvd.problems import DTLZ1, PymooProblemWithAD
 from hvd.reference_set import ClusteredReferenceSet
@@ -30,29 +29,22 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
-max_iters = 5
+max_iters = 10
 f = DTLZ1(boundry_constraints=True)
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front()
-reference_point = {
-    "DTLZ[1-6]": np.array([1, 1, 1]),
-    "DTLZ7": np.array([1, 1, 6]),
-    "IDTLZ1[1-4]": np.array([1, 1, 1]),
-}
-
+# read the reference set data
 ref_ = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_ref_1_gen0.csv", header=None).values
 X0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_x_gen0.csv", header=None).values
 Y0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_y_gen0.csv", header=None).values
 eta = {0: pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_eta_1_gen0.csv", header=None).values.ravel()}
 Y_idx = None
-
-method = "alternate"
-km = KMedoids(n_clusters=50, method=method, random_state=0, init="k-medoids++").fit(ref_)
-ref_ = ref_[km.medoid_indices_]
-km = KMedoids(n_clusters=50, method=method, random_state=0, init="k-medoids++").fit(Y0)
-Y0 = Y0[km.medoid_indices_]
-X0 = X0[km.medoid_indices_]
-
+# select a subset of the reference data "evenly" since 300 points are taking too long for MMD
+# km = KMedoids(n_clusters=50, method="alternate", random_state=0, init="k-medoids++").fit(ref_)
+# ref_ = ref_[km.medoid_indices_]
+# km = KMedoids(n_clusters=50, method="alternate", random_state=0, init="k-medoids++").fit(Y0)
+# Y0 = Y0[km.medoid_indices_]
+# X0 = X0[km.medoid_indices_]
 N = len(X0)
 ref = ClusteredReferenceSet(ref=ref_, eta=eta, Y_idx=Y_idx)
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
@@ -73,9 +65,12 @@ opt = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     metrics=metrics,
-    preconditioning=True,
+    preconditioning=False,
 )
-X, Y, _ = opt.run()
+if 11 < 2:
+    X, Y, _ = bootstrap_reference_set(opt, problem, ref_, 5)
+else:
+    X, Y, _ = opt.run()
 Y = get_non_dominated(Y)
 igd_mmd = igd.compute(Y=Y)
 
@@ -150,4 +145,5 @@ ax1.set_ylabel(r"$f_2$")
 ax1.set_ylabel(r"$f_3$")
 
 plt.tight_layout()
+plt.show()
 plt.savefig(f"MMD-{f.__class__.__name__}.pdf", dpi=1000)

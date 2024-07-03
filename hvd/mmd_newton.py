@@ -11,7 +11,7 @@ from scipy.optimize import line_search
 from .base import State
 from .mmd import MMDMatching
 from .reference_set import ClusteredReferenceSet
-from .utils import get_logger, precondition_hessian, set_bounds
+from .utils import compute_chim, get_logger, get_non_dominated, precondition_hessian, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -102,14 +102,7 @@ class MMDNewton:
         self.state: State = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
         # TODO: move indicator out of this class
         self.indicator = MMDMatching(
-            self.dim_p,
-            self.n_obj,
-            ref=self.ref,
-            func=func,
-            jac=jac,
-            hessian=hessian,
-            theta=1.0 / N,
-            beta=0.3,
+            self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.2
         )
         self._initialize(X0)
         self._set_logging(verbose)
@@ -287,7 +280,6 @@ class MMDNewton:
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_len, 0))
         indices = np.nonzero(masks)[0]
         self.ref.shift(0.08, indices)
-        self.indicator.ref = self.ref  # TODO: check if this is needed
         for k in indices:  # log the updated medoids
             self.history_medoids[k].append(self.ref.medoids[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
@@ -376,3 +368,50 @@ class MMDNewton:
             s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
             max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
         return step, max_step_size
+
+
+def bootstrap_reference_set(
+    optimizer, problem, init_ref: np.ndarray, interval: int = 5
+) -> Tuple[np.ndarray, np.ndarray, Dict]:
+    """Bootstrap the reference set with the intermediate population of an MOO algorithm
+
+    Args:
+        optimizer (_type_): an MOO algorithm
+        problem (_type_): the MOO problem to solve
+        init_ref (np.ndarray): the initial reference set
+        interval (int, optional): intervals at which bootstrapping is performed. Defaults to 5.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray, Dict]: (efficient set, Pareto front approximation,
+            the stopping criteria)
+    """
+    for i in range(optimizer.max_iters):
+        if i % interval == 0 and i > 0:
+            ref_ = np.r_[optimizer.state.Y, init_ref]
+            ref_ = get_non_dominated(ref_)
+            eta = compute_chim(ref_)
+            ref_ += 0.08 * eta
+            Y_idx = None
+            ref = ClusteredReferenceSet(ref=ref_, eta={0: eta}, Y_idx=Y_idx)
+            optimizer.ref = ref
+            optimizer.indicator.ref = ref
+            optimizer.indicator.compute(Y=optimizer.state.Y)  # To compute the medoids
+
+            if 11 < 2:
+                import matplotlib.pyplot as plt
+
+                pareto_front = problem.get_pareto_front()
+                m = ref.medoids
+                fig = plt.figure(figsize=plt.figaspect(1))
+                plt.subplots_adjust(bottom=0.08, top=0.9, right=0.93, left=0.05)
+                ax0 = fig.add_subplot(1, 1, 1, projection="3d")
+                ax0.set_box_aspect((1, 1, 1))
+                ax0.view_init(45, 45)
+                ax0.plot(ref_[:, 0], ref_[:, 1], ref_[:, 2], "g.", ms=6, alpha=0.6)
+                ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", ms=6, alpha=0.6)
+                ax0.plot(m[:, 0], m[:, 1], m[:, 2], "r+", ms=6, alpha=0.6)
+                plt.show()
+
+        optimizer.newton_iteration()
+        optimizer.log()
+    return optimizer.state.primal, optimizer.state.Y, optimizer.stop_dict
