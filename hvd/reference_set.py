@@ -149,8 +149,7 @@ class ClusteredReferenceSet:
         """
         if len(component) == k:
             return component
-        method = "alternate"
-        km = KMedoids(n_clusters=k, method=method, random_state=0, init="k-medoids++").fit(component)
+        km = KMedoids(n_clusters=k, method="alternate", random_state=0, init="k-medoids++").fit(component)
         return component[km.medoid_indices_]
 
     def _match(self, X: np.ndarray, Y: np.ndarray) -> np.ndarray:
