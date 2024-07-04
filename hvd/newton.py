@@ -375,12 +375,12 @@ class HVN:
         v = step.ravel() @ normal_vectors
         alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
 
-        h_ = self.h(primal_vars)
+        h_ = np.array([self.h(x) for x in primal_vars])
         eq_cstr = h_**2 / 2
-        G = h_ * self.h_jac(primal_vars)
+        G = h_ * np.array([self.h_jac(x) for x in primal_vars])
         for _ in range(6):
             X_ = primal_vars + alpha * step
-            eq_cstr_ = self.h(X_) ** 2 / 2
+            eq_cstr_ = np.array([self.h(x) for x in X_]) ** 2 / 2
             dec = np.inner(G.ravel(), step.ravel())
             cond = eq_cstr_ - eq_cstr <= c * alpha * dec
             if cond:
