@@ -40,8 +40,8 @@ def hybrid(seed: int, problem: MOOAnalytical, ref: np.ndarray):
     X = np.array([p._X for p in res.pop])  # final approximation set of NSGA-III
     problem.CPU_time = 0  # clear the CPU_time counter since we only need to measure the time taken by HVN
     opt = HVN(
-        dim=11,
-        n_objective=3,
+        n_var=11,
+        n_obj=3,
         ref=ref,
         func=problem.objective,
         jac=problem.objective_jacobian,
@@ -49,18 +49,18 @@ def hybrid(seed: int, problem: MOOAnalytical, ref: np.ndarray):
         h=problem.constraint,
         h_jac=problem.constraint_jacobian,
         h_hessian=problem.constraint_hessian,
-        mu=len(X),
-        lower_bounds=0,
-        upper_bounds=1,
+        N=len(X),
+        xl=0,
+        xu=1,
         minimization=True,
-        x0=X,
+        X0=X,
         max_iters=10,
         verbose=False,
         problem_name=type(problem).__name__,
     )
     X, Y, _ = opt.run()
     idx = non_domin_sort(Y, only_front_indices=True)[0]
-    HV = opt.hist_HV[-1]
+    HV = opt.history_HV[-1]
     CPU_time = problem.CPU_time / 1e9
     return X[idx], X_, CPU_time, HV0, HV
 
