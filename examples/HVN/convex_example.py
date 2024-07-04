@@ -3,6 +3,7 @@ import sys
 sys.path.insert(0, "./")
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from matplotlib import rcParams
 
 from hvd.newton import HVN
@@ -52,12 +53,11 @@ def g_Hessian(x):
 ref = np.array([1, 1])
 max_iters = 10
 
-N = 10
-x1 = np.random.rand(N)
-x2 = x1**2 - 2 * x1 + 1
+x1 = pd.read_csv("convex_concave/convex_x.csv", header=None, index_col=None).values
+x2 = pd.read_csv("convex_concave/convex_y.csv", header=None, index_col=None).values
 x0 = np.c_[x1, x2]
 y0 = x0.copy()
-
+N = len(x0)
 opt = HVN(
     dim=2,
     n_objective=2,
@@ -81,7 +81,7 @@ X, Y, stop = opt.run()
 fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(13, 6.5))
 plt.subplots_adjust(right=0.93, left=0.05)
 ax0.set_aspect("equal")
-ax0.plot(Y[:, 0], Y[:, 1], "r*")
+ax0.plot(Y[:, 0], Y[:, 1], "r*", ms=6)
 ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=8)
 trajectory = np.array([y0] + opt.hist_Y)
 
@@ -105,7 +105,7 @@ if 11 < 2:
 
 x_vals = np.linspace(0, 1, 100)
 y_vals = x_vals**2 - 2 * x_vals + 1
-ax0.plot(x_vals, y_vals, "r--")
+ax0.plot(x_vals, y_vals, "k--", alpha=0.5)
 ax0.set_title("Objective space")
 ax0.set_xlabel(r"$f_1$")
 ax0.set_ylabel(r"$f_2$")
