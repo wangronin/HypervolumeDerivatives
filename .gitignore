@@ -5,9 +5,12 @@
 *.h5
 .DS_Store
 *.npz
+*.png
 *.pdf
 *.ipynb
 *.tex
+*.txt
+*.mat
 *.csv
 data/
 model/
