@@ -111,8 +111,8 @@ x0[0, 0] = 3.5
 y0 = np.array([MOP1(_) for _ in x0])
 
 opt = HVN(
-    dim=dim,
-    n_objective=3,
+    n_var=dim,
+    n_obj=3,
     ref=ref,
     func=MOP1,
     jac=MOP1_Jacobian,
@@ -120,10 +120,10 @@ opt = HVN(
     h=h,
     h_jac=h_Jacobian,
     h_hessian=h_Hessian,
-    mu=len(x0),
-    x0=x0,
-    lower_bounds=-4,
-    upper_bounds=4,
+    N=len(x0),
+    X0=x0,
+    xl=-4,
+    xu=4,
     minimization=True,
     max_iters=max_iters,
     verbose=True,
@@ -212,7 +212,7 @@ ax = fig.add_subplot(1, 3, 3)
 # ax_ = ax.twinx()
 # ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
 # ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax.semilogy(range(1, len(opt.hist_G_norm) + 1), opt.hist_G_norm, "g--")
+ax.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
 # ax.set_ylabel("HV", color="b")
 # ax.set_ylabel("N_Nondominated", color="b")
 ax.set_ylabel(r"$||G(\mathbf{X})||$", color="g")

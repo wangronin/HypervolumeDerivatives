@@ -74,8 +74,8 @@ x0 = np.c_[p, p - 2]
 y0 = np.array([MOP1(_) for _ in x0])
 
 opt = HVN(
-    dim=2,
-    n_objective=2,
+    n_var=2,
+    n_obj=2,
     ref=ref,
     func=MOP1,
     jac=MOP1_Jacobian,
@@ -83,10 +83,10 @@ opt = HVN(
     h=h,
     h_jac=h_Jacobian,
     h_hessian=h_Hessian,
-    mu=len(x0),
-    x0=x0,
-    lower_bounds=-2,
-    upper_bounds=2,
+    N=len(x0),
+    X0=x0,
+    xl=-2,
+    xu=2,
     minimization=True,
     max_iters=max_iters,
     verbose=True,
@@ -115,7 +115,7 @@ Z2 = Z[:, 1].reshape(-1, len(x))
 CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
 CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
 
-trajectory = np.array([x0] + opt.hist_X)
+trajectory = np.array([x0] + opt.history_X)
 for i in range(mu):
     x, y = trajectory[:, i, 0], trajectory[:, i, 1]
     ax0.quiver(
@@ -135,7 +135,7 @@ for i in range(mu):
 
 ax1.plot(Y[:, 0], Y[:, 1], "g*")
 ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=8)
-trajectory = np.array([y0] + opt.hist_Y)
+trajectory = np.array([y0] + opt.history_Y)
 
 for i in range(mu):
     x, y = trajectory[:, i, 0], trajectory[:, i, 1]
@@ -162,8 +162,8 @@ ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
 ax22 = ax2.twinx()
-ax2.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax22.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
+ax2.plot(range(1, len(opt.history_HV) + 1), opt.history_HV, "b-")
+ax22.semilogy(range(1, len(opt.history_HV) + 1), opt.hist_R_norm, "g--")
 ax2.set_ylabel("HV", color="b")
 ax22.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")

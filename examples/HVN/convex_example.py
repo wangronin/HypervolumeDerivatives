@@ -59,8 +59,8 @@ x0 = np.c_[x1, x2]
 y0 = x0.copy()
 
 opt = HVN(
-    dim=2,
-    n_objective=2,
+    n_var=2,
+    n_obj=2,
     ref=ref,
     func=convex,
     jac=convex_Jacobian,
@@ -68,10 +68,10 @@ opt = HVN(
     h=g,
     h_jac=g_Jacobian,
     h_hessian=g_Hessian,
-    mu=len(x0),
-    x0=x0,
-    lower_bounds=0,
-    upper_bounds=1,
+    N=len(x0),
+    X0=x0,
+    xl=0,
+    xu=1,
     minimization=True,
     max_iters=max_iters,
     verbose=True,
@@ -83,7 +83,7 @@ plt.subplots_adjust(right=0.93, left=0.05)
 ax0.set_aspect("equal")
 ax0.plot(Y[:, 0], Y[:, 1], "r*")
 ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=8)
-trajectory = np.array([y0] + opt.hist_Y)
+trajectory = np.array([y0] + opt.history_Y)
 
 if 11 < 2:
     for i in range(N):
@@ -112,8 +112,8 @@ ax0.set_ylabel(r"$f_2$")
 ax0.legend([r"$Y_{\text{final}}$", r"$Y_0$", "Pareto front"])
 
 ax12 = ax1.twinx()
-ax1.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax12.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
+ax1.plot(range(1, len(opt.history_HV) + 1), opt.history_HV, "b-")
+ax12.semilogy(range(1, len(opt.history_HV) + 1), opt.hist_R_norm, "g--")
 ax1.set_ylabel("HV", color="b")
 ax12.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax1.set_title("Performance")

@@ -19,8 +19,8 @@ def run(i):
     y0 = np.array([f.objective(x) for x in x0])
     mu = len(x0)
     opt = HVN(
-        dim=dim,
-        n_objective=3,
+        n_var=dim,
+        n_obj=3,
         ref=ref,
         func=f.objective,
         jac=f.objective_jacobian,
@@ -28,16 +28,16 @@ def run(i):
         h=f.constraint,
         h_jac=f.constraint_jacobian,
         h_hessian=f.constraint_hessian,
-        mu=mu,
-        lower_bounds=0,
-        upper_bounds=1,
+        N=mu,
+        xl=0,
+        xu=1,
         minimization=True,
-        x0=x0,
+        X0=x0,
         max_iters=max_iters,
         verbose=True,
     )
     opt.run()
-    return opt.hist_G_norm
+    return opt.hist_R_norm
 
 
 data = Parallel(n_jobs=10)(delayed(run)(i) for i in range(N))

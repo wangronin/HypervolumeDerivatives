@@ -90,8 +90,8 @@ elif mu == 60:
     ref = np.array([100, 100, 100])
 
 opt = HVN(
-    dim=3,
-    n_objective=3,
+    n_var=3,
+    n_obj=3,
     ref=ref,
     func=MOP1,
     jac=MOP1_Jacobian,
@@ -99,10 +99,10 @@ opt = HVN(
     h=h,
     h_jac=h_Jacobian,
     h_hessian=h_Hessian,
-    mu=mu,
-    x0=x0,
-    lower_bounds=-2,
-    upper_bounds=2,
+    N=mu,
+    X0=x0,
+    xl=-2,
+    xu=2,
     minimization=True,
     max_iters=max_iters,
     verbose=True,
@@ -196,7 +196,7 @@ ax.set_zlabel(r"$f_3$")
 ax = fig.add_subplot(1, 3, 3)
 # ax_ = ax.twinx()
 # ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax.semilogy(range(1, len(opt.hist_G_norm) + 1), opt.hist_G_norm, "g--")
+ax.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
 # ax.set_ylabel("HV", color="b")
 ax.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
