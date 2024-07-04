@@ -6,16 +6,13 @@ from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.linalg import block_diag, cholesky, solve
-from scipy.sparse import csc_matrix
-from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
 
 from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import (compute_chim, get_logger, non_domin_sort,
-                    precondition_hessian, set_bounds)
+from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
 
 __authors__ = ["Hao Wang"]
 
@@ -37,7 +34,6 @@ def Nd_vector_to_matrix(
     return X
 
 
-# TODO: rewrite the code of `HVN` with the `State` class
 class HVN:
     """Hypervolume Newton method
 
@@ -224,7 +220,7 @@ class HVN:
         idx = active_indices[:, self.dim_p :]
         if self._constrained:
             dH = block_diag(*dH)  # (N * p, N * dim), `p` is the number of active constraints
-            ddH = block_diag(*[self.state.ddH[i] * dual_vars[i, idx[i]] for i in range(self.N)])
+            ddH = block_diag(*[self.state.ddH[i, k, ...] * dual_vars[i, k] for i, k in enumerate(idx)])
             # ddH = block_diag(
             # *[np.einsum("ijk,i->jk", self._h_hessian(x), dual_vars[i]) for i, x in enumerate(primal_vars)]
             # *[(self.g_hessian(x) * dual_vars[i, idx[i]])[0] for i, x in enumerate(primal_vars)]
@@ -248,7 +244,6 @@ class HVN:
         self.step = np.zeros((self.N, self.dim))
         self.step_size = np.ones(self.N)
         self.G = np.zeros((self.N, self.dim))
-
         # partition the approximation set to by feasibility
         self._nondominated_idx = non_domin_sort(self.Y, only_front_indices=True)[0]
         if self.h is None:

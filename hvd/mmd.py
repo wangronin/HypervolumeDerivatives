@@ -146,13 +146,6 @@ class MMD:
         MMDdX2 += block_diag(*np.einsum("ij,ij...->i...", MMDdY, YdX2))
         return dict(MMDdX2=MMDdX2, MMDdY2=MMDdY2, MMDdX=MMDdX, MMDdY=MMDdY)
 
-    def _check_X(self, X: Union[np.ndarray, List]) -> np.ndarray:
-        if not isinstance(X, np.ndarray):
-            X = np.asarray(X)
-        if X.shape[1] != self.n_var:
-            X = X.T
-        return X
-
     def _compute_objective_derivatives(
         self, X: np.ndarray, Y: np.ndarray = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -165,6 +158,13 @@ class MMD:
         # Hessians of the objective function
         YdX2 = np.array([self.hessian(x) for x in X])  # `(N, n_objective, n_decision_var, n_decision_var)`
         return Y, YdX, YdX2
+
+    def _check_X(self, X: Union[np.ndarray, List]) -> np.ndarray:
+        if not isinstance(X, np.ndarray):
+            X = np.asarray(X)
+        if X.shape[1] != self.n_var:
+            X = X.T
+        return X
 
 
 class MMDMatching:
@@ -316,13 +316,6 @@ class MMDMatching:
         MMDdX2 += block_diag(*np.einsum("ij,ij...->i...", MMDdY, YdX2))
         return dict(MMDdX2=MMDdX2, MMDdY2=MMDdY2, MMDdX=MMDdX, MMDdY=MMDdY)
 
-    def _check_X(self, X: Union[np.ndarray, List]) -> np.ndarray:
-        if not isinstance(X, np.ndarray):
-            X = np.asarray(X)
-        if X.shape[1] != self.n_decision_var:
-            X = X.T
-        return X
-
     def _compute_objective_derivatives(
         self, X: np.ndarray, Y: np.ndarray = None, jacobian: np.ndarray = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -336,3 +329,10 @@ class MMDMatching:
         # Hessians of the objective function
         YdX2 = np.array([self.hessian(x) for x in X])  # `(N, n_objective, n_decision_var, n_decision_var)`
         return Y, YdX, YdX2
+
+    def _check_X(self, X: Union[np.ndarray, List]) -> np.ndarray:
+        if not isinstance(X, np.ndarray):
+            X = np.asarray(X)
+        if X.shape[1] != self.n_decision_var:
+            X = X.T
+        return X
