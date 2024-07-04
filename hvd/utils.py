@@ -75,8 +75,11 @@ def merge_lists(x, y):
     out = []
     for k in range(len(x)):
         v, w = x[k], y[k]
-        N = len(v)
-        out.append(np.array([np.r_[v[i], w[i]] for i in range(N)]))
+        if v is None and w is None:
+            out.append(None)
+        else:
+            N = len(v)
+            out.append(np.array([np.r_[v[i], w[i]] for i in range(N)]))
     return tuple(out)
 
 
