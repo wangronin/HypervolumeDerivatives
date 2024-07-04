@@ -248,9 +248,8 @@ class HVN:
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
         # NOTE: preconditioning is needed EqDTLZ problems
         # if self.problem_name is not None and self.problem_name != "Eq1IDTLZ3":
-        # HVdX2 = self._precondition_hessian(HVdX2)
+        HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
-
         if self.h is not None:  # with equality constraints
             mud = int(N * self.dim_primal)
             mup = int(N * self.n_eq_cstr)
