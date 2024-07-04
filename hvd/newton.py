@@ -13,19 +13,11 @@ from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import (
-    compute_chim,
-    get_logger,
-    get_non_dominated,
-    merge_lists,
-    non_domin_sort,
-    precondition_hessian,
-    set_bounds,
-)
-
-np.seterr(divide="ignore", invalid="ignore")
+from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
 
 __authors__ = ["Hao Wang"]
+
+np.seterr(divide="ignore", invalid="ignore")
 
 # TODO: rewrite the code of `HVN` with the `State` class
 
@@ -91,7 +83,7 @@ class HVN:
         self.minimization = minimization
         self.dim_primal = dim
         self.n_objective = n_objective
-        self.mu = mu
+        self.mu = mu  # the population size
         self.lower_bounds = lower_bounds
         self.upper_bounds = upper_bounds
         self.ref = ref
@@ -106,13 +98,7 @@ class HVN:
         self.h_jac: Callable = h_jac
         self.h_hessian: Callable = h_hessian
         self.hypervolume_derivatives = HypervolumeDerivatives(
-            self.dim_primal,
-            self.n_objective,
-            ref,
-            func,
-            jac,
-            hessian,
-            minimization=minimization,
+            self.dim_primal, self.n_objective, ref, func, jac, hessian, minimization=minimization
         )
         self.iter_count: int = 0
         self.max_iters = max_iters
@@ -139,17 +125,14 @@ class HVN:
         # initialize dual variables
         if self.h is not None:
             v = self.h(X0[0, :])
-            self.n_eq_cstr = 1 if isinstance(v, (int, float)) else len(v)
+            self.n_eq_cstr = 1 if isinstance(v, float) else len(v)
             # to make the Hessian of Eq. constraints always a 3D tensor
             self._h_hessian = lambda x: self.h_hessian(x).reshape(self.n_eq_cstr, self.dim_primal, -1)
             X0 = np.c_[X0, np.ones((self.mu, self.n_eq_cstr)) / self.mu]
         else:
             self.n_eq_cstr = 0
 
-        self._get_primal_dual = lambda X: (
-            X[:, : self.dim_primal],
-            X[:, self.dim_primal :],
-        )
+        self._get_primal_dual = lambda X: (X[:, : self.dim_primal], X[:, self.dim_primal :])
         self.dim = self.dim_primal + self.n_eq_cstr
         self.X = X0
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])  # (mu, n_objective)
@@ -228,8 +211,6 @@ class HVN:
         return H - tau * I
 
     def _compute_G(self, X: np.ndarray) -> np.ndarray:
-        # TODO: correct it for active set method
-        # `_compute_G`` -> `_compute_R`
         N = len(X)
         mud = int(N * self.dim_primal)
         primal_vars, dual_vars = self._get_primal_dual(X)
@@ -250,6 +231,7 @@ class HVN:
         # if self.problem_name is not None and self.problem_name != "Eq1IDTLZ3":
         HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
+
         if self.h is not None:  # with equality constraints
             mud = int(N * self.dim_primal)
             mup = int(N * self.n_eq_cstr)
@@ -357,7 +339,6 @@ class HVN:
         for _ in range(6):
             X_ = X + alpha * step
             if self.h is None:
-                # TODO: check if this is correct
                 HV = self.hypervolume_derivatives.HV(X)
                 HV_ = self.hypervolume_derivatives.HV(X_)
                 inc = np.inner(G.ravel(), step.ravel())
@@ -401,12 +382,12 @@ class HVN:
         v = step.ravel() @ normal_vectors
         alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
 
-        h_ = self.h(primal_vars)
+        h_ = np.array([self.h(x) for x in primal_vars])
         eq_cstr = h_**2 / 2
-        G = h_ * self.h_jac(primal_vars)
+        G = h_ * np.array([self.h_jac(x) for x in primal_vars])
         for _ in range(6):
             X_ = primal_vars + alpha * step
-            eq_cstr_ = self.h(X_) ** 2 / 2
+            eq_cstr_ = np.array([self.h(x) for x in X_]) ** 2 / 2
             dec = np.inner(G.ravel(), step.ravel())
             cond = eq_cstr_ - eq_cstr <= c * alpha * dec
             if cond:
@@ -431,10 +412,7 @@ class HVN:
         # since the hypervolume indicator module is upgraded
         drop_idx_Y = set([])
         # TODO: Ad-hoc solution! check if this is still needed
-        if self.problem_name is not None and self.problem_name not in (
-            "Eq1DTLZ4",
-            "Eq1IDTLZ4",
-        ):
+        if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
             for i in range(self.mu):
                 if i not in drop_idx_Y:
                     drop_idx_Y |= set(np.nonzero(np.any(np.isclose(self.Y[i, :], self.Y), axis=1))[0]) - set(
@@ -472,14 +450,6 @@ class HVN:
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:
             self.stop_dict["iter_count"] = self.iter_count
-
-        # if self._delta_HV < self.HVtol:
-        #     self.stop_dict["HVtol"] = self._delta_HV
-        #     self.stop_dict["iter_count"] = self.iter_count
-
-        # if self._delta_X < self.xtol:
-        #     self.stop_dict["xtol"] = self._delta_X
-        #     self.stop_dict["iter_count"] = self.iter_count
 
         return bool(self.stop_dict)
 
