@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from matplotlib import rcParams
 from scipy.linalg import solve
-from scipy.stats import norm
 
 plt.style.use("ggplot")
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
@@ -24,7 +23,7 @@ rcParams["ytick.major.width"] = 1
 
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd import MMD, MMDMatching, rational_quadratic, rbf
+from hvd.mmd import MMD, rational_quadratic, rbf
 from hvd.utils import precondition_hessian
 
 np.random.seed(42)
@@ -46,49 +45,32 @@ def MOP1_Hessian(x):
 
 
 best_from_angel = pd.read_csv("MOP1_n=30.csv", header=None).values
-# generate the reference set
+# Pareto set and front
 mu = len(best_from_angel)
-# p = np.linspace(-1, 1, mu)
-# ref_X = np.c_[p, p]
-# ref = np.array([MOP1(_) for _ in ref_X])
-# ref = best_from_angel
-
-p = norm.ppf(np.linspace(0.05, 0.95, 30), scale=1 / 2)
-# p = np.r_[np.linspace(-1, 0, 5), np.linspace(0, 1, 25)]
-ref_X = np.c_[p, p]
-ref_unshifted = np.array([MOP1(_) for _ in ref_X])
+p = np.linspace(-1, 1, mu)
+pareto_set = np.c_[p, p]
+pareto_front = np.array([MOP1(_) for _ in pareto_set])
 # the reference set
-ref = ref_unshifted - 0.2 * np.ones(2)
+ref = pareto_front - 0.3 * np.ones(2)
 # the initial population
 p = np.linspace(-1, 0.5, mu)
 X = np.c_[p, p + 0.5]
 Y = np.array([MOP1(_) for _ in X])
 dim = Y.shape[1]
+# performance indicator
+gd = GenerationalDistance(ref=pareto_front)
+igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
 
-theta = 1 / mu
-kernel = rational_quadratic
-mmd = MMDMatching(
-    2, 2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian, kernel=kernel, theta=theta
-)
-# generate a fine grained Pareto front for measuring the final metrics
-p = np.linspace(-1, 1, 500)
+p = np.linspace(-1, 1, 1000)
 pareto_set = np.c_[p, p]
 pareto_front = np.array([MOP1(_) for _ in pareto_set])
-# performance indicator
-mmd_metric = MMD(
-    2, 2, ref=pareto_front, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian, kernel=kernel, theta=theta
-)
-hist_value = []
-hist_norm = []
-ref_value = mmd_metric.compute(ref_unshifted)
-max_iters = 14
 
 fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(15, 5.5))
 plt.subplots_adjust(right=0.95, left=0.05)
 
-ax0_handles = []
-ax0_handles += ax0.plot(pareto_set[:, 0], pareto_set[:, 1], "m-", alpha=0.5)
-ax0_handles += ax0.plot(X[:, 0], X[:, 1], "g.", ms=8, clip_on=False)
+ax0.plot(pareto_set[:, 0], pareto_set[:, 1], "k-", alpha=0.5)
+# ax0.plot((-1, -1), (1, 1), "k-")
+ax0.plot(X[:, 0], X[:, 1], "g.", ms=8, clip_on=False)
 ax0.set_title("decision space")
 ax0.set_xlabel(r"$x_1$")
 ax0.set_ylabel(r"$x_2$")
@@ -110,27 +92,22 @@ ax1.set_title("objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
+theta = 1 / mu
+kernel = rational_quadratic
+mmd = MMD(2, 2, ref=ref, func=MOP1, jac=MOP1_Jacobian, kernel=rational_quadratic, theta=theta)
+hist_value = [mmd.compute(Y)]
+# hist_deltap = [igd.compute(Y=Y)]
+hist_norm = []
+max_iters = 8
+
 for i in range(max_iters):
-    if i % 5 == 0 and i > 0:
-        ref_ = Y - 0.2
-        mmd = MMDMatching(
-            2,
-            2,
-            ref=ref_,
-            func=MOP1,
-            jac=MOP1_Jacobian,
-            hessian=MOP1_Hessian,
-            kernel=kernel,
-            theta=theta,
-        )
     out = mmd.compute_hessian(X)
     H, g = out["MMDdX2"], out["MMDdX"]
     H = precondition_hessian(H)
     g_ = g.reshape(-1, 1)
+    hist_norm.append(np.linalg.norm(g_))
     newton_step = -1 * solve(H, g_).reshape(mu, -1)
     step_size = np.ones((mu, 1))
-    hist_value.append(mmd_metric.compute(Y))
-    hist_norm.append(np.linalg.norm(g.reshape(-1, 1)))
     # Armijo–Goldstein backtracking line search
     for i in range(mu):
         X_ = X.copy()
@@ -139,13 +116,11 @@ for i in range(max_iters):
             f0 = mmd.compute(np.array([MOP1(_) for _ in X]))
             f1 = mmd.compute(np.array([MOP1(_) for _ in X_]))
             # when R norm is close to machine precision, it makes no sense to perform the line search
-            g_ = mmd.compute_gradient(X_)["MMDdX"][i]
-            armijo = f0 - f1 >= 1e-4 * step_size[i] * np.inner(g[i], newton_step[i])
-            # curvature = np.abs(np.inner(g_, newton_step[i])) <= np.abs(0.9 * np.inner(g[i], newton_step[i]))
-            if armijo:
+            success = f0 - f1 >= 1e-4 * step_size[i] * np.inner(g[i], newton_step[i])
+            if success:
                 break
             else:
-                step_size[i] *= 0.4
+                step_size[i] *= 0.5
 
     print(step_size.ravel())
     for i in range(mu):
@@ -182,27 +157,24 @@ for i in range(max_iters):
     #         headwidth=2.7,
     #     )
     Y = Y_
+    hist_value.append(mmd.compute(Y))
+    # hist_deltap.append(igd.compute(Y=Y))
 
-
-idx = mmd.compute_gradient(X)["match_idx"]
-for k, j in enumerate(idx):
-    ax1.plot((Y[k, 0], ref_[j, 0]), (Y[k, 1], ref_[j, 1]), "r-")
-ax1.plot(ref_[:, 0], ref_[:, 1], "k+")
-
-ax0_handles += ax0.plot(X[:, 0], X[:, 1], "kx", ms=5)
+ax0.plot(X[:, 0], X[:, 1], "k.", ms=5)
 ax1_handles += ax1.plot(Y[:, 0], Y[:, 1], "kx", ms=5)
-# ax1_handles += ax1.plot(best_from_angel[:, 0], best_from_angel[:, 1], "k.", ms=5)
-ax0.legend(ax0_handles, ["efficient set", r"$X_0$", r"$Y_{\text{final}}$"])
-# # ax1.legend(
-# #     ax1_handles, ["reference set", "Pareto front", r"$Y_0$", "DpN", r"$Y_{\text{final}}$", "Angel's set"]
-# # )
-ax1.legend(ax1_handles, ["reference set", "Pareto front", r"$Y_0$", r"$Y_{\text{final}}$"])
+ax1_handles += ax1.plot(best_from_angel[:, 0], best_from_angel[:, 1], "r.", ms=5)
+ax1.legend(ax1_handles, ["reference set", r"$Y_0$", r"$Y_{\text{final}}$", "Angel's set"])
+
+value_best = mmd.compute(best_from_angel)
+
+Y_ = Y[Y[:, 0].argsort()]
+breakpoint()
 
 ax2.semilogy(range(1, len(hist_value) + 1), hist_value, "b-")
 ax2.semilogy(range(1, len(hist_norm) + 1), hist_norm, "r--")
-ax2.hlines(ref_value, 1, len(hist_norm), colors="k", linestyles="dashed")
+ax2.hlines(value_best, 1, len(hist_norm) + 1, colors="k", linestyles="dashed")
 ax2.set_title(rf"{kernel.__name__}, $\sigma^2 = {0.5/theta}$")
 ax2.set_xlabel("iteration")
-ax2.legend(["MMD", r"$||\nabla \text{MMD-Matching}||_2$", "Unshifted reference"])
-# ax2.set_xticks(range(1, max_iters + 1))
-plt.savefig(f"MOP1_Newton_Matching_{kernel.__name__}_sigma2={0.5/theta:.2f}_{mu}points.pdf")
+ax2.legend(["MMD", r"$||\nabla \text{MMD}||_2$", "Angel's best set"])
+ax2.set_xticks(range(1, max_iters + 1))
+plt.savefig(f"MOP1_Newton_{kernel.__name__}_sigma2={0.5/theta:.2f}_{mu}points.pdf")

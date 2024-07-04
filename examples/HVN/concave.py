@@ -1,6 +1,3 @@
-import sys
-
-sys.path.insert(0, "./")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -24,69 +21,50 @@ rcParams["ytick.major.width"] = 1
 np.random.seed(66)
 
 
-def MOP1(x):
-    x = np.array(x)
-    return np.array([np.sum((x - 1) ** 2), np.sum((x + 1) ** 2)])
+def concave(x):
+    return np.array(x)
 
 
-def MOP1_Jacobian(x):
-    x = np.array(x)
-    return np.array([2 * (x - 1), 2 * (x + 1)])
+def concave_Jacobian(x):
+    return np.eye(2)
 
 
-def MOP1_Hessian(x):
-    x = np.array(x)
-    return np.array([2 * np.eye(2), 2 * np.eye(2)])
+def concave_Hessian(x):
+    return np.zeros((2, 2))
 
 
-def h(x):
-    x = np.array(x)
-    return np.sum(x**2) - 1
+def g(x):
+    return x[0] ** 2 - 1
 
 
-def h_Jacobian(x):
-    x = np.array(x)
-    return 2 * x
+def g_Jacobian(x):
+    return np.r_[2 * x[0], 0]
 
 
-def h_Hessian(x):
-    x = np.array(x)
-    return 2 * np.eye(2)
+def g_Hessian(x):
+    h = np.zeros((2, 2))
+    h[0, 0] = 2
+    return h
 
 
-ref = np.array([20, 20])
+ref = np.array([1, 1])
 max_iters = 10
-mu = 50
 
-# different initializations of the first population
-if 1 < 2:
-    # option1: linearly spacing
-    p = np.linspace(0, 2, mu)
-elif 11 < 2:
-    # option2: logistic spacing/denser on two tails
-    p = 2 / (1 + np.exp(-np.linspace(-3, 3, mu)))
-elif 11 < 2:
-    # option3: logit spacing/denser in the middle
-    p = np.log(1 / (1 - np.linspace(0.09485175, 1.90514825, mu) / 2) - 1)
-    p = 2 * (p - np.min(p)) / (np.max(p) - np.min(p))
-
-x0 = np.c_[p, p - 2]
-y0 = np.array([MOP1(_) for _ in x0])
 
 opt = HVN(
     dim=2,
     n_objective=2,
     ref=ref,
-    func=MOP1,
-    jac=MOP1_Jacobian,
-    hessian=MOP1_Hessian,
-    h=h,
-    h_jac=h_Jacobian,
-    h_hessian=h_Hessian,
+    func=concave,
+    jac=concave_Jacobian,
+    hessian=concave_Hessian,
+    h=g,
+    h_jac=g_Jacobian,
+    h_hessian=g_Hessian,
     mu=len(x0),
     x0=x0,
-    lower_bounds=-2,
-    upper_bounds=2,
+    lower_bounds=0,
+    upper_bounds=1,
     minimization=True,
     max_iters=max_iters,
     verbose=True,
@@ -109,7 +87,7 @@ ax0.set_ylabel(r"$x_2$")
 n_per_axis = 30
 x = np.linspace(-2, 2, n_per_axis)
 X1, X2 = np.meshgrid(x, x)
-Z = np.array([MOP1(p) for p in np.array([X1.flatten(), X2.flatten()]).T])
+Z = np.array([concave(p) for p in np.array([X1.flatten(), X2.flatten()]).T])
 Z1 = Z[:, 0].reshape(-1, len(x))
 Z2 = Z[:, 1].reshape(-1, len(x))
 CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)

@@ -387,6 +387,7 @@ def bootstrap_reference_set(
     """
     for i in range(optimizer.max_iters):
         if i % interval == 0 and i > 0:
+            # TODO: find a better way to take out outliersin `state.Y`
             ref_ = np.r_[optimizer.state.Y, init_ref]
             ref_ = get_non_dominated(ref_)
             eta = compute_chim(ref_)

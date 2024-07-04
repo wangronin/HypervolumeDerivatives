@@ -10,6 +10,7 @@ from matplotlib import rcParams
 from hvd.newton import DpN
 
 plt.style.use("ggplot")
+plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
 rcParams["font.size"] = 17
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
@@ -54,23 +55,23 @@ theta = np.linspace(-np.pi * 3 / 4, np.pi / 4, 100)
 ref_x = np.array([[np.cos(a) * 0.99, np.sin(a) * 0.99] for a in theta])
 ref = np.array([MOP1(_) for _ in ref_x])
 
-max_iters = 8
-mu = 20
+max_iters = 10
+# Pareto set and front
+p = np.linspace(-1, 1, 100)
+pareto_set = np.c_[p, p]
+pareto_front = np.array([MOP1(_) for _ in pareto_set])
+# generate the reference set
+best_from_angel = pd.read_csv("MOP1_n=30.csv", header=None).values
+mu = len(best_from_angel)
+# p = np.linspace(-1, 1, mu)
+# ref_X = np.c_[p, p]
+# ref = np.array([MOP1(_) for _ in ref_X])
+ref = best_from_angel - 0.3
+# the initial population
 p = np.linspace(-1, 0.5, mu)
-# p = np.random.rand(N) * 2 - 1
-# the initial set is on the Pareto front
 X0 = np.c_[p, p + 0.5]
 Y0 = np.array([MOP1(_) for _ in X0])
-
-# a simple non-uniform reference set
-p = np.linspace(-1, 1, 30)
-ref_X = np.c_[p, p]
-ref = np.array([MOP1(_) for _ in ref_X])
-PF = ref.copy()
-ref -= 0.4 * np.ones(2)
 dim = Y0.shape[1]
-ref = pd.read_csv("MOP1_n=30.csv").values
-ref -= 0.3 * np.ones(2)
 
 opt = DpN(
     dim=2,
@@ -79,25 +80,24 @@ opt = DpN(
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
-    h=h,
-    h_jac=h_Jacobian,
     N=len(X0),
     x0=X0,
     xl=-2,
     xu=2,
     max_iters=max_iters,
     type="igd",
+    pareto_front=pareto_front,
     verbose=True,
 )
 X, Y, stop = opt.run()
 
 fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(18, 6.5))
 plt.subplots_adjust(right=0.93, left=0.05)
-ciricle = plt.Circle((0, 0), 1, color="r", fill=False, ls="--", lw=1.5)
+# ciricle = plt.Circle((0, 0), 1, color="r", fill=False, ls="--", lw=1.5)
 
-ax0.plot(X[:, 0], X[:, 1], "g*")
+ax0.plot(X[:, 0], X[:, 1], "kx", ms=5)
 ax0.plot(X0[:, 0], X0[:, 1], "g.", ms=8, clip_on=False)
-ax0.add_patch(ciricle)
+# ax0.add_patch(ciricle)
 ax0.set_xlim([-2, 2])
 ax0.set_ylim([-2, 2])
 ax0.set_title("Decision space")
@@ -116,7 +116,7 @@ Z2 = Z[:, 1].reshape(-1, len(x))
 CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
 CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
 
-if 1 < 2:
+if 11 < 2:
     trajectory = np.array([X0] + opt.hist_X)
     for i in range(mu):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
@@ -134,7 +134,7 @@ if 1 < 2:
             headlength=4.7,
             headwidth=2.7,
         )
-    trajectory = np.array([y0] + opt.hist_Y)
+    trajectory = np.array([Y0] + opt.hist_Y)
     for i in range(mu):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
         ax1.quiver(
@@ -154,16 +154,17 @@ if 1 < 2:
 
 x_vals = np.array([0, 6])
 y_vals = 6 - x_vals
-ax1.plot(Y[:, 0], Y[:, 1], "g*")
-ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=8)
-ax1.plot(ref[:, 0], ref[:, 1], "k.", ms=1)
-ax1.plot(x_vals, y_vals, "r--")
+ax1.plot(ref[:, 0], ref[:, 1], "r+")
+ax1.plot(Y0[:, 0], Y0[:, 1], "g.", ms=8)
+ax1.plot(Y[:, 0], Y[:, 1], "kx", ms=5)
+ax1.legend(["reference set", r"$Y_0$", r"$Y_{\text{final}}$"])
+# ax1.plot(x_vals, y_vals, "r--")
 ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
 ax22 = ax2.twinx()
-ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
+# ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
 ax2.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
 ax22.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
 ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
@@ -173,6 +174,5 @@ ax2.set_xticks(range(1, max_iters + 1))
 ax2.legend()
 
 plt.savefig(f"MOP1_DpN_{mu}points.pdf", dpi=1000)
-
-# df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
-# df.to_latex(buf=f"2D-example-{mu}.tex", index=False)
+np.savetxt("X_DpN.csv", X, delimiter=",")
+np.savetxt("Y_DpN.csv", Y, delimiter=",")
