@@ -8,6 +8,7 @@ from matplotlib import rcParams
 from hvd.newton import HVN
 
 plt.style.use("ggplot")
+plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
 rcParams["text.usetex"] = True
 rcParams["font.size"] = 13
 rcParams["xtick.direction"] = "out"
