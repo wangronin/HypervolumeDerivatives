@@ -125,14 +125,11 @@ ax0.set_ylabel(r"$f_2$")
 
 ax22 = ax1.twinx()
 ax1.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-# ax22.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
+ax22.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_G_norm, "g--")
 ax1.set_ylabel("HV", color="b")
-ax22.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
+ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax1.set_title("Performance")
 ax1.set_xlabel("iteration")
 ax1.set_xticks(range(1, max_iters + 1))
 
 plt.savefig(f"convex-example-{N}.pdf", dpi=1000)
-
-# df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
-# df.to_latex(buf=f"2D-example-{mu}.tex", index=False)
