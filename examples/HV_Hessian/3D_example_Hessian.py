@@ -16,14 +16,14 @@ for _ in range(10):
     ref = np.array([2, 2, 2])
 
     hvh = HypervolumeDerivatives(
-        n_decision_var=dim,
-        n_objective=3,
+        n_var=dim,
+        n_obj=3,
         ref=ref,
         func=f.objective,
         jac=f.objective_jacobian,
         hessian=f.objective_hessian,
     )
-    out = hvh.compute(X)
+    out = hvh._compute_hessian(X)
     # automatic differentiation is very slow;
     # used for verifying the result of the analytical computation
     AD = hvh.compute_automatic_differentiation(X)

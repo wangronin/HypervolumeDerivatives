@@ -44,14 +44,14 @@ def test_4D(n_objective):
         ref = Y.max(axis=0) * 1.2
 
         hvh = HypervolumeDerivatives(
-            n_decision_var=dim,
-            n_objective=n_objective,
+            n_var=dim,
+            n_obj=n_objective,
             ref=ref,
             func=func,
             jac=jac,
             hessian=hessian,
         )
-        out = hvh.compute(X)
+        out = hvh._compute_hessian(X)
         AD = hvh.compute_automatic_differentiation(X)
 
         assert np.all(np.isclose(AD["HVdY"], out["HVdY"], atol=1e-5, rtol=1e-8))

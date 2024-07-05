@@ -10,7 +10,6 @@ from scipy.spatial.distance import cdist
 
 from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
-from .hypervolume import hypervolume
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
 
@@ -72,10 +71,20 @@ class HVN:
         self.xl: np.ndarray = xl
         self.xu: np.ndarray = xu
         self.ref: np.ndarray = ref
-        self.h_hessian: Callable = h_hessian
-        self.g_hessian: Callable = g_hessian
         self._check_constraints(h, g)
-        self.state: State = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
+        self.state = State(
+            self.dim_p,
+            self.n_eq,
+            self.n_ieq,
+            func,
+            jac,
+            h=h,
+            h_jac=h_jac,
+            h_hess=h_hessian,
+            g=g,
+            g_jac=g_jac,
+            g_hess=g_hessian,
+        )
         self.indicator = HypervolumeDerivatives(self.dim_p, self.n_obj, ref, func, jac, hessian)
         self._initialize(X0)
         self._set_logging(verbose)
@@ -128,15 +137,11 @@ class HVN:
         self.curr_indicator_value: float = None
         self.history_Y: List[np.ndarray] = []
         self.history_X: List[np.ndarray] = []
-        self.history_HV: List[float] = []
-        # self.history_indicator_value: List[float] = []
+        self.history_indicator_value: List[float] = []
         self.history_R_norm: List[float] = []
         self.history_metrics: Dict[str, List] = defaultdict(list)
         self.history_medoids: Dict[int, List] = defaultdict(list)
         self.logger: logging.Logger = get_logger(logger_id=f"{self.__class__.__name__}", console=self.verbose)
-        self._delta_X: float = np.inf
-        self._delta_Y: float = np.inf
-        self._delta_HV: float = np.inf
 
     @property
     def xl(self):
@@ -158,7 +163,120 @@ class HVN:
         while not self.terminate():
             self.newton_iteration()
             self.log()
-        return self._get_primal_dual(self.X)[0], self.Y, self.stop_dict
+        return self.state.primal, self.state.Y, self.stop_dict
+
+    def _compute_R(
+        self, state: State, grad: np.ndarray = None
+    ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+        """compute the root-finding problem R
+        Returns:
+            Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
+                (R, H, active_indices) -> the rooting-finding problem,
+                the Jacobian of the equality constraints, and
+                the indices of the active primal-dual variables
+        """
+        if grad is None:
+            grad = self.indicator.compute_derivatives(state.primal, state.Y, False, state.J)
+        # the unconstrained case
+        R, dH, active_indices = grad, None, np.array([[True] * state.n_var] * state.N)
+        if self._constrained:
+            R = np.zeros((state.N, self.dim))  # the root-finding problem
+            func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
+            cstr_value, idx, dH = state.cstr_value, state.active_indices, state.cstr_grad
+            dH = [dH[i, idx, :] for i, idx in enumerate(idx)]  # only take Jacobian of the active constraints
+            active_indices = np.c_[active_indices, idx]
+            for i, k in enumerate(active_indices):
+                R[i, k] = np.r_[func(grad[i], state.dual[i, idx[i]], dH[i]), cstr_value[i, idx[i]]]
+        return R, dH, active_indices
+
+    def _compute_netwon_step(self, state: State) -> Tuple[np.ndarray, np.ndarray]:
+        grad, Hessian = self.indicator.compute_derivatives(X=state.primal, Y=state.Y, YdX=state.J)
+        R, H, active_indices = self._compute_R(state, grad=grad)
+        # sometimes the Hessian is not NSD
+        if self.preconditioning:
+            Hessian = self._precondition_hessian(Hessian)
+        DR, idx = Hessian, active_indices[:, self.dim_p :]
+        if self._constrained:
+            H = block_diag(*H)  # (N * p, N * dim), `p` is the number of active constraints
+            B = state.cstr_hess
+            M = block_diag(*[np.einsum("i...,i", B[i, k], state.dual[i, k]) for i, k in enumerate(idx)])
+            Z = np.zeros((len(H), len(H)))
+            DR = np.r_[np.c_[DR + M, H.T], np.c_[H, Z]]
+        # the vector-format of R
+        R_ = np.r_[R[:, : self.dim_p].reshape(-1, 1), R[:, self.dim_p :][idx].reshape(-1, 1)]
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error")
+            try:
+                newton_step_ = -1 * solve(DR, R_)
+            except:  # if DR is singular, then use the pseudoinverse
+                newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
+        # convert the vector-format of the newton step to matrix format
+        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), self.N, self.dim, self.dim_p, active_indices)
+        return newton_step, R
+
+    def _compute_indicator_value(self):
+        self.curr_indicator_value = self.indicator.compute(Y=self.state.Y)
+
+    def newton_iteration(self):
+        # check for anomalies in `X` and `Y`
+        self._check_population()
+        # first compute the current indicator value
+        self._compute_indicator_value()
+        self._nondominated_idx = non_domin_sort(self.state.Y, only_front_indices=True)[0]
+        # partition the approximation set to by feasibility
+        feasible_mask = self.state.is_feasible()
+        feasible_idx = np.nonzero(feasible_mask)[0]
+        infeasible_idx = np.nonzero(~feasible_mask)[0]
+        partitions = {0: np.array(range(self.N))}
+        if len(feasible_idx) > 0:
+            # non-dominatd sorting of the feasible points
+            partitions = non_domin_sort(self.state.Y[feasible_idx], only_front_indices=True)
+            partitions = {k: feasible_idx[v] for k, v in partitions.items()}
+            # add all infeasible points to the first dominance layer
+            partitions.update({0: np.sort(np.r_[partitions[0], infeasible_idx])})
+
+        # compute the Newton direction for each partition
+        self.step = np.zeros((self.N, self.dim))
+        self.step_size = np.ones(self.N)
+        self.R = np.zeros((self.N, self.dim))
+        for i, idx in partitions.items():
+            # compute Newton step
+            newton_step, R = self._compute_netwon_step(self.state[idx])
+            self.step[idx, :] = newton_step
+            self.R[idx, :] = R
+            # backtracking line search with Armijo's condition for each layer
+            idx_ = list(set(idx) - set(infeasible_idx)) if i == 0 else idx
+            self.step_size[idx_] = self._line_search(self.state[idx_], self.step[idx_], R=self.R[idx_])
+        # TODO: unify `_line_search` and `_line_search_dominated`
+        # for k in infeasible_idx:  # for dominated and infeasible points
+        # self.step_size[k] = self._line_search(self.state[infeasible_idx], self.step[infeasible_idx], R=self.R[infeasible_idx])
+        # TODO: this part should be tested
+        self.step_size[infeasible_idx] = self._line_search(
+            self.state[infeasible_idx], self.step[infeasible_idx], R=self.R[infeasible_idx]
+        )
+        # Newton iteration and evaluation
+        self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
+
+    def log(self):
+        self.iter_count += 1
+        self.history_X += [self.state.primal.copy()]
+        self.history_Y += [self.state.Y.copy()]
+        self.history_indicator_value += [self.curr_indicator_value]
+        self.history_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
+        for name, func in self.metrics.items():  # compute the performance metrics
+            self.history_metrics[name].append(func.compute(Y=self.state.Y))
+        if self.verbose:
+            self.logger.info(f"iteration {self.iter_count} ---")
+            self.logger.info(f"{self.indicator.__class__.__name__}: {self.curr_indicator_value}")
+            self.logger.info(f"step size: {self.step_size.ravel()}")
+            self.logger.info(f"R norm: {self.history_R_norm[-1]}")
+            self.logger.info(f"#non-dominated: {len(self._nondominated_idx)}")
+
+    def terminate(self) -> bool:
+        if self.iter_count >= self.max_iters:
+            self.stop_dict["iter_count"] = self.iter_count
+
+        return bool(self.stop_dict)
 
     def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
         """Precondition the Hessian matrix to make sure it is negative definite
@@ -169,6 +287,7 @@ class HVN:
         Returns:
             np.ndarray: the preconditioned Hessian
         """
+        # TODO: remove this function
         # pre-condition the Hessian
         beta = 1e-6
         v = np.min(np.diag(-H))
@@ -185,146 +304,81 @@ class HVN:
             self.logger.warn("Pre-conditioning the HV Hessian failed")
         return H - tau * I
 
-    def _compute_R(
-        self, state: State, grad: np.ndarray = None
-    ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
-        """compute the root-finding problem R
-        Returns:
-            Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
-                (R, H, active_indices) -> the rooting-finding problem,
-                the Jacobian of the equality constraints, and
-                the indices of the active primal-dual variables
-        """
-        primal_vars, dual_vars = state.primal, state.dual
-        if grad is None:
-            grad = self.indicator._compute_gradient(X=primal_vars, Y=state.Y, jacobian=state.J)
-        # the unconstrained case
-        R, dH, active_indices = grad, None, np.array([[True] * state.n_var] * state.N)
-        if self._constrained:
-            R = np.zeros((state.N, self.dim))  # the root-finding problem
-            func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
-            cstr_value, idx, dH = state.cstr_value, state.active_indices, state.dH
-            dH = [dH[i, idx, :] for i, idx in enumerate(idx)]  # only take Jacobian of the active constraints
-            active_indices = np.c_[active_indices, idx]
-            for i, k in enumerate(active_indices):
-                R[i, k] = np.r_[func(grad[i], dual_vars[i, idx[i]], dH[i]), cstr_value[i, idx[i]]]
-        return R, dH, active_indices
-
-    def _compute_netwon_step(self) -> Tuple[np.ndarray, np.ndarray]:
-        primal_vars, dual_vars = self.state.primal, self.state.dual
-        grad, Hessian = self.indicator.compute(X=primal_vars, Y=dual_vars, jacobian=self.state.J)
-        if self.preconditioning:  # sometimes the Hessian is not NSD
-            Hessian = self._precondition_hessian(Hessian)
-        R, dH, active_indices = self._compute_R(self.state, grad=grad)
-        DR = Hessian
-        idx = active_indices[:, self.dim_p :]
-        if self._constrained:
-            dH = block_diag(*dH)  # (N * p, N * dim), `p` is the number of active constraints
-            ddH = block_diag(*[self.state.ddH[i, k, ...] * dual_vars[i, k] for i, k in enumerate(idx)])
-            # ddH = block_diag(
-            # *[np.einsum("ijk,i->jk", self._h_hessian(x), dual_vars[i]) for i, x in enumerate(primal_vars)]
-            # *[(self.g_hessian(x) * dual_vars[i, idx[i]])[0] for i, x in enumerate(primal_vars)]
-            # )  # (N * dim, mu * dim)
-            Z = np.zeros((len(dH), len(dH)))
-            DR = np.r_[np.c_[DR + ddH, dH.T], np.c_[dH, Z]]
-        # the vector-format of R
-        R_ = np.r_[R[:, : self.dim_p].reshape(-1, 1), R[:, self.dim_p :][idx].reshape(-1, 1)]
-        with warnings.catch_warnings():
-            warnings.filterwarnings("error")
-            try:
-                newton_step_ = -1 * solve(DR, R_)
-            except:  # if DR is singular, then use the pseudoinverse
-                newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
-        # convert the vector-format of the newton step to matrix format
-        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), self.N, self.dim, self.dim_p, active_indices)
-        return newton_step, R
-
-    def newton_iteration(self):
-        self._check_XY()
-        self.step = np.zeros((self.N, self.dim))
-        self.step_size = np.ones(self.N)
-        self.G = np.zeros((self.N, self.dim))
-        # partition the approximation set to by feasibility
-        self._nondominated_idx = non_domin_sort(self.Y, only_front_indices=True)[0]
-        if self.h is None:
-            feasible_mask = np.array([True] * self.N)
-        else:
-            eq_cstr = np.array([self.h(_) for _ in self._get_primal_dual(self.X)[0]]).reshape(self.N, -1)
-            feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-4, rtol=0), axis=1)
-
-        feasible_idx = np.nonzero(feasible_mask)[0]
-        dominated_idx = list((set(range(self.N)) - set(self._nondominated_idx) - set(feasible_idx)))
-        if np.any(feasible_mask):
-            # non-dominatd sorting of the feasible points
-            partitions = non_domin_sort(self.Y[feasible_mask], only_front_indices=True)
-            partitions = {k: feasible_idx[v] for k, v in partitions.items()}
-            partitions.update({0: np.sort(np.r_[partitions[0], np.nonzero(~feasible_mask)[0]])})
-        else:
-            partitions = {0: np.array(range(self.N))}
-
-        # compute the Newton direction for each partition
-        for _, idx in partitions.items():
-            out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
-            self.step[idx, :] = out["step"]
-            self.G[idx, :] = out["G"]
-            # backtracking line search with Armijo's condition for each layer
-            if _ == 0 and len(dominated_idx) > 0:  # for the first layer
-                idx_ = list(set(idx) - set(dominated_idx))
-                for k in dominated_idx:  # for dominated and infeasible points
-                    self.step_size[k] = self._line_search_dominated(self.X[[k]], self.step[[k]])
-                self.step_size[idx_] = self._line_search(self.X[idx_], self.step[idx_], G=self.G[idx_])
-            else:  # for all other layers
-                self.step_size[idx] = self._line_search(self.X[idx], self.step[idx], G=self.G[idx])
-
-        self.X += self.step_size.reshape(-1, 1) * self.step
-        # evaluation
-        self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
-        self.iter_count += 1
-
-    def _line_search(self, X: np.ndarray, step: np.ndarray, G: np.ndarray) -> float:
+    def _line_search(
+        self, state: State, step: np.ndarray, R: np.ndarray, max_step_size: float = None
+    ) -> float:
         """backtracking line search with Armijo's condition"""
-        # TODO: ad-hoc! to solve this in the further using a high precision numerical library
-        # NOTE: when the step length is close to numpy's numerical resolution, it makes no sense to perform
-        # the step-size control
-        if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
+        c1 = 1e-4
+        if np.all(np.isclose(step, 0)):
             return 1
 
-        c = 1e-5
-        N = len(X)
-        primal_vars = self._get_primal_dual(X)[0]
-        normal_vectors = np.c_[np.eye(self.dim_p * N), -1 * np.eye(self.dim_p * N)]
-        # calculate the maximal step-size
-        dist = np.r_[
-            np.abs(primal_vars.ravel() - np.tile(self.xl, N)),
-            np.abs(np.tile(self.xu, N) - primal_vars.ravel()),
-        ]
-        v = step[:, : self.dim_p].ravel() @ normal_vectors
-        alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+        def phi_func(alpha):
+            state_ = deepcopy(state)
+            state_.update(state.X + alpha * step)
+            R = self._compute_R(state_)[0]
+            return np.linalg.norm(R)
 
+        step_size = 1 if max_step_size is None else max_step_size
+        phi = [np.linalg.norm(R)]
+        s = [0, step_size]
         for _ in range(6):
-            X_ = X + alpha * step
-            if self.h is None:
-                HV = self.indicator.HV(X)
-                HV_ = self.indicator.HV(X_)
-                inc = np.inner(G.ravel(), step.ravel())
-                cond = HV_ - HV >= c * alpha * inc
-            else:
-                G_ = self._compute_R(X_)
-                cond = np.linalg.norm(G_) <= (1 - c * alpha) * np.linalg.norm(G)
-            if cond:
+            phi.append(phi_func(s[-1]))
+            # Armijo–Goldstein condition
+            # when R norm is close to machine precision, it makes no sense to perform the line search
+            success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+            if success:
                 break
             else:
                 if 11 < 2:
-                    phi0 = HV if self.h is None else np.sum(G**2) / 2
-                    phi1 = HV_ if self.h is None else np.sum(G_**2) / 2
-                    phi0prime = inc if self.h is None else -np.sum(G**2)
-                    alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
-                    # alpha *= tau
-                if 1 < 2:
-                    alpha *= 0.5
+                    # cubic interpolation to compute the next step length
+                    d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
+                    d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
+                    s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
+                    s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
+                    s.append(s_)
+                else:
+                    s.append(s[-1] * 0.5)
         else:
-            self.logger.warn("Armijo's backtracking line search failed")
-        return alpha
+            self.logger.warn("backtracking line search failed")
+        step_size = s[-1]
+        return step_size
+
+        # c = 1e-5
+        # N = len(X)
+        # primal_vars = self._get_primal_dual(X)[0]
+        # normal_vectors = np.c_[np.eye(self.dim_p * N), -1 * np.eye(self.dim_p * N)]
+        # # calculate the maximal step-size
+        # dist = np.r_[
+        #     np.abs(primal_vars.ravel() - np.tile(self.xl, N)),
+        #     np.abs(np.tile(self.xu, N) - primal_vars.ravel()),
+        # ]
+        # v = step[:, : self.dim_p].ravel() @ normal_vectors
+        # alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+
+        # for _ in range(6):
+        #     X_ = X + alpha * step
+        #     if self.h is None:
+        #         HV = self.indicator.compute(X)
+        #         HV_ = self.indicator.compute(X_)
+        #         inc = np.inner(R.ravel(), step.ravel())
+        #         cond = HV_ - HV >= c * alpha * inc
+        #     else:
+        #         G_ = self._compute_R(X_)
+        #         cond = np.linalg.norm(G_) <= (1 - c * alpha) * np.linalg.norm(R)
+        #     if cond:
+        #         break
+        #     else:
+        #         if 11 < 2:
+        #             phi0 = HV if self.h is None else np.sum(R**2) / 2
+        #             phi1 = HV_ if self.h is None else np.sum(G_**2) / 2
+        #             phi0prime = inc if self.h is None else -np.sum(R**2)
+        #             alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
+        #             # alpha *= tau
+        #         if 1 < 2:
+        #             alpha *= 0.5
+        # else:
+        #     self.logger.warn("Armijo's backtracking line search failed")
+        # return alpha
 
     def _line_search_dominated(self, X: np.ndarray, step: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
@@ -363,9 +417,9 @@ class HVN:
             self.logger.warn("Armijo's backtracking line search failed")
         return alpha
 
-    def _check_XY(self):
+    def _check_population(self):
         # get unique points: if some points converge to the same location
-        primal_vars = self.X[:, : self.dim_p]
+        primal_vars = self.state.primal
         D = cdist(primal_vars, primal_vars)
         drop_idx_X = set([])
         for i in range(self.N):
@@ -373,54 +427,17 @@ class HVN:
                 drop_idx_X |= set(np.nonzero(np.isclose(D[i, :], 0, rtol=self.eps))[0]) - set([i])
 
         # get rid of weakly-dominated points
-        # TODO: Ad-hoc solution! check if this is still needed
-        # since the hypervolume indicator module is upgraded
         drop_idx_Y = set([])
         # TODO: Ad-hoc solution! check if this is still needed
-        if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
-            for i in range(self.N):
-                if i not in drop_idx_Y:
-                    drop_idx_Y |= set(np.nonzero(np.any(np.isclose(self.Y[i, :], self.Y), axis=1))[0]) - set(
-                        [i]
-                    )
+        # if self.problem_name is not None and self.problem_name not in ("Eq1DTLZ4", "Eq1IDTLZ4"):
+        #     for i in range(self.N):
+        #         if i not in drop_idx_Y:
+        #             drop_idx_Y |= set(np.nonzero(np.any(np.isclose(self.Y[i, :], self.Y), axis=1))[0]) - set(
+        #                 [i]
+        #             )
         idx = list(set(range(self.N)) - (drop_idx_X | drop_idx_Y))
-        self.N = len(idx)
-        self.X = self.X[idx, :]
-        self.Y = self.Y[idx, :]
-
-    def log(self):
-        HV = hypervolume(self.Y, self.ref)
-        self.history_Y += [self.Y.copy()]
-        self.history_X += [self._get_primal_dual(self.X.copy())[0]]
-        self.history_HV += [HV]
-
-        if self.verbose:
-            self.logger.info(f"iteration {self.iter_count} ---")
-            self.logger.info(f"HV: {HV}")
-            # self.logger.info(f"step size: {self.step_size}")
-            self.logger.info(f"#non-dominated: {len(self._nondominated_idx)}")
-
-        if self.iter_count >= 1:
-            try:
-                self._delta_X = np.mean(
-                    np.sqrt(np.sum((self.history_X[-1] - self.history_X[-2]) ** 2, axis=1))
-                )
-                self._delta_Y = np.mean(
-                    np.sqrt(np.sum((self.history_Y[-1] - self.history_Y[-2]) ** 2, axis=1))
-                )
-                self._delta_HV = np.abs(self.history_HV[-1] - self.history_HV[-2])
-            except:
-                pass
-
-        if self.h is not None:
-            self.hist_R_norm += [np.median(np.linalg.norm(self.G[self._nondominated_idx], axis=1))]
-            self.logger.info(f"G norm: {self.hist_R_norm[-1]}")
-
-    def terminate(self) -> bool:
-        if self.iter_count >= self.max_iters:
-            self.stop_dict["iter_count"] = self.iter_count
-
-        return bool(self.stop_dict)
+        self.state = self.state[idx]
+        self.N = self.state.N
 
 
 class DpN:
@@ -493,7 +510,7 @@ class DpN:
         self.xl = xl
         self.xu = xu
         self._check_constraints(h, g)
-        self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
+        self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
         self._initialize(x0)
         self._set_indicator(ref, func, jac, hessian)
         self._set_logging(verbose)
@@ -676,7 +693,7 @@ class DpN:
         dH, idx = None, None
         if self._constrained:
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
-            v, idx, dH = state.cstr_value, state.active_indices, state.dH
+            v, idx, dH = state.cstr_value, state.active_indices, state.cstr_grad
             dH = [dH[i][idx, :] for i, idx in enumerate(idx)]
             R = [np.r_[func(grad[i], dual_vars[i, k], dH[i]), v[i, k]] for i, k in enumerate(idx)]
         return R, dH, idx
@@ -782,7 +799,7 @@ class DpN:
 
         def phi_func(alpha, i):
             state = deepcopy(self.state)
-            x = state.X[i]
+            x = state.X[i].copy()
             x += alpha * step[i]
             state.update_one(x, i)
             self.active_indicator.re_match = False

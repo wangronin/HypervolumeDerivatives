@@ -10,7 +10,7 @@ sns.set(font_scale=1.3, rc={"text.usetex": True})
 ref = np.array([17, 35, 7, 10])
 hvh = HypervolumeDerivatives(4, 4, ref, minimization=True)
 X = np.array([(16, 23, 1, 8), (14, 32, 2, 5), (12, 27, 3, 1), (10, 21, 4, 9), (8, 33, 5, 3)])
-out = hvh.compute(X)
+out = hvh._compute_hessian(X)
 
 assert np.all(
     out["HVdY2"]
