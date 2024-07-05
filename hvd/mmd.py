@@ -253,9 +253,11 @@ class MMDMatching:
                 if `compute_hessian` = True, it returns (gradient, Hessian)
                 otherwise, it returns (gradient, )
         """
-        grad = self.compute_gradient(X, Y, jacobian)["MMDdX"]
         if compute_hessian:
-            hessian = self.compute_hessian(X, Y)["MMDdX2"]
+            out = self.compute_hessian(X, Y)
+            grad, hessian = out["MMDdX"], out["MMDdX2"]
+        else:
+            grad = self.compute_gradient(X, Y, jacobian)["MMDdX"]
         return (grad, hessian) if compute_hessian else grad
 
     def compute_gradient(

@@ -52,7 +52,7 @@ def g_Hessian(x):
 ref = np.array([1, 1])
 max_iters = 10
 
-N = 10
+N = 15
 x1 = np.random.rand(N)
 x2 = x1**2 - 2 * x1 + 1
 x0 = np.c_[x1, x2]
@@ -75,6 +75,7 @@ opt = HVN(
     minimization=True,
     max_iters=max_iters,
     verbose=True,
+    preconditioning=True,
 )
 X, Y, stop = opt.run()
 
@@ -112,8 +113,8 @@ ax0.set_ylabel(r"$f_2$")
 ax0.legend([r"$Y_{\text{final}}$", r"$Y_0$", "Pareto front"])
 
 ax12 = ax1.twinx()
-ax1.plot(range(1, len(opt.history_HV) + 1), opt.history_HV, "b-")
-ax12.semilogy(range(1, len(opt.history_HV) + 1), opt.hist_R_norm, "g--")
+ax1.plot(range(1, len(opt.history_indicator_value) + 1), opt.history_indicator_value, "b-")
+ax12.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 ax1.set_ylabel("HV", color="b")
 ax12.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax1.set_title("Performance")

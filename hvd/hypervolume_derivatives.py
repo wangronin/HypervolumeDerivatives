@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple, Union
 
-# TODO: remove dependencies on `autograd`
+# TODO: remove dependencies on `autograd` and move to jax
 import autograd.numpy as np
 import numpy as np
 from autograd import hessian, jacobian
@@ -9,7 +9,7 @@ from scipy.linalg import block_diag
 from .hypervolume import hypervolume
 from .utils import non_domin_sort
 
-__author__ = ["Hao Wang"]
+__author__ = "Hao Wang"
 
 
 def HVY(n_objective: int, ref: np.ndarray) -> callable:
@@ -36,8 +36,8 @@ class HypervolumeDerivatives:
 
     def __init__(
         self,
-        n_decision_var: int,
-        n_objective: int,
+        n_var: int,
+        n_obj: int,
         ref: Union[np.ndarray, List[List]],
         func: callable = None,
         jac: callable = None,
@@ -73,8 +73,8 @@ class HypervolumeDerivatives:
         if hessian is None:
             hessian = lambda x: np.zeros((len(x), len(x), len(x)))
 
-        self.n_decision_var = int(n_decision_var)
-        self.n_objective = int(n_objective)
+        self.n_var = int(n_var)
+        self.n_obj = int(n_obj)
         self.func = func if minimization else lambda x: -1 * func(x)
         self.jac = jac if minimization else lambda x: -1 * jac(x)
         self.hessian = hessian if minimization else lambda x: -1 * hessian(x)
@@ -103,7 +103,7 @@ class HypervolumeDerivatives:
         if not isinstance(points, np.ndarray):
             points = np.asarray(points)
         self._objective_points = points
-        assert self.n_objective == self._objective_points.shape[1]
+        assert self.n_obj == self._objective_points.shape[1]
 
         if self._objective_points.shape[1] == 1:
             self._nondominated_indices = np.array([np.argmin(self._objective_points.ravel())])
@@ -114,45 +114,58 @@ class HypervolumeDerivatives:
 
     def _check_X(self, X: np.ndarray):
         X = np.atleast_2d(X)
-        if X.shape[1] != self.n_decision_var:
-            X = X.reshape(-1, self.n_decision_var)
+        if X.shape[1] != self.n_var:
+            X = X.reshape(-1, self.n_var)
         return X
 
     def _check_Y(self, Y: np.ndarray):
         Y = np.atleast_2d(Y)
-        if Y.shape[1] != self.n_objective:
-            Y = Y.reshape(-1, self.n_decision_var)
+        if Y.shape[1] != self.n_obj:
+            Y = Y.reshape(-1, self.n_var)
         return Y
 
-    def HV(self, X: np.ndarray) -> float:
-        X = self._check_X(X)
-        Y = np.array([self.func(x) for x in X])
+    def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
+        if Y is None:
+            assert X is not None
+            assert self.func is not None
+            X = self._check_X(X)
+            Y = np.array([self.func(x) for x in X])
         return hypervolume(Y, self.ref)
 
-    def project(
-        self, axis: int, i: int, pareto_front: np.ndarray = None, ref: np.ndarray = None
-    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        """projecting the Pareto front along `axis` with respect to the i-th point"""
-        pareto_front = self.objective_points if pareto_front is None else pareto_front
-        ref = self.ref if ref is None else ref
-        y = pareto_front[i, :]
-        # projection: drop the `axis`-th dimension
-        y_ = np.delete(y, obj=axis)
-        ref_ = np.delete(ref, obj=axis)
-        idx = np.nonzero(pareto_front[:, axis] < y[axis])[0]
-        pareto_front_ = np.delete(pareto_front[idx, :], obj=axis, axis=1)
-        if len(pareto_front_) != 0:
-            if pareto_front_.shape[1] == 1:
-                pareto_indices = np.array([np.argmin(pareto_front_.ravel())])
-            else:
-                pareto_indices = non_domin_sort(pareto_front_, only_front_indices=True)[0]
-            # NOTE: implement a fast algorithm to get the non dominated subset
-            # pareto_indices = get_non_dominated(pareto_front_, return_index=True)
-            pareto_front_ = pareto_front_[pareto_indices]
-            idx = idx[pareto_indices]
-        return y_, pareto_front_, ref_, idx
+    def compute_derivatives(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray = None,
+        compute_hessian: bool = True,
+        YdX: np.ndarray = None,
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """compute the derivatives of the inverted generational distance^p
 
-    def _compute_gradient(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
+        Args:
+            X (np.ndarray): the decision points of shape (N, dim).
+            Y (np.ndarray, optional): the objective points of shape (N, n_objective). Defaults to None.
+            compute_hessian (bool, optional): whether the Hessian is computed. Defaults to True.
+            jacobian (np.ndarray, optional): Jacobian of the objective function at `X`. Defaults to None.
+
+        Returns:
+            Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+                if `compute_hessian` = True, it returns (gradient, Hessian)
+                otherwise, it returns (gradient, )
+        """
+        if compute_hessian:
+            out = self._compute_hessian(X, Y, YdX)
+            HVdX, HVdX2 = out["HVdX"], out["HVdX2"]
+        else:
+            HVdX = self._compute_gradient(X, Y, YdX)["HVdX"]
+        HVdX = HVdX.reshape(len(X), -1)
+        return (HVdX, HVdX2) if compute_hessian else HVdX
+
+    def _compute_gradient(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray = None,
+        YdX: np.ndarray = None,
+    ) -> Dict[str, np.ndarray]:
         """compute the hypervolume gradient using analytical expressions
 
         Parameters
@@ -177,17 +190,19 @@ class HypervolumeDerivatives:
             }
         """
         X = self._check_X(X)
-        Y, YdX, YdX2 = self._compute_objective_derivatives(X, Y)
+        Y, YdX = self._compute_objective_derivatives(X, Y, YdX)
         self.objective_points = Y
-        HVdY = np.zeros((self.N, self.n_objective))
+        HVdY = np.zeros((self.N, self.n_obj))
         HVdY[self._nondominated_indices] = self.hypervolume_dY(
             self.objective_points[self._nondominated_indices], self.ref
         )
         HVdY = HVdY.reshape(1, -1)[0]
         HVdX = HVdY @ YdX
-        return dict(HVdX=HVdX, HVdY=HVdY, YdX=YdX, YdX2=YdX2)
+        return dict(HVdX=HVdX, HVdY=HVdY, YdX=YdX)
 
-    def compute(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
+    def _compute_hessian(
+        self, X: np.ndarray, Y: np.ndarray = None, YdX: np.ndarray = None
+    ) -> Dict[str, np.ndarray]:
         """compute the hypervolume gradient and Hessian matrix using analytical expressions
 
         Parameters
@@ -211,15 +226,17 @@ class HypervolumeDerivatives:
             }
         """
         X = self._check_X(X)
-        res = self._compute_gradient(X, Y)
-        HVdY, HVdX, YdX, YdX2 = res["HVdY"], res["HVdX"], res["YdX"], res["YdX2"]
-        HVdY2 = np.zeros((self.N * self.n_objective, self.N * self.n_objective))
+        # TODO: fix passing the input arugment `YdX`
+        res = self._compute_gradient(X, Y, YdX)
+        Y, YdX, YdX2 = self._compute_objective_derivatives(X, Y, YdX, compute_hessian=True)
+        HVdY, HVdX = res["HVdY"], res["HVdX"]
+        HVdY2 = np.zeros((self.N * self.n_obj, self.N * self.n_obj))
         for i in range(self.N):
             if i in self._dominated_indices:  # if the point is dominated
                 continue
-            for k in range(self.n_objective):
+            for k in range(self.n_obj):
                 # project along `axis`; `*_` indicates variables in the projected subspace
-                y_, pareto_front_, ref_, proj_idx = self.project(axis=k, i=i)
+                y_, pareto_front_, ref_, proj_idx = self._project(axis=k, i=i)
                 # partial derivatives ∂(∂HV/∂y_k^i)/∂y^i
                 # of shape (1, dim), where the k-th element is zero
                 Y_ = np.vstack([y_, pareto_front_])
@@ -232,8 +249,8 @@ class HypervolumeDerivatives:
                 idx = np.where(pareto_indices == 0)[0]
                 out = self.hypervolume_dY(Y_[pareto_indices], ref_)[idx]
 
-                rows = slice(i * self.n_objective, (i + 1) * self.n_objective)
-                HVdY2[rows, i * self.n_objective + k] = np.insert(-1.0 * out, k, 0)
+                rows = slice(i * self.n_obj, (i + 1) * self.n_obj)
+                HVdY2[rows, i * self.n_obj + k] = np.insert(-1.0 * out, k, 0)
                 # partial derivatives ∂(∂HV/∂y_k^i)/∂y^{-i}
                 # of shape (len(proj_idx), dim), where the k-th element is zero
                 # ∂HV/∂y_k^i is the hypervolume improvement of `x_` w.r.t. `pareto_front_`
@@ -244,8 +261,8 @@ class HypervolumeDerivatives:
                 # hypervolume improvement of points in `pareto_front_` decreases ∂HV/∂y_k^i
                 out = np.insert(out, k, 0, axis=1)
                 for s, j in enumerate(proj_idx):
-                    rows = slice(j * self.n_objective, (j + 1) * self.n_objective)
-                    HVdY2[rows, i * self.n_objective + k] = out[s]
+                    rows = slice(j * self.n_obj, (j + 1) * self.n_obj)
+                    HVdY2[rows, i * self.n_obj + k] = out[s]
 
         # TODO: use sparse matrix multiplication here
         HVdX2 = YdX.T @ HVdY2 @ YdX + np.einsum("...i,i...", HVdY, YdX2)
@@ -257,6 +274,29 @@ class HypervolumeDerivatives:
             HVdX2=HVdX2,
             HVdY2=HVdY2,
         )
+
+    def _project(
+        self, axis: int, i: int, pareto_front: np.ndarray = None, ref: np.ndarray = None
+    ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """projecting the Pareto front along `axis` with respect to the i-th point"""
+        pareto_front = self.objective_points if pareto_front is None else pareto_front
+        ref = self.ref if ref is None else ref
+        y = pareto_front[i, :]
+        # projection: drop the `axis`-th dimension
+        y_ = np.delete(y, obj=axis)
+        ref_ = np.delete(ref, obj=axis)
+        idx = np.nonzero(pareto_front[:, axis] < y[axis])[0]
+        pareto_front_ = np.delete(pareto_front[idx, :], obj=axis, axis=1)
+        if len(pareto_front_) != 0:
+            if pareto_front_.shape[1] == 1:
+                pareto_indices = np.array([np.argmin(pareto_front_.ravel())])
+            else:
+                pareto_indices = non_domin_sort(pareto_front_, only_front_indices=True)[0]
+            # NOTE: implement a fast algorithm to get the non dominated subset
+            # pareto_indices = get_non_dominated(pareto_front_, return_index=True)
+            pareto_front_ = pareto_front_[pareto_indices]
+            idx = idx[pareto_indices]
+        return y_, pareto_front_, ref_, idx
 
     def compute_automatic_differentiation(self, X: np.ndarray) -> Dict[str, np.ndarray]:
         """compute the hypervolume gradient and Hessian matrix using automatic differentiation
@@ -282,9 +322,9 @@ class HypervolumeDerivatives:
             }
         """
         if self._HV_Jac is None:
-            self._HV_Jac = jacobian(HVY(self.n_objective, self.ref))
+            self._HV_Jac = jacobian(HVY(self.n_obj, self.ref))
         if self._HV_Hessian is None:
-            self._HV_Hessian = hessian(HVY(self.n_objective, self.ref))
+            self._HV_Hessian = hessian(HVY(self.n_obj, self.ref))
 
         X = self._check_X(X)
         Y, YdX, YdX2 = self._compute_objective_derivatives(X)
@@ -329,31 +369,37 @@ class HypervolumeDerivatives:
             # higher dimensional cases: recursive computation
             for i in range(N):
                 for k in range(dim):
-                    y_, pareto_front_, ref_, _ = self.project(k, i, pareto_front, ref)
+                    y_, pareto_front_, ref_, _ = self._project(k, i, pareto_front, ref)
                     # NOTE: `-1.0` -> since we assume a minimization problem
                     HVdY[i, k] = -1.0 * hypervolume_improvement(y_, pareto_front_, ref_)
         return HVdY
 
     def _compute_objective_derivatives(
-        self, X: np.ndarray, Y: np.ndarray = None
+        self,
+        X: np.ndarray,
+        Y: np.ndarray = None,
+        YdX: np.ndarray = None,
+        compute_hessian: np.ndarray = False,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """compute the objective function value, the Jacobian, and Hessian tensor"""
         if not isinstance(X, np.ndarray):
             X = np.asarray(X)
-        if X.shape[1] != self.n_decision_var:
+        if X.shape[1] != self.n_var:
             X = X.T
         self.N = X.shape[0]  # number of points
         if Y is None:  # do not evaluate the function when `Y` is provided
             Y = np.array([self.func(x) for x in X])  # `(N, n_objective)`
         # Jacobians
-        YdX = np.array([self.jac(x) for x in X])  # `(N, n_objective, n_decision_var)`
+        # `(N, n_objective, n_decision_var)`
+        YdX = np.array([self.jac(x) for x in X]) if YdX is None else YdX.copy()
         YdX = block_diag(*YdX)  # `(N * n_objective, N * n_decision_var)` grouped by points
         # Hessians
-        _YdX2 = np.array([self.hessian(x) for x in X])  # `(N, n_objective, n_decision_var, n_decision_var)`
-        YdX2 = np.zeros(
-            (self.N * self.n_objective, self.N * self.n_decision_var, self.N * self.n_decision_var)
-        )
-        for i in range(self.N):
-            idx = slice(i * self.n_decision_var, (i + 1) * self.n_decision_var)
-            YdX2[i * self.n_objective : (i + 1) * self.n_objective, idx, idx] = _YdX2[i, ...]
-        return Y, YdX, YdX2
+        if compute_hessian:
+            _YdX2 = np.array(
+                [self.hessian(x) for x in X]
+            )  # `(N, n_objective, n_decision_var, n_decision_var)`
+            YdX2 = np.zeros((self.N * self.n_obj, self.N * self.n_var, self.N * self.n_var))
+            for i in range(self.N):
+                idx = slice(i * self.n_var, (i + 1) * self.n_var)
+                YdX2[i * self.n_obj : (i + 1) * self.n_obj, idx, idx] = _YdX2[i, ...]
+        return (Y, YdX, YdX2) if compute_hessian else (Y, YdX)

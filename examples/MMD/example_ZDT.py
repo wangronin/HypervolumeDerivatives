@@ -74,6 +74,7 @@ opt = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     metrics=metrics,
+    preconditioning=True,
 )
 X, Y, _ = opt.run()
 

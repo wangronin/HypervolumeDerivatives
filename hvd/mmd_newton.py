@@ -99,7 +99,7 @@ class MMDNewton:
         self.xu: np.ndarray = xu
         self.ref: ClusteredReferenceSet = ref  # TODO: we should pass ref to the indicator directly
         self._check_constraints(h, g)
-        self.state: State = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, g, g_jac)
+        self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
         # TODO: move indicator out of this class
         self.indicator = MMDMatching(
             self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.2
@@ -235,7 +235,7 @@ class MMDNewton:
         if self._constrained:
             R = np.zeros((state.N, self.dim))  # the root-finding problem
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
-            cstr_value, idx, dH = state.cstr_value, state.active_indices, state.dH
+            cstr_value, idx, dH = state.cstr_value, state.active_indices, state.cstr_grad
             dH = [dH[i, idx, :] for i, idx in enumerate(idx)]  # only take Jacobian of the active constraints
             active_indices = np.c_[active_indices, idx]
             for i, k in enumerate(active_indices):
@@ -298,7 +298,7 @@ class MMDNewton:
 
         def phi_func(alpha, i):
             state = deepcopy(self.state)
-            x = state.X[i]
+            x = state.X[i].copy()
             x += alpha * step[i]
             state.update_one(x, i)
             self.indicator.re_match = False
