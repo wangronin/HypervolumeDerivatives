@@ -105,7 +105,6 @@ class State:
         ieq_active_idx = self.active_indices[:, self.n_eq :]
         eq_feasible = np.all(np.isclose(self.H, 0, atol=1e-4, rtol=0), axis=1)
         ieq_feasible = ~np.any(ieq_active_idx, axis=1)
-        breakpoint()
         return np.bitwise_and(eq_feasible, ieq_feasible)
 
     @property

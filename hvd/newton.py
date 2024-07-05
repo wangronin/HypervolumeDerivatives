@@ -11,8 +11,7 @@ from scipy.spatial.distance import cdist
 from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import (compute_chim, get_logger, non_domin_sort,
-                    precondition_hessian, set_bounds)
+from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
 
 __authors__ = ["Hao Wang"]
 
@@ -243,6 +242,7 @@ class HVN:
         for i, idx in partitions.items():
             # compute Newton step
             newton_step, R = self._compute_netwon_step(self.state[idx])
+            breakpoint()
             self.step[idx, :] = newton_step
             self.R[idx, :] = R
             # backtracking line search with Armijo's condition for each layer
