@@ -295,6 +295,7 @@ class HVN:
             out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
             self.step[idx, :] = out["step"]
             self.G[idx, :] = out["G"]
+            breakpoint()
             # backtracking line search with Armijo's condition for each layer
             if _ == 0 and len(dominated_idx) > 0:  # for the first layer
                 idx_ = list(set(idx) - set(dominated_idx))
