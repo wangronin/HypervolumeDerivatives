@@ -106,6 +106,7 @@ opt = HVN(
     minimization=True,
     max_iters=max_iters,
     verbose=True,
+    preconditioning=True,
 )
 X, Y, stop = opt.run()
 
@@ -196,7 +197,7 @@ ax.set_zlabel(r"$f_3$")
 ax = fig.add_subplot(1, 3, 3)
 # ax_ = ax.twinx()
 # ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
+ax.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 # ax.set_ylabel("HV", color="b")
 ax.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
