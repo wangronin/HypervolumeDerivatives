@@ -127,7 +127,7 @@ class HVN:
             assert all(~np.isinf(self.xl)) & all(~np.isinf(self.xu))
             X0 = np.random.rand(self.N, self.dim_p) * (self.xu - self.xl) + self.xl  # (mu, dim_primal)
         # initialize the state variables
-        self.state.update(np.c_[X0, np.zeros((self.N, self.dim_d)) / self.N])  # (mu, dim)
+        self.state.update(np.c_[X0, np.ones((self.N, self.dim_d)) / self.N])  # (mu, dim)
         self.iter_count: int = 0
         self._max_HV = np.product(self.ref)  # TODO: this should be moved to `HV` class
 
