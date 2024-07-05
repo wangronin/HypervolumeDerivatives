@@ -11,7 +11,8 @@ from scipy.spatial.distance import cdist
 from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
+from .utils import (compute_chim, get_logger, non_domin_sort,
+                    precondition_hessian, set_bounds)
 
 __authors__ = ["Hao Wang"]
 
