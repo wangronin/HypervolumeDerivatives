@@ -98,7 +98,7 @@ max_iters = 30
 #         [1.2, 1.5, 2],
 #     ]
 # )
-mu = 5
+mu = 20
 # a = np.mgrid[-2.5:-0.5:6j, 0:3.5:10j]
 # a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
 w = np.abs(np.random.randn(mu, 3))
@@ -117,9 +117,9 @@ opt = HVN(
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
-    h=h,
-    h_jac=h_Jacobian,
-    h_hessian=h_Hessian,
+    g=h,
+    g_jac=h_Jacobian,
+    g_hessian=h_Hessian,
     N=len(x0),
     X0=x0,
     xl=-4,
@@ -212,7 +212,7 @@ ax = fig.add_subplot(1, 3, 3)
 # ax_ = ax.twinx()
 # ax.semilogy(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
 # ax.plot(range(1, len(opt.hist_HV) + 1), opt.hist_HV, "b-")
-ax.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
+ax.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 # ax.set_ylabel("HV", color="b")
 # ax.set_ylabel("N_Nondominated", color="b")
 ax.set_ylabel(r"$||G(\mathbf{X})||$", color="g")

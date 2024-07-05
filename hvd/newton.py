@@ -211,7 +211,7 @@ class HVN:
             except:  # if DR is singular, then use the pseudoinverse
                 newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
         # convert the vector-format of the newton step to matrix format
-        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), self.N, self.dim, self.dim_p, active_indices)
+        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), state.N, self.dim, self.dim_p, active_indices)
         return newton_step, R
 
     def _compute_indicator_value(self):
@@ -342,43 +342,6 @@ class HVN:
             self.logger.warn("backtracking line search failed")
         step_size = s[-1]
         return step_size
-
-        # c = 1e-5
-        # N = len(X)
-        # primal_vars = self._get_primal_dual(X)[0]
-        # normal_vectors = np.c_[np.eye(self.dim_p * N), -1 * np.eye(self.dim_p * N)]
-        # # calculate the maximal step-size
-        # dist = np.r_[
-        #     np.abs(primal_vars.ravel() - np.tile(self.xl, N)),
-        #     np.abs(np.tile(self.xu, N) - primal_vars.ravel()),
-        # ]
-        # v = step[:, : self.dim_p].ravel() @ normal_vectors
-        # alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
-
-        # for _ in range(6):
-        #     X_ = X + alpha * step
-        #     if self.h is None:
-        #         HV = self.indicator.compute(X)
-        #         HV_ = self.indicator.compute(X_)
-        #         inc = np.inner(R.ravel(), step.ravel())
-        #         cond = HV_ - HV >= c * alpha * inc
-        #     else:
-        #         G_ = self._compute_R(X_)
-        #         cond = np.linalg.norm(G_) <= (1 - c * alpha) * np.linalg.norm(R)
-        #     if cond:
-        #         break
-        #     else:
-        #         if 11 < 2:
-        #             phi0 = HV if self.h is None else np.sum(R**2) / 2
-        #             phi1 = HV_ if self.h is None else np.sum(G_**2) / 2
-        #             phi0prime = inc if self.h is None else -np.sum(R**2)
-        #             alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
-        #             # alpha *= tau
-        #         if 1 < 2:
-        #             alpha *= 0.5
-        # else:
-        #     self.logger.warn("Armijo's backtracking line search failed")
-        # return alpha
 
     def _line_search_dominated(self, X: np.ndarray, step: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""

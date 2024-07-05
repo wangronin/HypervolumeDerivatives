@@ -90,6 +90,7 @@ opt = HVN(
     minimization=True,
     max_iters=max_iters,
     verbose=True,
+    preconditioning=False,
 )
 X, Y, stop = opt.run()
 
@@ -162,8 +163,8 @@ ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
 ax22 = ax2.twinx()
-ax2.plot(range(1, len(opt.history_HV) + 1), opt.history_HV, "b-")
-ax22.semilogy(range(1, len(opt.history_HV) + 1), opt.hist_R_norm, "g--")
+ax2.plot(range(1, len(opt.history_indicator_value) + 1), opt.history_indicator_value, "b-")
+ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 ax2.set_ylabel("HV", color="b")
 ax22.set_ylabel(r"$||G(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
