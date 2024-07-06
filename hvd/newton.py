@@ -281,7 +281,6 @@ class HVN:
             feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-4, rtol=0), axis=1)
 
         feasible_idx = np.nonzero(feasible_mask)[0]
-        print(feasible_idx)
         dominated_idx = list((set(range(self.mu)) - set(self._nondominated_idx) - set(feasible_idx)))
         if np.any(feasible_mask):
             # non-dominatd sorting of the feasible points
@@ -309,11 +308,6 @@ class HVN:
         # evaluation
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
         self.iter_count += 1
-
-        with open("out.txt", "a") as f:
-            print(f"iteration {self.iter_count}", file=f)
-            print(self.X, file=f)
-            print(self.Y, file=f)
 
     def _line_search(self, X: np.ndarray, step: np.ndarray, G: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
