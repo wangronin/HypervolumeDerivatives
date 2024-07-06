@@ -75,7 +75,7 @@ point_set -= center
 pareto_set = point_set / np.linalg.norm(point_set, axis=1).reshape(-1, 1) + center
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
-max_iters = 30
+max_iters = 10
 mu = 40
 ref = np.array([20, 20, 20])
 w = np.abs(np.random.rand(mu, 3))
@@ -143,20 +143,20 @@ ax.set_xlim([-1.3, 1.3])
 ax.set_ylim([-1.3, 1.3])
 ax.set_zlim([-2.5, 0.3])
 
-# trajectory = np.atleast_3d([x0] + opt.hist_X)
-# for i in range(len(x0)):
-#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-#     ax.quiver(
-#         x[:-1],
-#         y[:-1],
-#         z[:-1],
-#         x[1:] - x[:-1],
-#         y[1:] - y[:-1],
-#         z[1:] - z[:-1],
-#         color="k",
-#         arrow_length_ratio=0.1,
-#         alpha=0.3,
-#     )
+trajectory = np.atleast_3d([x0] + opt.history_X)
+for i in range(len(x0)):
+    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+    ax.quiver(
+        x[:-1],
+        y[:-1],
+        z[:-1],
+        x[1:] - x[:-1],
+        y[1:] - y[:-1],
+        z[1:] - z[:-1],
+        color="k",
+        arrow_length_ratio=0.1,
+        alpha=0.3,
+    )
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
@@ -177,7 +177,7 @@ ax.plot_trisurf(triang, z, color="k", alpha=0.2)
 # plot the final Pareton approximation set
 ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "g*", ms=8)
 
-# trajectory = np.atleast_3d([y0] + opt.hist_Y)
+# trajectory = np.atleast_3d([y0] + opt.history_Y)
 # for i in range(len(x0)):
 #     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
 #     ax.quiver(

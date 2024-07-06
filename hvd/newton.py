@@ -244,6 +244,7 @@ class HVN:
         self.step = np.zeros((self.N, self.dim))
         self.step_size = np.ones(self.N)
         self.R = np.zeros((self.N, self.dim))
+        print(feasible_idx)
         for i, idx in partitions.items():
             # compute Newton step
             newton_step, R = self._compute_netwon_step(self.state[idx])
