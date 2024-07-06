@@ -242,7 +242,6 @@ class HVN:
         for i, idx in partitions.items():
             # compute Newton step
             newton_step, R = self._compute_netwon_step(self.state[idx])
-            breakpoint()
             self.step[idx, :] = newton_step
             self.R[idx, :] = R
             # backtracking line search with Armijo's condition for each layer
