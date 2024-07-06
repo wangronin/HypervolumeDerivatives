@@ -222,7 +222,7 @@ class HVN:
         HVdX, HVdX2 = out["HVdX"].ravel(), out["HVdX2"]
         # NOTE: preconditioning is needed EqDTLZ problems
         # if self.problem_name is not None and self.problem_name != "Eq1IDTLZ3":
-        HVdX2 = self._precondition_hessian(HVdX2)
+        # HVdX2 = self._precondition_hessian(HVdX2)
         H, G = HVdX2, HVdX
 
         if self.h is not None:  # with equality constraints
@@ -281,6 +281,7 @@ class HVN:
             feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-4, rtol=0), axis=1)
 
         feasible_idx = np.nonzero(feasible_mask)[0]
+        print(feasible_idx)
         dominated_idx = list((set(range(self.mu)) - set(self._nondominated_idx) - set(feasible_idx)))
         if np.any(feasible_mask):
             # non-dominatd sorting of the feasible points
@@ -291,11 +292,11 @@ class HVN:
             partitions = {0: np.array(range(self.mu))}
 
         # compute the Newton direction for each partition
+        breakpoint()
         for _, idx in partitions.items():
             out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
             self.step[idx, :] = out["step"]
             self.G[idx, :] = out["G"]
-            breakpoint()
             # backtracking line search with Armijo's condition for each layer
             if _ == 0 and len(dominated_idx) > 0:  # for the first layer
                 idx_ = list(set(idx) - set(dominated_idx))
