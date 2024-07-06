@@ -250,7 +250,6 @@ class HVN:
             newton_step, R = self._compute_netwon_step(self.state[idx])
             self.step[idx, :] = newton_step
             self.R[idx, :] = R
-            breakpoint()
             # backtracking line search with Armijo's condition for each layer
             if i == 0 and len(dominated_idx) > 0:  # for the first layer
                 idx_ = list(set(idx) - set(dominated_idx))
@@ -262,6 +261,7 @@ class HVN:
             self.step_size[idx] = self._line_search(self.state[idx], self.step[idx], R=self.R[idx])
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
+        breakpoint()
 
     def log(self):
         self.iter_count += 1
@@ -324,6 +324,16 @@ class HVN:
             R = self._compute_R(state_)[0]
             return np.linalg.norm(R)
 
+        primal_vars = state.primal
+        N = state.N
+        normal_vectors = np.c_[np.eye(self.dim_p * N), -1 * np.eye(self.dim_p * N)]
+        # calculate the maximal step-size
+        dist = np.r_[
+            np.abs(primal_vars.ravel() - np.tile(self.xl, N)),
+            np.abs(np.tile(self.xu, N) - primal_vars.ravel()),
+        ]
+        v = step[:, : self.dim_p].ravel() @ normal_vectors
+        step_size = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
         # alpha = 1
         # R_norm = np.linalg.norm(R)
         # for _ in range(6):
@@ -344,7 +354,7 @@ class HVN:
         #     self.logger.warn("Armijo's backtracking line search failed")
         # return alpha
 
-        step_size = 1 if max_step_size is None else max_step_size
+        # step_size = 1 if max_step_size is None else max_step_size
         phi = [np.linalg.norm(R)]
         s = [0, step_size]
         for _ in range(6):
