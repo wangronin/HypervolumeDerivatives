@@ -75,7 +75,7 @@ point_set -= center
 pareto_set = point_set / np.linalg.norm(point_set, axis=1).reshape(-1, 1) + center
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
-max_iters = 10
+max_iters = 30
 mu = 40
 ref = np.array([20, 20, 20])
 w = np.abs(np.random.rand(mu, 3))
