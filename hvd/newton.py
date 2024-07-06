@@ -212,6 +212,10 @@ class HVN:
                 newton_step_ = -1 * solve(DR, R_)
             except:  # if DR is singular, then use the pseudoinverse
                 newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
+                # w, V = np.linalg.eigh(H)
+                # w[np.isclose(w, 0)] = 1e-6
+                # D = np.diag(1 / w)
+                # step = -1 * V @ D @ V.T @ G
         # convert the vector-format of the newton step to matrix format
         newton_step = Nd_vector_to_matrix(newton_step_.ravel(), state.N, self.dim, self.dim_p, active_indices)
         return newton_step, R
@@ -250,10 +254,6 @@ class HVN:
             # backtracking line search with Armijo's condition for each layer
             idx_ = list(set(idx) - set(dominated_idx)) if i == 0 else idx  # for the first layer
             self.step_size[idx_] = self._line_search(self.state[idx_], self.step[idx_], R=self.R[idx_])
-            #     self.step_size[idx_] = self._line_search(self.state[idx_], self.step[idx_], R=self.R[idx_])
-            # else:  # for all other layers
-
-            # self.step_size[idx] = self._line_search(self.state[idx], self.step[idx], R=self.R[idx])
         for k in dominated_idx:  # for dominated and infeasible points
             self.step_size[k] = self._line_search_dominated(self.state[[k]], self.step[[k]])
         # Newton iteration and evaluation
