@@ -250,6 +250,7 @@ class HVN:
             newton_step, R = self._compute_netwon_step(self.state[idx])
             self.step[idx, :] = newton_step
             self.R[idx, :] = R
+            breakpoint()
             # backtracking line search with Armijo's condition for each layer
             if i == 0 and len(dominated_idx) > 0:  # for the first layer
                 idx_ = list(set(idx) - set(dominated_idx))
@@ -313,7 +314,7 @@ class HVN:
         self, state: State, step: np.ndarray, R: np.ndarray, max_step_size: float = None
     ) -> float:
         """backtracking line search with Armijo's condition"""
-        c1 = 1e-4
+        c1 = 1e-5
         if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
             return 1
 
@@ -322,6 +323,26 @@ class HVN:
             state_.update(state.X + alpha * step)
             R = self._compute_R(state_)[0]
             return np.linalg.norm(R)
+
+        # alpha = 1
+        # R_norm = np.linalg.norm(R)
+        # for _ in range(6):
+        #     v = phi_func(alpha)
+        #     cond = np.linalg.norm(v) <= (1 - c1 * alpha) * R_norm
+        #     if cond:
+        #         break
+        #     else:
+        #         if 11 < 2:
+        #             phi0 = HV if self.h is None else np.sum(G**2) / 2
+        #             phi1 = HV_ if self.h is None else np.sum(G_**2) / 2
+        #             phi0prime = inc if self.h is None else -np.sum(G**2)
+        #             alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
+        #             # alpha *= tau
+        #         if 1 < 2:
+        #             alpha *= 0.5
+        # else:
+        #     self.logger.warn("Armijo's backtracking line search failed")
+        # return alpha
 
         step_size = 1 if max_step_size is None else max_step_size
         phi = [np.linalg.norm(R)]
