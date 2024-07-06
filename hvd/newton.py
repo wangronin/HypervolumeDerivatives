@@ -6,12 +6,15 @@ from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.linalg import block_diag, cholesky, solve
+from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
 
 from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
+from .utils import (compute_chim, get_logger, non_domin_sort,
+                    precondition_hessian, set_bounds)
 
 __authors__ = ["Hao Wang"]
 
@@ -209,13 +212,13 @@ class HVN:
         with warnings.catch_warnings():
             warnings.filterwarnings("error")
             try:
-                newton_step_ = -1 * solve(DR, R_)
+                newton_step_ = -1 * spsolve(csc_matrix(DR), csc_matrix(R_.reshape(-1, 1)))
             except:  # if DR is singular, then use the pseudoinverse
-                newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
-                # w, V = np.linalg.eigh(H)
-                # w[np.isclose(w, 0)] = 1e-6
-                # D = np.diag(1 / w)
-                # step = -1 * V @ D @ V.T @ G
+                # newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
+                w, V = np.linalg.eigh(DR)
+                w[np.isclose(w, 0)] = 1e-6
+                D = np.diag(1 / w)
+                newton_step_ = -1 * V @ D @ V.T @ R_
         # convert the vector-format of the newton step to matrix format
         newton_step = Nd_vector_to_matrix(newton_step_.ravel(), state.N, self.dim, self.dim_p, active_indices)
         return newton_step, R
@@ -228,7 +231,6 @@ class HVN:
         self._check_population()
         # first compute the current indicator value
         self._compute_indicator_value()
-        self._nondominated_idx = non_domin_sort(self.state.Y, only_front_indices=True)[0]
         # partition the approximation set to by feasibility
         feasible_mask = self.state.is_feasible()
         feasible_idx = np.nonzero(feasible_mask)[0]
@@ -242,6 +244,7 @@ class HVN:
             partitions.update({0: np.sort(np.r_[partitions[0], infeasible_idx])})
 
         # compute the Newton direction for each partition
+        self._nondominated_idx = non_domin_sort(self.state.Y, only_front_indices=True)[0]
         dominated_idx = list((set(range(self.N)) - set(self._nondominated_idx) - set(feasible_idx)))
         self.step = np.zeros((self.N, self.dim))
         self.step_size = np.ones(self.N)
