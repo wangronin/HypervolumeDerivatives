@@ -226,9 +226,7 @@ class HVN:
         self._compute_indicator_value()
         self._nondominated_idx = non_domin_sort(self.state.Y, only_front_indices=True)[0]
         # partition the approximation set to by feasibility
-        # feasible_mask = self.state.is_feasible()
-        eq_cstr = np.array([self.h(_) for _ in self.state.primal]).reshape(self.N, -1)
-        feasible_mask = np.all(np.isclose(eq_cstr, 0, atol=1e-4, rtol=0), axis=1)
+        feasible_mask = self.state.is_feasible()
         feasible_idx = np.nonzero(feasible_mask)[0]
         infeasible_idx = np.nonzero(~feasible_mask)[0]
         partitions = {0: np.array(range(self.N))}
@@ -244,24 +242,22 @@ class HVN:
         self.step = np.zeros((self.N, self.dim))
         self.step_size = np.ones(self.N)
         self.R = np.zeros((self.N, self.dim))
-        print(feasible_idx)
         for i, idx in partitions.items():
             # compute Newton step
             newton_step, R = self._compute_netwon_step(self.state[idx])
             self.step[idx, :] = newton_step
             self.R[idx, :] = R
             # backtracking line search with Armijo's condition for each layer
-            if i == 0 and len(dominated_idx) > 0:  # for the first layer
-                idx_ = list(set(idx) - set(dominated_idx))
-                for k in dominated_idx:  # for dominated and infeasible points
-                    self.step_size[k] = self._line_search_dominated(self.state[[k]], self.step[[k]])
-                self.step_size[idx_] = self._line_search(self.state[idx_], self.step[idx_], R=self.R[idx_])
-            else:  # for all other layers
-                self.step_size[idx] = self._line_search(self.state[idx], self.step[idx], R=self.R[idx])
-            self.step_size[idx] = self._line_search(self.state[idx], self.step[idx], R=self.R[idx])
+            idx_ = list(set(idx) - set(dominated_idx)) if i == 0 else idx  # for the first layer
+            self.step_size[idx_] = self._line_search(self.state[idx_], self.step[idx_], R=self.R[idx_])
+            #     self.step_size[idx_] = self._line_search(self.state[idx_], self.step[idx_], R=self.R[idx_])
+            # else:  # for all other layers
+
+            # self.step_size[idx] = self._line_search(self.state[idx], self.step[idx], R=self.R[idx])
+        for k in dominated_idx:  # for dominated and infeasible points
+            self.step_size[k] = self._line_search_dominated(self.state[[k]], self.step[[k]])
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
-        breakpoint()
 
     def log(self):
         self.iter_count += 1
@@ -310,9 +306,7 @@ class HVN:
             self.logger.warn("Pre-conditioning the HV Hessian failed")
         return H - tau * I
 
-    def _line_search(
-        self, state: State, step: np.ndarray, R: np.ndarray, max_step_size: float = None
-    ) -> float:
+    def _line_search(self, state: State, step: np.ndarray, R: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
         c1 = 1e-5
         if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
@@ -334,27 +328,7 @@ class HVN:
         ]
         v = step[:, : self.dim_p].ravel() @ normal_vectors
         step_size = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
-        # alpha = 1
-        # R_norm = np.linalg.norm(R)
-        # for _ in range(6):
-        #     v = phi_func(alpha)
-        #     cond = np.linalg.norm(v) <= (1 - c1 * alpha) * R_norm
-        #     if cond:
-        #         break
-        #     else:
-        #         if 11 < 2:
-        #             phi0 = HV if self.h is None else np.sum(G**2) / 2
-        #             phi1 = HV_ if self.h is None else np.sum(G_**2) / 2
-        #             phi0prime = inc if self.h is None else -np.sum(G**2)
-        #             alpha = -phi0prime * alpha**2 / (phi1 - phi0 - phi0prime * alpha) / 2
-        #             # alpha *= tau
-        #         if 1 < 2:
-        #             alpha *= 0.5
-        # else:
-        #     self.logger.warn("Armijo's backtracking line search failed")
-        # return alpha
 
-        # step_size = 1 if max_step_size is None else max_step_size
         phi = [np.linalg.norm(R)]
         s = [0, step_size]
         for _ in range(6):
@@ -385,20 +359,18 @@ class HVN:
             return 1
 
         c = 1e-4
-        # N = len(X)
         step = step[:, : self.dim_p]
         primal_vars = state.primal
-        # primal_vars = self._get_primal_dual(X)[0]
-        # normal_vectors = np.c_[np.eye(self.dim_p * N), -1 * np.eye(self.dim_p * N)]
+        N = state.N
+        normal_vectors = np.c_[np.eye(self.dim_p * N), -1 * np.eye(self.dim_p * N)]
         # calculate the maximal step-size
-        # dist = np.r_[
-        #     np.abs(primal_vars.ravel() - np.tile(self.xl, N)),
-        #     np.abs(np.tile(self.xu, N) - primal_vars.ravel()),
-        # ]
-        # v = step.ravel() @ normal_vectors
-        # alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+        dist = np.r_[
+            np.abs(primal_vars.ravel() - np.tile(self.xl, N)),
+            np.abs(np.tile(self.xu, N) - primal_vars.ravel()),
+        ]
+        v = step[:, : self.dim_p].ravel() @ normal_vectors
+        alpha = min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
 
-        alpha = 1 if max_step_size is None else max_step_size
         h_ = np.array([self.h(x) for x in primal_vars])
         eq_cstr = h_**2 / 2
         G = h_ * np.array([self.h_jac(x) for x in primal_vars])
