@@ -139,20 +139,20 @@ ax.set_xlim([-1.3, 1.3])
 ax.set_ylim([-1.3, 1.3])
 ax.set_zlim([-2.5, 0.3])
 
-# trajectory = np.atleast_3d([x0] + opt.hist_X)
-# for i in range(len(x0)):
-#     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
-#     ax.quiver(
-#         x[:-1],
-#         y[:-1],
-#         z[:-1],
-#         x[1:] - x[:-1],
-#         y[1:] - y[:-1],
-#         z[1:] - z[:-1],
-#         color="k",
-#         arrow_length_ratio=0.1,
-#         alpha=0.3,
-#     )
+trajectory = np.atleast_3d([x0] + opt.hist_X)
+for i in range(len(x0)):
+    x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
+    ax.quiver(
+        x[:-1],
+        y[:-1],
+        z[:-1],
+        x[1:] - x[:-1],
+        y[1:] - y[:-1],
+        z[1:] - z[:-1],
+        color="k",
+        arrow_length_ratio=0.1,
+        alpha=0.3,
+    )
 
 ax = fig.add_subplot(1, 3, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
