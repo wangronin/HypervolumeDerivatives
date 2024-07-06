@@ -292,7 +292,6 @@ class HVN:
             partitions = {0: np.array(range(self.mu))}
 
         # compute the Newton direction for each partition
-        breakpoint()
         for _, idx in partitions.items():
             out = self._compute_netwon_step(X=self.X[idx], Y=self.Y[idx])
             self.step[idx, :] = out["step"]
@@ -310,6 +309,11 @@ class HVN:
         # evaluation
         self.Y = np.array([self.func(x) for x in self._get_primal_dual(self.X)[0]])
         self.iter_count += 1
+
+        with open("out.txt", "a") as f:
+            print(f"iteration {self.iter_count}", file=f)
+            print(self.X, file=f)
+            print(self.Y, file=f)
 
     def _line_search(self, X: np.ndarray, step: np.ndarray, G: np.ndarray) -> float:
         """backtracking line search with Armijo's condition"""
