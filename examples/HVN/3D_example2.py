@@ -1,3 +1,6 @@
+import sys
+
+sys.path.insert(0, "./")
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
@@ -124,9 +127,9 @@ opt = HVN(
     X0=x0,
     xl=-4,
     xu=4,
-    minimization=True,
     max_iters=max_iters,
     verbose=True,
+    preconditioning=False,
 )
 X, Y, stop = opt.run()
 

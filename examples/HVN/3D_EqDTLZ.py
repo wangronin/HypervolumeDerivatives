@@ -69,17 +69,15 @@ opt = HVN(
     func=f.objective,
     jac=f.objective_jacobian,
     hessian=f.objective_hessian,
-    h=f.constraint,
-    h_jac=f.constraint_jacobian,
-    h_hessian=f.constraint_hessian,
+    h=f.eq_constraint,
+    h_jac=f.eq_jacobian,
+    h_hessian=f.eq_hessian,
     N=mu,
     xl=0,
     xu=1,
-    minimization=True,
     X0=x0,
     max_iters=max_iters,
     verbose=True,
-    problem_name=type(f).__name__,
 )
 X, Y, stop = opt.run()
 
