@@ -1,3 +1,7 @@
+import sys
+
+sys.path.insert(0, "./")
+
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
@@ -98,7 +102,7 @@ max_iters = 30
 #         [1.2, 1.5, 2],
 #     ]
 # )
-mu = 5
+mu = 10
 # a = np.mgrid[-2.5:-0.5:6j, 0:3.5:10j]
 # a = np.array(list(zip(a[0].ravel(), a[1].ravel())))
 w = np.abs(np.random.randn(mu, 3))
