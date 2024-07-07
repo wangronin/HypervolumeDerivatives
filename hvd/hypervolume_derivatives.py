@@ -327,7 +327,7 @@ class HypervolumeDerivatives:
             self._HV_Hessian = hessian(HVY(self.n_obj, self.ref))
 
         X = self._check_X(X)
-        Y, YdX, YdX2 = self._compute_objective_derivatives(X)
+        Y, YdX, YdX2 = self._compute_objective_derivatives(X, compute_hessian=True)
         # NOTE: atuograd does not support matrix input
         HVdY = self._HV_Jac(Y.ravel())
         HVdY2 = self._HV_Hessian(Y.ravel())
