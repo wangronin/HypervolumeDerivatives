@@ -72,7 +72,6 @@ opt = HVN(
     X0=x0,
     xl=0,
     xu=1,
-    minimization=True,
     max_iters=max_iters,
     verbose=True,
     preconditioning=True,

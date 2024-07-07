@@ -9,16 +9,16 @@ from matplotlib import rcParams
 from hvd.newton import HVN
 
 plt.style.use("ggplot")
-rcParams["font.size"] = 17
+rcParams["font.size"] = 13
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
 rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 17
-rcParams["ytick.labelsize"] = 17
-rcParams["xtick.major.size"] = 7
+rcParams["xtick.labelsize"] = 13
+rcParams["ytick.labelsize"] = 13
+rcParams["xtick.major.size"] = 5
 rcParams["xtick.major.width"] = 1
-rcParams["ytick.major.size"] = 7
+rcParams["ytick.major.size"] = 5
 rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
@@ -87,14 +87,13 @@ opt = HVN(
     X0=x0,
     xl=-2,
     xu=2,
-    minimization=True,
     max_iters=max_iters,
     verbose=True,
     preconditioning=False,
 )
 X, Y, stop = opt.run()
 
-fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(18, 6.5))
+fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(22, 5))
 plt.subplots_adjust(right=0.93, left=0.05)
 ciricle = plt.Circle((0, 0), 1, color="r", fill=False, ls="--", lw=1.5)
 

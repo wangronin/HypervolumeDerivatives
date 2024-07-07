@@ -5,7 +5,7 @@ from copy import deepcopy
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
-from scipy.linalg import block_diag, cholesky, solve
+from scipy.linalg import block_diag, solve
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import spsolve
 from scipy.spatial.distance import cdist
@@ -62,10 +62,8 @@ class HVN:
         max_iters: Union[int, str] = np.inf,
         xtol: float = 1e-3,
         verbose: bool = True,
-        problem_name: str = None,
         metrics: Dict[str, Callable] = dict(),
         preconditioning: bool = False,
-        **kwargs,
     ):
         self.dim_p: int = n_var  # the number of primal variables
         self.n_obj: int = n_obj  # the number of objectives
@@ -74,20 +72,8 @@ class HVN:
         self.xu: np.ndarray = xu
         self.ref: np.ndarray = ref
         self._check_constraints(h, g)
-        self.h = h
-        self.h_jac = h_jac
-        self.state = State(
-            self.dim_p,
-            self.n_eq,
-            self.n_ieq,
-            func,
-            jac,
-            h=h,
-            h_jac=h_jac,
-            h_hess=h_hessian,
-            g=g,
-            g_jac=g_jac,
-            g_hess=g_hessian,
+        self.state: State = State(
+            self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, h_hessian, g, g_jac, g_hessian
         )
         self.indicator = HypervolumeDerivatives(self.dim_p, self.n_obj, ref, func, jac, hessian)
         self._initialize(X0)
@@ -95,11 +81,10 @@ class HVN:
         self.xtol: float = xtol
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
         self.stop_dict: Dict[str, float] = {}
-        self.metrics = metrics
+        self.metrics: Dict[str, Callable] = metrics
         self.preconditioning: bool = preconditioning
         self.verbose: bool = verbose
-        self.eps = 1e-3 * np.max(self.xu - self.xl)
-        self.problem_name = problem_name
+        self.eps: float = 1e-3 * np.max(self.xu - self.xl)
 
     def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables
@@ -187,8 +172,7 @@ class HVN:
         self._compute_indicator_value()
         # partition the approximation set to by feasibility
         feasible_mask = self.state.is_feasible()
-        feasible_idx = np.nonzero(feasible_mask)[0]
-        infeasible_idx = np.nonzero(~feasible_mask)[0]
+        feasible_idx, infeasible_idx = np.nonzero(feasible_mask)[0], np.nonzero(~feasible_mask)[0]
         partitions = {0: np.array(range(self.N))}
         if len(feasible_idx) > 0:
             # non-dominatd sorting of the feasible points
@@ -208,15 +192,17 @@ class HVN:
             # backtracking line search with Armijo's condition for each layer
             self.step_size[idx] = self._backtracking_line_search(self.state[idx], newton_step, R)
         # Newton iteration and evaluation
-        self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
+        self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))
 
     def log(self):
+        # TODO: maybe we should log the initial population
         self.iter_count += 1
         self.history_X += [self.state.primal.copy()]
         self.history_Y += [self.state.Y.copy()]
         self.history_indicator_value += [self.curr_indicator_value]
         self.history_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
-        for name, func in self.metrics.items():  # compute the performance metrics
+        # compute the performance metrics
+        for name, func in self.metrics.items():
             self.history_metrics[name].append(func.compute(Y=self.state.Y))
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
@@ -259,7 +245,7 @@ class HVN:
         R, H, active_indices = self._compute_R(state, grad=grad)
         # sometimes the Hessian is not NSD
         if self.preconditioning:
-            Hessian = self._precondition_hessian(Hessian)
+            Hessian = -1.0 * precondition_hessian(-1.0 * Hessian)
         DR, idx = Hessian, active_indices[:, self.dim_p :]
         if self._constrained:
             H = block_diag(*H)  # (N * p, N * dim), `p` is the number of active constraints
@@ -275,7 +261,7 @@ class HVN:
                 newton_step_ = -1 * spsolve(csc_matrix(DR), csc_matrix(R_))
             except:  # if DR is singular, then use the pseudoinverse
                 # TODO: compute the pseudoinverse with sparse matrix operations
-                newton_step = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0].ravel()
+                newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0].ravel()
         # convert the vector-format of the newton step to matrix format
         newton_step = Nd_vector_to_matrix(newton_step_.ravel(), state.N, self.dim, self.dim_p, active_indices)
         return newton_step, R
@@ -283,40 +269,11 @@ class HVN:
     def _compute_indicator_value(self):
         self.curr_indicator_value = self.indicator.compute(Y=self.state.Y)
 
-    def _precondition_hessian(self, H: np.ndarray) -> np.ndarray:
-        """Precondition the Hessian matrix to make sure it is negative definite
-
-        Args:
-            H (np.ndarray): the Hessian matrix
-
-        Returns:
-            np.ndarray: the preconditioned Hessian
-        """
-        # TODO: remove this function
-        # pre-condition the Hessian
-        beta = 1e-6
-        v = np.min(np.diag(-H))
-        tau = 0 if v > 0 else -v + beta
-        I = np.eye(H.shape[0])
-        for _ in range(35):
-            try:
-                cholesky(-H + tau * I, lower=True)
-                break
-            except:
-                # NOTE: the multiplier is not working for Eq1IDTLZ3.. Otherwise, it takes 1.5
-                tau = max(1.5 * tau, beta)
-        else:
-            self.logger.warn("Pre-conditioning the HV Hessian failed")
-        return H - tau * I
-
     def _compute_max_step_size(self, X: np.ndarray, step: np.ndarray) -> float:
         N, dim = X.shape
+        # normal vector to each decision boundary
         normal_vectors = np.c_[np.eye(dim * N), -1 * np.eye(dim * N)]
-        # calculate the maximal step-size
-        dist = np.r_[
-            np.abs(X.ravel() - np.tile(self.xl, N)),
-            np.abs(np.tile(self.xu, N) - X.ravel()),
-        ]
+        dist = np.r_[np.abs(X.ravel() - np.tile(self.xl, N)), np.abs(np.tile(self.xu, N) - X.ravel())]
         v = step.ravel() @ normal_vectors
         return min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
 
@@ -369,7 +326,10 @@ class HVN:
 
         # TODO: get rid of weakly-dominated points
         drop_idx_Y = set([])
-        idx = list(set(range(self.N)) - (drop_idx_X | drop_idx_Y))
+        drop_idx = drop_idx_X | drop_idx_Y
+        if len(drop_idx) > 0:
+            self.logger.info(f"{len(drop_idx)} points are removed due to duplication")
+        idx = list(set(range(self.N)) - drop_idx)
         self.state = self.state[idx]
         self.N = self.state.N
 
