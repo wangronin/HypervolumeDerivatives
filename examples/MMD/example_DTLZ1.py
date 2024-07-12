@@ -29,7 +29,7 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
-max_iters = 10
+max_iters = 13
 f = DTLZ1(boundry_constraints=True)
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front()
@@ -67,8 +67,8 @@ opt = MMDNewton(
     metrics=metrics,
     preconditioning=False,
 )
-if 11 < 2:
-    X, Y, _ = bootstrap_reference_set(opt, problem, ref_, 5)
+if 1 < 2:
+    X, Y, _ = bootstrap_reference_set(opt, problem, 5)
 else:
     X, Y, _ = opt.run()
 Y = get_non_dominated(Y)

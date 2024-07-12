@@ -93,7 +93,7 @@ opt = HVN(
 )
 X, Y, stop = opt.run()
 
-fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(22, 5))
+fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(22, 8))
 plt.subplots_adjust(right=0.93, left=0.05)
 ciricle = plt.Circle((0, 0), 1, color="r", fill=False, ls="--", lw=1.5)
 
