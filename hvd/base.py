@@ -38,6 +38,7 @@ class State:
 
     @property
     def N(self):
+        # TODO: maybe `N` -> `__len__`
         return len(self.X)
 
     def jac(self, x: np.ndarray) -> np.ndarray:
@@ -63,7 +64,8 @@ class State:
         # TODO: only evaluate active inequality constraints
         dH = self.h_jac(x).tolist() if self.h_jac is not None else []
         dG = self.g_jac(x).tolist() if self.g_jac is not None else []
-        return np.array(dH + dG).reshape(self.n_cstr, self.n_var)
+        out = np.array(dH + dG)
+        return out if len(out) == 0 else out.reshape(self.n_cstr, self.n_var)
 
     def evaluate_cstr_hess(self, x: np.ndarray) -> np.ndarray:
         if self.g_hess is not None or self.h_hess is not None:
@@ -71,7 +73,8 @@ class State:
         # TODO: only evaluate active inequality constraints
         ddH = self.h_hess(x).tolist() if self.h_hess is not None else []
         ddG = self.g_hess(x).tolist() if self.g_hess is not None else []
-        return np.array(ddH + ddG).reshape(self.n_cstr, self.n_var, self.n_var)
+        out = np.array(ddH + ddG)
+        return out if len(out) == 0 else out.reshape(self.n_cstr, self.n_var, self.n_var)
 
     def update(self, X: np.ndarray, compute_gradient: bool = True):
         self.X = X

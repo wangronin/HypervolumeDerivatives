@@ -370,9 +370,7 @@ class MMDNewton:
         return step, max_step_size
 
 
-def bootstrap_reference_set(
-    optimizer, problem, init_ref: np.ndarray, interval: int = 5
-) -> Tuple[np.ndarray, np.ndarray, Dict]:
+def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.ndarray, np.ndarray, Dict]:
     """Bootstrap the reference set with the intermediate population of an MOO algorithm
 
     Args:
@@ -385,18 +383,26 @@ def bootstrap_reference_set(
         Tuple[np.ndarray, np.ndarray, Dict]: (efficient set, Pareto front approximation,
             the stopping criteria)
     """
+    alpha = 0.05
     for i in range(optimizer.max_iters):
+        # TODO: generalize the condition to trigger the boostrap: maybe if the R norm for most points
+        # are near zero?
         if i % interval == 0 and i > 0:
-            # TODO: find a better way to take out outliersin `state.Y`
-            ref_ = np.r_[optimizer.state.Y, init_ref]
-            ref_ = get_non_dominated(ref_)
+            # relax dominance resistent points (improper dominance)
+            func = lambda y: (1 - alpha) * y + alpha * y.mean(axis=1).reshape(len(y), -1)
+            Y = func(optimizer.state.Y)
+            idx = get_non_dominated(Y, return_index=True)
+            ref_ = Y[idx]
             eta = compute_chim(ref_)
             ref_ += 0.08 * eta
             Y_idx = None
             ref = ClusteredReferenceSet(ref=ref_, eta={0: eta}, Y_idx=Y_idx)
-            optimizer.ref = ref
-            optimizer.indicator.ref = ref
-            optimizer.indicator.compute(Y=optimizer.state.Y)  # To compute the medoids
+            # only keep the non-dominated points
+            optimizer.N = len(idx)
+            optimizer.step = optimizer.step[idx]
+            optimizer.state = optimizer.state[idx]
+            optimizer.indicator.ref = optimizer.ref = ref
+            optimizer.indicator.compute(Y=optimizer.state.Y)  # to compute the medoids
 
             if 11 < 2:
                 import matplotlib.pyplot as plt
@@ -408,9 +414,17 @@ def bootstrap_reference_set(
                 ax0 = fig.add_subplot(1, 1, 1, projection="3d")
                 ax0.set_box_aspect((1, 1, 1))
                 ax0.view_init(45, 45)
+                ax0.plot(
+                    optimizer.state.Y[:, 0],
+                    optimizer.state.Y[:, 1],
+                    optimizer.state.Y[:, 2],
+                    "r+",
+                    ms=6,
+                    alpha=0.6,
+                )
                 ax0.plot(ref_[:, 0], ref_[:, 1], ref_[:, 2], "g.", ms=6, alpha=0.6)
-                ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", ms=6, alpha=0.6)
-                ax0.plot(m[:, 0], m[:, 1], m[:, 2], "r+", ms=6, alpha=0.6)
+                ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", ms=6, alpha=0.3)
+                ax0.plot(m[:, 0], m[:, 1], m[:, 2], "r^", ms=6, alpha=0.6)
                 plt.show()
 
         optimizer.newton_iteration()
