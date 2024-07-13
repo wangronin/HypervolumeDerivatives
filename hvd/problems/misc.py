@@ -11,6 +11,30 @@ from ..utils import timeit
 from .base import ConstrainedMOOAnalytical, MOOAnalytical
 
 
+class DENT(MOOAnalytical):
+    def __init__(self, **kwargs):
+        self.n_obj = 2
+        self.n_var = 2
+        self.xl = -2 * np.ones(self.n_var)
+        self.xu = 2 * np.ones(self.n_var)
+        super().__init__(**kwargs)
+
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+        term1 = jnp.sqrt(1 + (x[0] + x[1]) ** 2) + jnp.sqrt(1 + (x[0] - x[1]) ** 2)
+        term2 = 0.85 * jnp.exp(-((x[0] - x[1]) ** 2))
+        y1 = 0.5 * (term1 + x[0] - x[1]) + term2
+        y2 = 0.5 * (term1 - x[0] + x[1]) + term2
+        return jnp.array([y1, y2])
+
+    def get_pareto_set(self, n: int = 100) -> np.ndarray:
+        x = np.linspace(-2, 2, n)
+        return np.c_[x, -x]
+
+    def get_pareto_front(self, n: int = 100) -> np.ndarray:
+        X = self.get_pareto_set(n)
+        return np.array([self.objective(x) for x in X])
+
+
 class CONV3(ConstrainedMOOAnalytical):
     def __init__(self, **kwargs):
         self.n_obj = 3
