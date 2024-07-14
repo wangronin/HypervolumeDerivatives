@@ -118,8 +118,8 @@ class ClusteredReferenceSet:
             # if the clustering/partition of `Y` is not given,
             # we assign each `Y` to the closest cluster of the reference set
             if self.Y_idx is None:
-                D = np.array([cdist(self._ref[i], Y).min(axis=1) for i in range(self.n_components)])
-                labels = np.argmin(D, axis=1)
+                D = np.array([cdist(self._ref[i], Y).min(axis=0) for i in range(self.n_components)])
+                labels = np.argmin(D, axis=0)
                 self.Y_idx = [np.nonzero(labels == i)[0] for i in range(self.n_components)]
             # parition `Y` according to `Y_idx`
             Y_partitions = [Y[idx] for idx in self.Y_idx]

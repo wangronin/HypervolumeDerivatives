@@ -614,7 +614,7 @@ class DpN:
             dh = np.array([]) if dH is None else dH[r]
             Z = np.zeros((len(dh), len(dh)))
             # pre-condition indicator's Hessian if needed, e.g., on ZDT6, CF1, CF7
-            Hessian[r] = precondition_hessian(Hessian[r])
+            # Hessian[r] = precondition_hessian(Hessian[r])
             # derivative of the root-finding problem
             DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             R[r, c] = R_list[r]
