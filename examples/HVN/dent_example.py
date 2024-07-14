@@ -92,3 +92,6 @@ ax1.set_xlabel("iteration")
 ax1.set_xticks(range(1, max_iters + 1))
 
 plt.savefig(f"dent-example-{N}.pdf", dpi=1000)
+
+data = pd.DataFrame(np.c_[Y0, Y], columns=["initial y1", "initial y2", "final y1", "final y2"])
+data.to_csv(f"dent-example-{N}.csv")
