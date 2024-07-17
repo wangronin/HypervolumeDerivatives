@@ -62,8 +62,8 @@ class State:
         if self.g_jac is not None or self.h_jac is not None:
             self.n_cstr_jac_evals += 1
         # TODO: only evaluate active inequality constraints
-        dH = self.h_jac(x).tolist() if self.h_jac is not None else []
-        dG = self.g_jac(x).tolist() if self.g_jac is not None else []
+        dH = self.h_jac(x).reshape(self.n_eq, -1).tolist() if self.h_jac is not None else []
+        dG = self.g_jac(x).reshape(self.n_ieq, -1).tolist() if self.g_jac is not None else []
         out = np.array(dH + dG)
         return out if len(out) == 0 else out.reshape(self.n_cstr, self.n_var)
 
@@ -71,8 +71,8 @@ class State:
         if self.g_hess is not None or self.h_hess is not None:
             self.n_cstr_hess_evals += 1
         # TODO: only evaluate active inequality constraints
-        ddH = self.h_hess(x).tolist() if self.h_hess is not None else []
-        ddG = self.g_hess(x).tolist() if self.g_hess is not None else []
+        ddH = self.h_hess(x).reshape(self.n_eq, self.n_var, -1).tolist() if self.h_hess is not None else []
+        ddG = self.g_hess(x).reshape(self.n_ieq, self.n_var, -1).tolist() if self.g_hess is not None else []
         out = np.array(ddH + ddG)
         return out if len(out) == 0 else out.reshape(self.n_cstr, self.n_var, self.n_var)
 
