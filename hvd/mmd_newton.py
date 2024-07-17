@@ -260,6 +260,7 @@ class MMDNewton:
         with warnings.catch_warnings():
             warnings.filterwarnings("error")
             try:
+                # TODO: use sparse matrix operations here
                 newton_step_ = -1 * solve(DR, R_)
             except:  # if DR is singular, then use the pseudoinverse
                 newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
