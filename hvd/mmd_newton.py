@@ -102,7 +102,7 @@ class MMDNewton:
         self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
         # TODO: move indicator out of this class
         self.indicator = MMDMatching(
-            self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.2
+            self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.25
         )
         self._initialize(X0)
         self._set_logging(verbose)
@@ -384,6 +384,9 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
             the stopping criteria)
     """
     alpha = 0.05
+    ref_archive = []
+    from sklearn_extra.cluster import KMedoids
+
     for i in range(optimizer.max_iters):
         # TODO: generalize the condition to trigger the boostrap: maybe if the R norm for most points
         # are near zero?
@@ -392,11 +395,16 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
             func = lambda y: (1 - alpha) * y + alpha * y.mean(axis=1).reshape(len(y), -1)
             Y = func(optimizer.state.Y)
             idx = get_non_dominated(Y, return_index=True)
-            ref_ = Y[idx]
-            eta = compute_chim(ref_)
-            ref_ += 0.08 * eta
+            ref_archive.append(Y[idx].copy())
+            ref = np.concatenate(ref_archive, axis=0)
+            # km = KMedoids(
+            #     n_clusters=optimizer.state.N, method="alternate", random_state=0, init="k-medoids++"
+            # ).fit(ref)
+            # ref = ref[km.medoid_indices_]
+            eta = compute_chim(ref)
+            ref += 0.08 * eta
             Y_idx = None
-            ref = ClusteredReferenceSet(ref=ref_, eta={0: eta}, Y_idx=Y_idx)
+            ref = ClusteredReferenceSet(ref=ref, eta={0: eta}, Y_idx=Y_idx)
             # only keep the non-dominated points
             optimizer.N = len(idx)
             optimizer.step = optimizer.step[idx]
@@ -422,7 +430,7 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
                     ms=6,
                     alpha=0.6,
                 )
-                ax0.plot(ref_[:, 0], ref_[:, 1], ref_[:, 2], "g.", ms=6, alpha=0.6)
+                ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "g.", ms=6, alpha=0.6)
                 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", ms=6, alpha=0.3)
                 ax0.plot(m[:, 0], m[:, 1], m[:, 2], "r^", ms=6, alpha=0.6)
                 plt.show()

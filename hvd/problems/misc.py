@@ -177,3 +177,33 @@ class UF8(MOOAnalytical):
                 jnp.sin(0.5 * x[:, 0] * jnp.pi) + 2 * jnp.mean(y[:, J3] ** 2, 1),
             ]
         ).T
+
+
+class DISCONNECTED(ConstrainedMOOAnalytical):
+    def __init__(self, **kwargs):
+        self.n_obj = 2
+        self.n_var = 2
+        self.n_ieq_constr = 2
+        self.n_eq_constr = 1
+        self.xl = np.array([0, -8])
+        self.xu = np.array([1, 1])
+        super().__init__(**kwargs)
+
+    @timeit
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+        return x
+
+    def _ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
+        g1 = jax.numpy.where(x[0] <= 0.5, 0.1 - x[0], 0.6 + 1e-2 - x[0])
+        g2 = jax.numpy.where(x[0] <= 0.5, x[0] - 0.4, x[0] - 0.8)
+        return jnp.array([g1, g2])
+
+    def _eq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
+        return jax.numpy.where(
+            x[0] <= 0.6,
+            (2.5 * x[0]) ** 2 - 5 * x[0] + 1 - x[1],
+            1 - (2.5 * x[0]) ** 2 - 5 - x[1],
+        )
+
+    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
+        pass
