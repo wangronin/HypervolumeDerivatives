@@ -281,7 +281,7 @@ class HVN:
         """backtracking line search with Armijo's condition"""
         # TODO: implement curvature condition or use scipy's line search function
         c1 = 1e-5
-        if np.any(np.isclose(np.median(step), np.finfo(np.double).resolution)):
+        if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
             return 1
 
         def phi_func(alpha):
