@@ -194,7 +194,7 @@ class DISCONNECTED(ConstrainedMOOAnalytical):
         return x
 
     def _ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
-        g1 = jax.numpy.where(x[0] <= 0.5, 0.1 - x[0], 0.6 + 1e-2 - x[0])
+        g1 = jax.numpy.where(x[0] <= 0.5, 0.1 - x[0], 0.6 - x[0])
         g2 = jax.numpy.where(x[0] <= 0.5, x[0] - 0.4, x[0] - 0.8)
         return jnp.array([g1, g2])
 
