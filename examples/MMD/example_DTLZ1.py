@@ -30,7 +30,8 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
-max_iters = 17
+max_iters = 15
+
 f = DTLZ1(boundry_constraints=True)
 problem = PymooProblemWithAD(f)
 pareto_front = problem.get_pareto_front()
@@ -62,6 +63,8 @@ ref2_ = ref2_[idx]
 ref = {0: ref1_, 1: ref2_}
 eta = {0: -1 * np.array([1 / np.sqrt(3)] * 3), 1: -1 * np.array([1 / np.sqrt(3)] * 3)}
 Y_idx = [list(range(0, len(Y_component1))), list(range(len(Y_component1), len(Y0)))]
+Y_label = np.array([0] * len(X_component1) + [1] * len(X_component2))
+
 
 # X0 = X_component2
 # Y0 = Y_component2
@@ -137,7 +140,7 @@ opt = MMDNewton(
     preconditioning=False,
 )
 if 1 < 2:
-    X, Y, _ = bootstrap_reference_set(opt, problem, 5)
+    X, Y, _ = bootstrap_reference_set(opt, problem, 7)
 else:
     X, Y, _ = opt.run()
 Y = get_non_dominated(Y)
@@ -160,7 +163,7 @@ opt_dpn = DpN(
     verbose=True,
     type="igd",
     eta=eta,
-    Y_label=None,
+    Y_label=Y_label,
     pareto_front=pareto_front,
 )
 X_DpN, Y_DpN, _ = opt_dpn.run()
@@ -176,7 +179,9 @@ ax0 = fig.add_subplot(1, 3, 1, projection="3d")
 ax0.set_box_aspect((1, 1, 1))
 ax0.view_init(45, 45)
 ax0.plot(Y0[:, 0], Y0[:, 1], Y0[:, 2], "r+", ms=8, alpha=0.6)
-ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "g.", ms=6, alpha=0.6)
+# ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "g.", ms=6, alpha=0.6)
+ax0.plot(ref1_[:, 0], ref1_[:, 1], ref1_[:, 2], "g.", ms=6, alpha=0.6)
+ax0.plot(ref2_[:, 0], ref2_[:, 1], ref2_[:, 2], "g.", ms=6, alpha=0.6)
 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", mec="none", ms=5, alpha=0.4)
 
 ax0.set_title("Initialization")

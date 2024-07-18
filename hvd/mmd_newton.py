@@ -396,8 +396,9 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
             func = lambda y: (1 - alpha) * y + alpha * y.mean(axis=1).reshape(len(y), -1)
             Y = func(optimizer.state.Y)
             idx = get_non_dominated(Y, return_index=True)
-            ref_archive.append(Y[idx].copy())
-            ref = np.concatenate(ref_archive, axis=0)
+            ref = Y[idx]
+            # ref_archive.append(Y[idx].copy())
+            # ref = np.concatenate(ref_archive, axis=0)
             # km = KMedoids(
             #     n_clusters=optimizer.state.N, method="alternate", random_state=0, init="k-medoids++"
             # ).fit(ref)
@@ -413,7 +414,7 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
             optimizer.indicator.ref = optimizer.ref = ref
             optimizer.indicator.compute(Y=optimizer.state.Y)  # to compute the medoids
 
-            if 11 < 2:
+            if 1 < 2:
                 import matplotlib.pyplot as plt
 
                 pareto_front = problem.get_pareto_front()
@@ -431,10 +432,12 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
                     ms=6,
                     alpha=0.6,
                 )
-                ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "g.", ms=6, alpha=0.6)
+                rs = ref.reference_set
+                ax0.plot(rs[:, 0], rs[:, 1], rs[:, 2], "g.", ms=6, alpha=0.6)
                 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", ms=6, alpha=0.3)
                 ax0.plot(m[:, 0], m[:, 1], m[:, 2], "r^", ms=6, alpha=0.6)
                 plt.show()
+                breakpoint()
 
         optimizer.newton_iteration()
         optimizer.log()
