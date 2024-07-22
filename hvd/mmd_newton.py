@@ -101,7 +101,7 @@ class MMDNewton:
         self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
         # TODO: move indicator out of this class
         self.indicator = MMDMatching(
-            self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.5
+            self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.25
         )
         self._initialize(X0)
         self._set_logging(verbose)
@@ -468,7 +468,6 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
                 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", ms=6, alpha=0.3)
                 ax0.plot(m[:, 0], m[:, 1], m[:, 2], "r^", ms=6, alpha=0.6)
                 plt.show()
-
         optimizer.newton_iteration()
         optimizer.log()
     return optimizer.state.primal, optimizer.state.Y, optimizer.stop_dict
