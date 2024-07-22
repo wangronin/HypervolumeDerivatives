@@ -6,7 +6,6 @@ from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.linalg import block_diag, solve
-from scipy.optimize import line_search
 
 from .base import State
 from .mmd import MMDMatching
@@ -102,7 +101,7 @@ class MMDNewton:
         self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
         # TODO: move indicator out of this class
         self.indicator = MMDMatching(
-            self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.25
+            self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.5
         )
         self._initialize(X0)
         self._set_logging(verbose)
@@ -204,7 +203,8 @@ class MMDNewton:
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"{self.indicator.__class__.__name__}: {self.curr_indicator_value}")
-            self.logger.info(f"step size: {self.step_size.ravel()}")
+            # self.logger.info(f"step size: {self.step_size.ravel()}")
+            self.logger.info(f"step size: {self.step_size}")
             self.logger.info(f"R norm: {self.history_R_norm[-1]}")
 
     def terminate(self) -> bool:
@@ -260,7 +260,7 @@ class MMDNewton:
         with warnings.catch_warnings():
             warnings.filterwarnings("error")
             try:
-                # TODO: use sparse matrix operations here
+                # NOTE: use sparse matrix operations here does not save much time
                 newton_step_ = -1 * solve(DR, R_)
             except:  # if DR is singular, then use the pseudoinverse
                 newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
@@ -286,6 +286,7 @@ class MMDNewton:
         self.logger.info(f"{len(indices)} target points are shifted")
 
     def _backtracking_line_search_scipy(self):
+        # TODO: test scipy's version
         pass
 
     def _backtracking_line_search(
@@ -293,50 +294,85 @@ class MMDNewton:
     ) -> float:
         # TODO: use the backtracking line search in scipy
         """backtracking line search with Armijo's condition"""
-        c1 = 1e-4
-        if np.all(np.isclose(step, 0)):
-            return np.ones((self.N, 1))
+        c1 = 1e-5
+        if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
+            return 1
 
-        def phi_func(alpha, i):
-            state = deepcopy(self.state)
-            x = state.X[i].copy()
-            x += alpha * step[i]
-            state.update_one(x, i)
+        def phi_func(alpha):
+            state_ = deepcopy(self.state)
+            state_.update(state_.X + alpha * step)
             self.indicator.re_match = False
-            R_ = self._compute_R(state)[0][i]
+            R_ = self._compute_R(state_)[0]
             self.indicator.re_match = True
-            self.state.n_jac_evals = state.n_jac_evals
             return np.linalg.norm(R_)
 
-        if max_step_size is not None:
-            step_size = max_step_size.reshape(-1, 1)
-        else:
-            step_size = np.ones((self.N, 1))
-        for i in range(self.N):
-            phi = [np.linalg.norm(R[i])]
-            s = [0, step_size[i]]
-            for _ in range(8):
-                phi.append(phi_func(s[-1], i))
-                # Armijo–Goldstein condition
-                # when R norm is close to machine precision, it makes no sense to perform the line search
-                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
-                if success:
-                    break
-                else:
-                    if 1 < 2:
-                        # cubic interpolation to compute the next step length
-                        d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
-                        d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
-                        s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
-                        s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
-                        s.append(s_)
-                    else:
-                        s.append(s[-1] * 0.5)
+        # TODO: add maximal step size here
+        # step_size = max_step_size if max_step_size is not None else 1
+        step_size = 1
+        phi = [np.linalg.norm(R)]
+        s = [0, step_size]
+        for _ in range(8):
+            phi.append(phi_func(s[-1]))
+            # Armijo–Goldstein condition
+            # when R norm is close to machine precision, it makes no sense to perform the line search
+            success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+            if success:
+                break
             else:
-                pass
-                # self.logger.info("backtracking line search failed")
-            step_size[i] = s[-1]
+                s.append(s[-1] * 0.5)
+        else:
+            self.logger.warn("backtracking line search failed")
+        step_size = s[-1]
         return step_size
+
+    # def _backtracking_line_search(
+    #     self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
+    # ) -> float:
+    #     # TODO: use the backtracking line search in scipy
+    #     """backtracking line search with Armijo's condition"""
+    #     c1 = 1e-4
+    #     if 1 or np.all(np.isclose(step, 0)):
+    #         return np.ones((self.N, 1))
+
+    #     def phi_func(alpha, i):
+    #         state = deepcopy(self.state)
+    #         x = state.X[i].copy()
+    #         x += alpha * step[i]
+    #         state.update_one(x, i)
+    #         self.indicator.re_match = False
+    #         # this step takes too long since we compute the gradient at all points while only one changes
+    #         R_ = self._compute_R(state)[0][i]
+    #         self.indicator.re_match = True
+    #         self.state.n_jac_evals = state.n_jac_evals
+    #         return np.linalg.norm(R_)
+
+    #     # TODO: this is individual step-size control; what if we use only a global step-size?
+    #     step_size = max_step_size.reshape(-1, 1) if max_step_size is not None else np.ones((self.N, 1))
+    #     for i in range(self.N):
+    #         phi = [np.linalg.norm(R[i])]
+    #         s = [0, step_size[i]]
+    #         for _ in range(8):
+    #             phi.append(phi_func(s[-1], i))
+    #             # Armijo–Goldstein condition
+    #             # when R norm is close to machine precision, it makes no sense to perform the line search
+    #             success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+    #             if success:
+    #                 break
+    #             else:
+    #                 if 1 < 2:
+    #                     # cubic interpolation to compute the next step length
+    #                     d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
+    #                     d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
+    #                     s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
+    #                     s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
+    #                     s.append(s_)
+    #                 else:
+    #                     s.append(s[-1] * 0.5)
+    #         else:
+    #             pass
+    #             # self.logger.info("backtracking line search failed")
+    #         step_size[i] = s[-1]
+    #     return step_size
 
     def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """The box-constraint handler projects the Newton step onto the box boundary, preventing the
@@ -413,8 +449,10 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
             optimizer.state = optimizer.state[idx]
             optimizer.indicator.ref = optimizer.ref = ref
             optimizer.indicator.compute(Y=optimizer.state.Y)  # to compute the medoids
+            # halve the weight of the spread term to reduce spread effect in the following iterations
+            optimizer.indicator.beta = optimizer.indicator.beta / 2
 
-            if 1 < 2:
+            if 11 < 2:
                 import matplotlib.pyplot as plt
 
                 pareto_front = problem.get_pareto_front()
@@ -424,20 +462,12 @@ def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.n
                 ax0 = fig.add_subplot(1, 1, 1, projection="3d")
                 ax0.set_box_aspect((1, 1, 1))
                 ax0.view_init(45, 45)
-                ax0.plot(
-                    optimizer.state.Y[:, 0],
-                    optimizer.state.Y[:, 1],
-                    optimizer.state.Y[:, 2],
-                    "r+",
-                    ms=6,
-                    alpha=0.6,
-                )
+                ax0.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r+", ms=6, alpha=0.6)
                 rs = ref.reference_set
                 ax0.plot(rs[:, 0], rs[:, 1], rs[:, 2], "g.", ms=6, alpha=0.6)
                 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", ms=6, alpha=0.3)
                 ax0.plot(m[:, 0], m[:, 1], m[:, 2], "r^", ms=6, alpha=0.6)
                 plt.show()
-                breakpoint()
 
         optimizer.newton_iteration()
         optimizer.log()
