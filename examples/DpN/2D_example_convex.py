@@ -87,7 +87,7 @@ opt = DpN(
     h=h,
     h_jac=h_Jacobian,
     N=len(x0),
-    X0=x0,
+    x0=x0,
     xl=-2,
     xu=2,
     max_iters=max_iters,
@@ -110,7 +110,7 @@ ax0.set_title("Decision space")
 ax0.set_xlabel(r"$x_1$")
 ax0.set_ylabel(r"$x_2$")
 
-# ax1.plot(ref[:, 0], ref[:, 1], "k.")
+ax1.plot(ref[:, 0], ref[:, 1], "k.")
 # ax0.plot(ref_x[:, 0], ref_x[:, 1], "k.")
 
 n_per_axis = 30
