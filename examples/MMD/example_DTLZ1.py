@@ -65,7 +65,8 @@ opt = MMDNewton(
     preconditioning=False,
 )
 if 1 < 2:
-    opt.indicator.beta = 0.25  # start with a large spreading effect
+    opt.indicator.beta = 0.25
+    # TODO: figure out how to determine when to bootstrap automatically
     X, Y, _ = bootstrap_reference_set(opt, problem, 7)
 else:
     X, Y, _ = opt.run()

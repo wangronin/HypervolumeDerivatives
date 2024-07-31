@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib import rcParams
 
 from hvd.newton import DpN
-from hvd.problems import ZDT6, PymooProblemWithAD
+from hvd.problems import ZDT1, PymooProblemWithAD
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -30,7 +30,7 @@ np.random.seed(77)
 
 N = 5
 max_iters = 10
-problem = PymooProblemWithAD(ZDT6(n_var=2))
+problem = PymooProblemWithAD(ZDT1(n_var=2))
 pareto_front = problem.get_pareto_front(500)
 pareto_set = problem.get_pareto_set(500)
 
@@ -74,7 +74,7 @@ opt = DpN(
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
     N=N,
-    X0=x0,
+    x0=x0,
     xl=problem.xl,
     xu=problem.xu,
     max_iters=max_iters,

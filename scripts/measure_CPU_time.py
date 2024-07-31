@@ -6,7 +6,8 @@ sys.path.insert(0, "./")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
+
+# import seaborn as sns
 from matplotlib import rcParams
 
 from hvd.problems import (
@@ -27,6 +28,10 @@ from hvd.problems import (
     DTLZ5,
     DTLZ6,
     DTLZ7,
+    IDTLZ1,
+    IDTLZ2,
+    IDTLZ3,
+    IDTLZ4,
     ZDT1,
     ZDT2,
     ZDT3,
@@ -53,16 +58,31 @@ rcParams["ytick.major.width"] = 1
 N = 1e5
 res = []
 data_FE = []
-# problems = [ZDT1(), ZDT2(), ZDT3(), ZDT4(), ZDT6()]
-# problems = [f"CF{k}" for k in range(1, 5)]
-problems_name = [f"DTLZ{k}" for k in range(1, 8)]
-dict_ = locals()
-problems = [dict_[k]() for k in problems_name]
-# problems = [CF1(), CF2(), CF3(), CF4(), CF5()]
-# problems_name = [type(p).__name__ for p in problems]
+set_ = 2
+if set_ == 1:
+    problems_name = ["ZDT1", "ZDT2", "ZDT3", "ZDT4", "ZDT6"] + [f"DTLZ{k}" for k in range(1, 8)]
+    dict_ = locals()
+    problems = [dict_[k]() for k in problems_name]
+else:
+    problems = [
+        CF1(),
+        CF2(),
+        CF3(),
+        CF4(),
+        CF5(),
+        CF6(),
+        CF7(),
+        CF8(),
+        CF9(),
+        CF10(),
+        IDTLZ1(),
+        IDTLZ2(),
+        IDTLZ3(),
+        IDTLZ4(),
+    ]
+    problems_name = [type(p).__name__ for p in problems]
 for problem in problems:
-    f = PymooProblemWithAD(problem)
-    # f = problem
+    f = PymooProblemWithAD(problem) if set_ == 1 else problem
     FE_time = []
     for i in range(int(N)):
         r = problem.xu - problem.xl
@@ -72,14 +92,15 @@ for problem in problems:
         t1 = time.process_time_ns()
         FE_time.append((t1 - t0) / 1000.0)
     data_FE += FE_time
-    res.append(["FE", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
+    res.append(
+        ["FE", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.quantile(FE_time, 0.9)]
+    )
 data_FE = np.vstack([np.repeat(problems_name, N), data_FE]).T
 
 N = 1e5
 data_AD = []
 for problem in problems:
-    f = PymooProblemWithAD(problem)
-    # f = problem
+    f = PymooProblemWithAD(problem) if set_ == 1 else problem
     FE_time = []
     func = f.objective
     jac = f.objective_jacobian
@@ -92,15 +113,17 @@ for problem in problems:
         # Y = func(x)  # `(N, dim_m)`
         # H = h(x)
         # Jacobians
-        # YdX = jac(x)  # `(N, dim_m, dim_d)`
+        YdX = jac(x)  # `(N, dim_m, dim_d)`
         # Hessians
-        YdX2 = hessian(x)  # `(N, dim_m, dim_d, dim_d)`
+        # YdX2 = hessian(x)  # `(N, dim_m, dim_d, dim_d)`
         # HdX = h_jac(x)
         # HdX2 = h_hessian(x)
         t1 = time.process_time_ns()
         FE_time.append((t1 - t0) / 1000.0)
     data_AD += FE_time
-    res.append(["AD", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.std(FE_time)])
+    res.append(
+        ["AD", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.quantile(FE_time, 0.9)]
+    )
 
 data_AD = np.vstack([np.repeat(problems_name, N), data_AD]).T
 data = pd.DataFrame(
@@ -108,14 +131,14 @@ data = pd.DataFrame(
     columns=["type", "problem", "time"],
 )
 
-df = pd.DataFrame(res, columns=["type", "problem", "mean_CPU", "median_CPU", "std_CPU"])
-df.to_csv("CF_CPU_time.csv", index=False)
+df = pd.DataFrame(res, columns=["type", "problem", "mean_CPU", "median_CPU", "upper quantile"])
+df.to_csv("CPU_time.csv", index=False)
 print(df)
 
-data = data.astype({"time": "float64"})
-ax = sns.violinplot(
-    data=data, x="problem", y="time", hue="type", log_scale=True, split=True, gap=0.1, inner="quart"
-)
+# data = data.astype({"time": "float64"})
+# ax = sns.violinplot(
+#     data=data, x="problem", y="time", hue="type", log_scale=True, split=True, gap=0.1, inner="quart"
+# )
 # ax.set_ylim([2e-6, 1e-5])
 # plt.show()
 #  type   problem  mean_CPU  median_CPU   std_CPU
