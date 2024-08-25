@@ -17,7 +17,7 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-data = pd.read_csv("./result.csv", header=0, index_col=0)
+data = pd.read_csv("./Newton-300-long.csv", header=0, index_col=0)
 data.columns = ["Method", "Problem", "DpN", "MOEA", "test"]
 data["impr"] = np.clip((data["MOEA"] - data["DpN"]) / data["MOEA"], -2, np.inf)
 df = data.pivot(index="Problem", columns="Method", values="impr")

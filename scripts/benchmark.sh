@@ -17,4 +17,4 @@ export PYTHONPATH=./:$PYTHONPATH
 problems=(ZDT1 ZDT2 ZDT3 ZDT4)
 
 srun --ntasks=1 --cpus-per-task=15 python scripts/benchmark_ZDT.py ${problems[$SLURM_ARRAY_TASK_ID]}
-srun --ntasks=1 --cpus-per-task=15 python scripts/benchmark_EA.py ${problems[$SLURM_ARRAY_TASK_ID]}
+# srun --ntasks=1 --cpus-per-task=15 python scripts/benchmark_EA.py ${problems[$SLURM_ARRAY_TASK_ID]}
