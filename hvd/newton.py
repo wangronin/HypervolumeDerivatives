@@ -116,9 +116,10 @@ class HVN:
             assert all(~np.isinf(self.xl)) & all(~np.isinf(self.xu))
             X0 = np.random.rand(self.N, self.dim_p) * (self.xu - self.xl) + self.xl  # (mu, dim_primal)
         # initialize the state variables
-        self.state.update(np.c_[X0, np.ones((self.N, self.dim_d)) / self.N])  # (mu, dim)
+        # TODO: maybe try initializing the multipliers to positive values for
+        self.state.update(np.c_[X0, np.zeros((self.N, self.dim_d))])  # (mu, dim)
         self.iter_count: int = 0
-        self._max_HV = np.product(self.ref)  # TODO: this should be moved to `HV` class
+        self._max_HV = np.product(self.ref)  # TODO: this should be moved to the `HV` class
 
     def _set_logging(self, verbose: bool):
         """parameters for logging the history"""
@@ -445,10 +446,11 @@ class DpN:
         if X0 is not None:
             X0 = np.asarray(X0)
             X0 = np.clip(X0, self.xl, self.xu)
-            # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is not defined
-            # on the decision boundary or the local Hessian is ill-conditioned.
-            X0 = np.clip(X0 - self.xl, 1e-2, 1) + self.xl
-            X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
+            if 11 < 2:
+                # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is
+                # not defined on the decision boundary or the local Hessian is ill-conditioned.
+                X0 = np.clip(X0 - self.xl, 1e-2, 1) + self.xl
+                X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -456,7 +458,7 @@ class DpN:
             assert all(~np.isinf(self.xl)) & all(~np.isinf(self.xu))
             X0 = np.random.rand(self.N, self.dim_p) * (self.xu - self.xl) + self.xl  # (mu, dim_primal)
         # initialize the state variables
-        self.state.update(np.c_[X0, np.zeros((self.N, self.dim_d)) / self.N])  # (mu, dim)
+        self.state.update(np.c_[X0, np.zeros((self.N, self.dim_d))])  # (mu, dim)
         self.iter_count: int = 0
 
     def _set_indicator(
