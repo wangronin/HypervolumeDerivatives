@@ -54,7 +54,7 @@ reference_point = {  # for hypervolume
 }
 
 
-def execute(run: int):
+def execute(run: int) -> np.ndarray:
     # read the reference set
     ref, x0, y0, Y_label, eta = read_reference_set_data(path, problem_name, emoa, run, gen)
     all_ref = np.vstack([r for r in ref.values()])
