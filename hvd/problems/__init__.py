@@ -1,4 +1,5 @@
-from .base import PymooProblemWithAD
+import os
+
 from .cf import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from .dtlz import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
 from .eqdtlz import (
@@ -16,7 +17,11 @@ from .eqdtlz import (
     Eq1IDTLZ4,
 )
 from .misc import CONV3, CONV4, CONV4_2F, UF7, UF8
+from .pymoo_wrapper import PymooProblemWithAD, PymooProblemWrapper
 from .zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
+
+# enable double-precision of JAX
+os.environ["JAX_ENABLE_X64"] = "True"
 
 __all__ = [
     "Eq1DTLZ1",
@@ -59,4 +64,5 @@ __all__ = [
     "DTLZ6",
     "DTLZ7",
     "PymooProblemWithAD",
+    "PymooProblemWrapper",
 ]

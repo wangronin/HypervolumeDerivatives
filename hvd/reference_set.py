@@ -30,9 +30,10 @@ class ClusteredReferenceSet:
         """Clustered Reference Set
 
         Args:
-            ref (Union[Dict[int, np.ndarray], np.ndarray]): _description_
-            eta (Union[Dict[int, np.ndarray], np.ndarray], optional): _description_. Defaults to None.
-            Y_idx (Optional[np.ndarray], optional): _description_. Defaults to None.
+            ref (Union[Dict[int, np.ndarray], np.ndarray]): the reference set
+            eta (Union[Dict[int, np.ndarray], np.ndarray], optional): direction to shift each component of
+                the reference set. Defaults to None.
+            Y_idx (Optional[np.ndarray], optional): indices to indicate . Defaults to None.
         """
         self._ref: Dict[int, np.ndarray] = {0: ref} if isinstance(ref, np.ndarray) else ref
         assert isinstance(self._ref, dict)
