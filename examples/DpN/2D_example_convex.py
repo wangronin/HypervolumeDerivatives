@@ -50,6 +50,11 @@ def h_Jacobian(x):
     return 2 * x
 
 
+def h_Hessian(x):
+    x = np.array(x)
+    return 2 * np.eye(2)
+
+
 theta = np.linspace(-np.pi * 3 / 4, np.pi / 4, 100)
 ref_x = np.array([[np.cos(a) * 0.99, np.sin(a) * 0.99] for a in theta])
 ref = np.array([MOP1(_) for _ in ref_x])
@@ -86,6 +91,7 @@ opt = DpN(
     hessian=MOP1_Hessian,
     h=h,
     h_jac=h_Jacobian,
+    h_hessian=h_Hessian,
     N=len(x0),
     x0=x0,
     xl=-2,
