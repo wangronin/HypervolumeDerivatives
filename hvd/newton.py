@@ -357,8 +357,10 @@ class DpN:
         N: int = 5,
         h: Callable = None,
         h_jac: callable = None,
+        h_hessian: callable = None,
         g: Callable = None,
         g_jac: Callable = None,
+        g_hessian: callable = None,
         x0: np.ndarray = None,
         max_iters: Union[int, str] = np.inf,
         xtol: float = 0,
@@ -366,6 +368,7 @@ class DpN:
         pareto_front: Union[List[float], np.ndarray] = None,
         eta=None,
         Y_label=None,
+        preconditioning: bool = False,
     ):
         """
         Args:
@@ -404,8 +407,11 @@ class DpN:
         self.N = N
         self.xl = xl
         self.xu = xu
+        self.preconditioning: bool = preconditioning
         self._check_constraints(h, g)
-        self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
+        self.state = State(
+            self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, h_hessian, g, g_jac, g_hessian
+        )
         self._initialize(x0)
         self._set_indicator(ref, func, jac, hessian)
         self._set_logging(verbose)
@@ -526,7 +532,7 @@ class DpN:
         # shift the reference set if needed
         self._shift_reference_set()
         # compute the Newton step
-        self.step, self.R = self._compute_netwon_step()
+        self.step, self.R = self._compute_netwon_step(self.state)
         # prevent the decision points from moving out of the decision space. Needed for CF7 with NSGA-III
         self.step, max_step_size = self._handle_box_constraint(self.step)
         # backtracking line search for the step size
@@ -586,39 +592,42 @@ class DpN:
                 X=primal_vars, Y=state.Y, Y_label=self.Y_label, compute_hessian=False, Jacobian=state.J
             )
         R = grad  # the unconstrained case
-        dH, idx = None, None
+        dH, active_indices = None, np.array([[True] * state.n_var] * self.N)
         if self._constrained:
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
             v, idx, dH = state.cstr_value, state.active_indices, state.cstr_grad
             dH = [dH[i][idx, :] for i, idx in enumerate(idx)]
             R = [np.r_[func(grad[i], dual_vars[i, k], dH[i]), v[i, k]] for i, k in enumerate(idx)]
-        return R, dH, idx
+            active_indices = np.c_[active_indices, idx]
+        return R, dH, active_indices
 
-    def _compute_netwon_step(self) -> Tuple[np.ndarray, np.ndarray]:
-        primal_vars = self.state.primal
+    def _compute_netwon_step(self, state: State) -> Tuple[np.ndarray, np.ndarray]:
         newton_step = np.zeros((self.N, self.dim))  # Netwon steps
         R = np.zeros((self.N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
         grad, Hessian = self.active_indicator.compute_derivatives(
-            X=primal_vars,
-            Y=self.state.Y,
-            Jacobian=self.state.J,
+            X=state.primal,
+            Y=state.Y,
+            Jacobian=state.J,
             Y_label=self.Y_label,
         )
         # the root-finding problem and the gradient of the active constraints
-        R_list, dH, active_indices = self._compute_R(self.state, grad=grad)
-        idx = np.array([[True] * self.dim_p] * self.N)
-        if active_indices is not None:
-            idx = np.c_[idx, active_indices]
+        R_list, dH, active_indices = self._compute_R(state, grad=grad)
+        idx = active_indices[:, self.dim_p :]
+        if state.cstr_hess.size != 0:
+            S = [np.einsum("i...,i", state.cstr_hess[i, k], state.dual[i, k]) for i, k in enumerate(idx)]
+        else:
+            S = [np.zeros((self.dim_p, self.dim_p))] * self.N
         # compute the Newton step for each approximation point - lower computation costs
         for r in range(self.N):
-            c = idx[r]
+            c = active_indices[r]
             dh = np.array([]) if dH is None else dH[r]
             Z = np.zeros((len(dh), len(dh)))
             # pre-condition indicator's Hessian if needed, e.g., on ZDT6, CF1, CF7
-            # Hessian[r] = precondition_hessian(Hessian[r])
+            if self.preconditioning:
+                Hessian[r] = precondition_hessian(Hessian[r])
             # derivative of the root-finding problem
-            DR = np.r_[np.c_[Hessian[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
+            DR = np.r_[np.c_[Hessian[r] + S[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             R[r, c] = R_list[r]
             with warnings.catch_warnings():
                 warnings.filterwarnings("error")
