@@ -39,11 +39,11 @@ y0 = y0[idx]
 x0[:, 0] += 0.01
 N = len(x0)
 y0 = np.array([problem.objective(x) for x in x0])
-ref = pd.read_csv("./examples/DpN/CF2_refset_nofillmeans_shifted.csv", header=None).values
-ref -= 0.03
+# ref = pd.read_csv("./examples/DpN/CF2_refset_nofillmeans_shifted.csv", header=None).values
+# ref -= 0.03
 pareto_front = problem.get_pareto_front(N=200)
 
-if 11 < 2:
+if 1 < 2:
     ref = pareto_front - 0.03
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6.5))
