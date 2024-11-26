@@ -28,9 +28,11 @@ np.random.seed(66)
 
 ref = np.array([5, 5])
 max_iters = 10
-X0 = pd.read_csv("dent/dent_x.csv", header=None, index_col=None).values
-Y0 = pd.read_csv("dent/dent_y.csv", header=None, index_col=None).values
+# X0 = pd.read_csv("dent/dent_x.csv", header=None, index_col=None).values
+# Y0 = pd.read_csv("dent/dent_y.csv", header=None, index_col=None).values
 problem = DENT()
+X0 = problem.get_pareto_set(50)
+Y0 = np.array([problem.objective(x) for x in X0])
 pareto_front = problem.get_pareto_front(1000)
 N = len(X0)
 

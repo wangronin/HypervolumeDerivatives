@@ -7,8 +7,6 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
 import numpy as np
-import pandas as pd
-from jax import jit
 from scipy.linalg import cholesky, qr
 from sklearn.neighbors import LocalOutlierFactor
 
