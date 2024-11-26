@@ -4,15 +4,31 @@ from collections import defaultdict
 from copy import deepcopy
 from typing import Callable, Dict, List, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import rcParams
 from scipy.linalg import block_diag, solve
 
 from .base import State
 from .mmd import MMDMatching
 from .reference_set import ClusteredReferenceSet
-from .utils import compute_chim, get_logger, get_non_dominated, precondition_hessian, set_bounds
+from .utils import get_logger, precondition_hessian, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
+
+plt.style.use("ggplot")
+rcParams["font.size"] = 15
+rcParams["xtick.direction"] = "out"
+rcParams["ytick.direction"] = "out"
+rcParams["text.usetex"] = True
+rcParams["legend.numpoints"] = 1
+rcParams["xtick.labelsize"] = 15
+rcParams["ytick.labelsize"] = 15
+rcParams["xtick.major.size"] = 7
+rcParams["xtick.major.width"] = 1
+rcParams["ytick.major.size"] = 7
+rcParams["ytick.major.width"] = 1
+
 
 __authors__ = ["Hao Wang"]
 
@@ -132,8 +148,9 @@ class MMDNewton:
             X0 = np.clip(X0, self.xl, self.xu)
             # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is not defined
             # on the decision boundary or the local Hessian is ill-conditioned.
-            X0 = np.clip(X0 - self.xl, 1e-2, 1) + self.xl
-            X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
+            if 1 < 2:
+                X0 = np.clip(X0 - self.xl, 1e-2, 1) + self.xl
+                X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
             self.N = len(X0)
         else:
             # sample `x` u.a.r. in `[lb, ub]`
@@ -191,21 +208,22 @@ class MMDNewton:
         self.step_size = self._backtracking_line_search(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size * self.step)
+        self.iter_count += 1
 
     def log(self):
-        self.iter_count += 1
         self.history_Y += [self.state.Y.copy()]
         self.history_X += [self.state.primal.copy()]
         self.history_indicator_value += [self.curr_indicator_value]
         self.history_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
-        for name, func in self.metrics.items():  # compute the performance metrics
-            self.history_metrics[name].append(func.compute(Y=self.state.Y))
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"{self.indicator.__class__.__name__}: {self.curr_indicator_value}")
-            # self.logger.info(f"step size: {self.step_size.ravel()}")
-            self.logger.info(f"step size: {self.step_size}")
+            self.logger.info(f"step size: {self.step_size.ravel()}")
             self.logger.info(f"R norm: {self.history_R_norm[-1]}")
+        for name, func in self.metrics.items():  # compute the performance metrics
+            value = func.compute(Y=self.state.Y)
+            self.history_metrics[name].append(value)
+            self.logger.info(f"{name}: {value}")
 
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:
@@ -254,7 +272,7 @@ class MMDNewton:
             dH = block_diag(*dH)  # (N * p, N * dim), `p` is the number of active constraints
             Z = np.zeros((len(dH), len(dH)))
             DR = np.r_[np.c_[DR, dH.T], np.c_[dH, Z]]
-        # the vector-format of R
+        # vectorize R
         idx = active_indices[:, self.dim_p :]
         R_ = np.r_[R[:, : self.dim_p].reshape(-1, 1), R[:, self.dim_p :][idx].reshape(-1, 1)]
         with warnings.catch_warnings():
@@ -273,7 +291,7 @@ class MMDNewton:
         1. always shift the first reference set (`self.iter_count == 0`); Otherwise, weird matching can happen
         2. if at least one approximation point is close to its matched target and the Newton step is not zero.
         """
-        if self.iter_count == 0:
+        if self.iter_count == 0:  # TODO: maybe do not perform the initial shift here..
             masks = np.array([True] * self.N)
         else:
             distance = np.linalg.norm(self.state.Y - self.ref.medoids, axis=1)
@@ -285,18 +303,13 @@ class MMDNewton:
             self.history_medoids[k].append(self.ref.medoids[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
 
-    def _backtracking_line_search_scipy(self):
-        # TODO: test scipy's version
-        pass
-
-    def _backtracking_line_search(
+    def _backtracking_line_search_single_step_size(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> float:
-        # TODO: use the backtracking line search in scipy
-        """backtracking line search with Armijo's condition"""
+        """backtracking line search with Armijo's condition. Global step-size control"""
         c1 = 1e-5
         if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
-            return 1
+            return np.array([1])
 
         def phi_func(alpha):
             state_ = deepcopy(self.state)
@@ -306,9 +319,7 @@ class MMDNewton:
             self.indicator.re_match = True
             return np.linalg.norm(R_)
 
-        # TODO: add maximal step size here
-        # step_size = max_step_size if max_step_size is not None else 1
-        step_size = 1
+        step_size = min(max_step_size) if max_step_size is not None else 1
         phi = [np.linalg.norm(R)]
         s = [0, step_size]
         for _ in range(8):
@@ -325,54 +336,52 @@ class MMDNewton:
         step_size = s[-1]
         return step_size
 
-    # def _backtracking_line_search(
-    #     self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
-    # ) -> float:
-    #     # TODO: use the backtracking line search in scipy
-    #     """backtracking line search with Armijo's condition"""
-    #     c1 = 1e-4
-    #     if 1 or np.all(np.isclose(step, 0)):
-    #         return np.ones((self.N, 1))
+    def _backtracking_line_search(
+        self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
+    ) -> np.ndarray:
+        # TODO: use the backtracking line search in scipy
+        """backtracking line search with Armijo's condition"""
+        c1 = 1e-4
+        if np.all(np.isclose(step, 0)):
+            return np.ones((self.N, 1))
 
-    #     def phi_func(alpha, i):
-    #         state = deepcopy(self.state)
-    #         x = state.X[i].copy()
-    #         x += alpha * step[i]
-    #         state.update_one(x, i)
-    #         self.indicator.re_match = False
-    #         # this step takes too long since we compute the gradient at all points while only one changes
-    #         R_ = self._compute_R(state)[0][i]
-    #         self.indicator.re_match = True
-    #         self.state.n_jac_evals = state.n_jac_evals
-    #         return np.linalg.norm(R_)
+        def phi_func(alpha, i):
+            state = deepcopy(self.state)
+            x = state.X[i].copy()
+            x += alpha * step[i]
+            state.update_one(x, i)
+            self.indicator.re_match = False
+            # this step takes too long since we compute the gradient at all points while only one changes
+            R_ = self._compute_R(state)[0][i]
+            self.indicator.re_match = True
+            self.state.n_jac_evals = state.n_jac_evals
+            return np.linalg.norm(R_)
 
-    #     # TODO: this is individual step-size control; what if we use only a global step-size?
-    #     step_size = max_step_size.reshape(-1, 1) if max_step_size is not None else np.ones((self.N, 1))
-    #     for i in range(self.N):
-    #         phi = [np.linalg.norm(R[i])]
-    #         s = [0, step_size[i]]
-    #         for _ in range(8):
-    #             phi.append(phi_func(s[-1], i))
-    #             # Armijo–Goldstein condition
-    #             # when R norm is close to machine precision, it makes no sense to perform the line search
-    #             success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
-    #             if success:
-    #                 break
-    #             else:
-    #                 if 1 < 2:
-    #                     # cubic interpolation to compute the next step length
-    #                     d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
-    #                     d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
-    #                     s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
-    #                     s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
-    #                     s.append(s_)
-    #                 else:
-    #                     s.append(s[-1] * 0.5)
-    #         else:
-    #             pass
-    #             # self.logger.info("backtracking line search failed")
-    #         step_size[i] = s[-1]
-    #     return step_size
+        step_size = max_step_size.reshape(-1, 1) if max_step_size is not None else np.ones((self.N, 1))
+        for i in range(self.N):
+            phi = [np.linalg.norm(R[i])]
+            s = [0, step_size[i]]
+            for _ in range(8):
+                phi.append(phi_func(s[-1], i))
+                # Armijo–Goldstein condition
+                # when R norm is close to machine precision, it makes no sense to perform the line search
+                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+                if success:
+                    break
+                else:
+                    if 1 < 2:
+                        # cubic interpolation to compute the next step length
+                        d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
+                        d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
+                        s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
+                        s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
+                        s.append(s_)
+                    else:
+                        s.append(s[-1] / 2)
+            else:
+                self.logger.warn("backtracking line search failed")
+            step_size[i] = s[-1]
+        return step_size
 
     def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """The box-constraint handler projects the Newton step onto the box boundary, preventing the
@@ -405,69 +414,3 @@ class MMDNewton:
             s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
             max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
         return step, max_step_size
-
-
-def bootstrap_reference_set(optimizer, problem, interval: int = 5) -> Tuple[np.ndarray, np.ndarray, Dict]:
-    """Bootstrap the reference set with the intermediate population of an MOO algorithm
-
-    Args:
-        optimizer (_type_): an MOO algorithm
-        problem (_type_): the MOO problem to solve
-        init_ref (np.ndarray): the initial reference set
-        interval (int, optional): intervals at which bootstrapping is performed. Defaults to 5.
-
-    Returns:
-        Tuple[np.ndarray, np.ndarray, Dict]: (efficient set, Pareto front approximation,
-            the stopping criteria)
-    """
-    alpha = 0.05
-    ref_archive = []
-    from sklearn_extra.cluster import KMedoids
-
-    for i in range(optimizer.max_iters):
-        # TODO: generalize the condition to trigger the boostrap: maybe if the R norm for most points
-        # are near zero?
-        if i % interval == 0 and i > 0:
-            # relax dominance resistent points (improper dominance)
-            func = lambda y: (1 - alpha) * y + alpha * y.mean(axis=1).reshape(len(y), -1)
-            Y = func(optimizer.state.Y)
-            idx = get_non_dominated(Y, return_index=True)
-            ref = Y[idx]
-            # ref_archive.append(Y[idx].copy())
-            # ref = np.concatenate(ref_archive, axis=0)
-            # km = KMedoids(
-            #     n_clusters=optimizer.state.N, method="alternate", random_state=0, init="k-medoids++"
-            # ).fit(ref)
-            # ref = ref[km.medoid_indices_]
-            eta = compute_chim(ref)
-            ref += 0.08 * eta
-            Y_idx = None
-            ref = ClusteredReferenceSet(ref=ref, eta={0: eta}, Y_idx=Y_idx)
-            # only keep the non-dominated points
-            optimizer.N = len(idx)
-            optimizer.step = optimizer.step[idx]
-            optimizer.state = optimizer.state[idx]
-            optimizer.indicator.ref = optimizer.ref = ref
-            optimizer.indicator.compute(Y=optimizer.state.Y)  # to compute the medoids
-            # halve the weight of the spread term to reduce spread effect in the following iterations
-            optimizer.indicator.beta = optimizer.indicator.beta / 2
-
-            if 11 < 2:
-                import matplotlib.pyplot as plt
-
-                pareto_front = problem.get_pareto_front()
-                m = ref.medoids
-                fig = plt.figure(figsize=plt.figaspect(1))
-                plt.subplots_adjust(bottom=0.08, top=0.9, right=0.93, left=0.05)
-                ax0 = fig.add_subplot(1, 1, 1, projection="3d")
-                ax0.set_box_aspect((1, 1, 1))
-                ax0.view_init(45, 45)
-                ax0.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r+", ms=6, alpha=0.6)
-                rs = ref.reference_set
-                ax0.plot(rs[:, 0], rs[:, 1], rs[:, 2], "g.", ms=6, alpha=0.6)
-                ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", ms=6, alpha=0.3)
-                ax0.plot(m[:, 0], m[:, 1], m[:, 2], "r^", ms=6, alpha=0.6)
-                plt.show()
-        optimizer.newton_iteration()
-        optimizer.log()
-    return optimizer.state.primal, optimizer.state.Y, optimizer.stop_dict

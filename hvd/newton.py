@@ -20,11 +20,16 @@ __authors__ = ["Hao Wang"]
 np.seterr(divide="ignore", invalid="ignore")
 
 
+def matrix_to_Nd_vector(X: np.ndarray, dim_primal: int, active_indices: np.ndarray) -> np.ndarray:
+    return np.r_[X[:, :dim_primal].reshape(-1, 1), X[:, dim_primal:][active_indices].reshape(-1, 1)]
+
+
 def Nd_vector_to_matrix(
     x: np.ndarray, N: int, dim: int, dim_primal: int, active_indices: np.ndarray
 ) -> np.ndarray:
     if dim == dim_primal:  # the unconstrained case
         return x.reshape(N, -1)
+    active_indices = np.c_[np.array([[True] * dim_primal] * N), active_indices]
     X = np.zeros((N, dim))  # Netwon steps
     D = int(N * dim_primal)
     a, b = x[:D].reshape(N, -1), x[D:]
@@ -168,7 +173,7 @@ class HVN:
             behavior of the infeasible ones falls back to case (1)
         """
         # check for anomalies in `X` and `Y`
-        self._check_population()
+        self._check_uniqueness()
         # first compute the current indicator value
         self._compute_indicator_value()
         # partition the approximation set to by feasibility
@@ -188,10 +193,14 @@ class HVN:
         for idx in partitions.values():
             # compute Newton step
             newton_step, R = self._compute_netwon_step(self.state[idx])
+            # constrain the search steps within the search box
+            newton_step, max_step_size = self._handle_box_constraint(newton_step, self.state[idx])
             self.step[idx, :] = newton_step
             self.R[idx, :] = R
             # backtracking line search with Armijo's condition for each layer
-            self.step_size[idx] = self._backtracking_line_search(self.state[idx], newton_step, R)
+            self.step_size[idx] = self._backtracking_line_search(
+                self.state[idx], newton_step, R, max_step_size
+            )
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))
 
@@ -225,29 +234,29 @@ class HVN:
             Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
                 (R, H, active_indices) -> the rooting-finding problem,
                 the Jacobian of the equality constraints, and
-                the indices of the active primal-dual variables
+                the indices of the active dual variables
         """
         if grad is None:
             grad = self.indicator.compute_derivatives(state.primal, state.Y, False, state.J)
         # the unconstrained case
-        R, dH, active_indices = grad, None, np.array([[True] * state.n_var] * state.N)
+        R, dH, active_indices = grad, None, None
         if self._constrained:
             R = np.zeros((state.N, self.dim))  # the root-finding problem
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
-            cstr_value, idx, dH = state.cstr_value, state.active_indices, state.cstr_grad
-            dH = [dH[i, idx, :] for i, idx in enumerate(idx)]  # only take Jacobian of the active constraints
-            active_indices = np.c_[active_indices, idx]
+            cstr_value, active_indices, dH = state.cstr_value, state.active_indices, state.cstr_grad
+            # only take Jacobian of the active constraints
+            dH = [dH[i, k, :] for i, k in enumerate(active_indices)]
             for i, k in enumerate(active_indices):
-                R[i, k] = np.r_[func(grad[i], state.dual[i, idx[i]], dH[i]), cstr_value[i, idx[i]]]
+                R[i, : self.dim_p] = func(grad[i], state.dual[i, k], dH[i])
+                R[i, self.dim_p :][k] = cstr_value[i, k]
         return R, dH, active_indices
 
     def _compute_netwon_step(self, state: State) -> Tuple[np.ndarray, np.ndarray]:
-        grad, Hessian = self.indicator.compute_derivatives(X=state.primal, Y=state.Y, YdX=state.J)
-        R, H, active_indices = self._compute_R(state, grad=grad)
+        grad, DR = self.indicator.compute_derivatives(X=state.primal, Y=state.Y, YdX=state.J)
+        R, H, idx = self._compute_R(state, grad=grad)
         # sometimes the Hessian is not NSD
         if self.preconditioning:
-            Hessian = -1.0 * precondition_hessian(-1.0 * Hessian)
-        DR, idx = Hessian, active_indices[:, self.dim_p :]
+            DR = -1.0 * precondition_hessian(-1.0 * DR)
         if self._constrained:
             H = block_diag(*H)  # (N * p, N * dim), `p` is the number of active constraints
             B = state.cstr_hess
@@ -255,35 +264,27 @@ class HVN:
             Z = np.zeros((len(H), len(H)))
             DR = np.r_[np.c_[DR + M, H.T], np.c_[H, Z]]
         # the vector-format of R
-        R_ = np.r_[R[:, : self.dim_p].reshape(-1, 1), R[:, self.dim_p :][idx].reshape(-1, 1)]
+        R_vec = matrix_to_Nd_vector(R, self.dim_p, idx)
         with warnings.catch_warnings():
             warnings.filterwarnings("error")
             try:
-                newton_step_ = -1 * spsolve(csc_matrix(DR), csc_matrix(R_))
+                newton_step_ = -1 * spsolve(csc_matrix(DR), csc_matrix(R_vec))
             except:  # if DR is singular, then use the pseudoinverse
-                # TODO: compute the pseudoinverse with sparse matrix operations
-                newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0].ravel()
+                newton_step_ = -1 * np.linalg.lstsq(DR, R_vec, rcond=None)[0].ravel()
         # convert the vector-format of the newton step to matrix format
-        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), state.N, self.dim, self.dim_p, active_indices)
+        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), state.N, self.dim, self.dim_p, idx)
         return newton_step, R
 
     def _compute_indicator_value(self):
         self.curr_indicator_value = self.indicator.compute(Y=self.state.Y)
 
-    def _compute_max_step_size(self, X: np.ndarray, step: np.ndarray) -> float:
-        N, dim = X.shape
-        # normal vector to each decision boundary
-        normal_vectors = np.c_[np.eye(dim * N), -1 * np.eye(dim * N)]
-        dist = np.r_[np.abs(X.ravel() - np.tile(self.xl, N)), np.abs(np.tile(self.xu, N) - X.ravel())]
-        v = step.ravel() @ normal_vectors
-        return min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
-
-    def _backtracking_line_search(self, state: State, step: np.ndarray, R: np.ndarray) -> float:
+    def _backtracking_line_search(
+        self, state: State, step: np.ndarray, R: np.ndarray, max_step_size: float = 1
+    ) -> float:
         """backtracking line search with Armijo's condition"""
-        # TODO: implement curvature condition or use scipy's line search function
         c1 = 1e-5
         if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
-            return 1
+            return max_step_size
 
         def phi_func(alpha):
             state_ = deepcopy(state)
@@ -291,7 +292,7 @@ class HVN:
             R = self._compute_R(state_)[0]
             return np.linalg.norm(R)
 
-        step_size = self._compute_max_step_size(state.primal, step[:, : self.dim_p])
+        step_size = max_step_size
         phi = [np.linalg.norm(R)]
         s = [0, step_size]
         for _ in range(6):
@@ -316,8 +317,26 @@ class HVN:
         step_size = s[-1]
         return step_size
 
-    def _check_population(self):
-        # get unique points: if some points converge to the same location
+    def _handle_box_constraint(self, step: np.ndarray, state: State) -> Tuple[np.ndarray, np.ndarray]:
+        primal_vars, step_primal = state.primal, step[:, : self.dim_p]
+        # distance to the lower and upper boundary per dimension
+        dist_xl, dist_xu = np.abs(primal_vars - self.xl), np.abs(self.xu - primal_vars)
+        # if a point on a lower boundary and its has a negative step on this dimension
+        r, c = np.nonzero(np.isclose(dist_xl, 0, atol=1e-10, rtol=1e-10) & (step_primal < 0))
+        step_primal[r, c] = 0
+        # if a point on an upuper boundary and its has a positive step on this dimension
+        r, c = np.nonzero(np.isclose(dist_xu, 0, atol=1e-10, rtol=1e-10) & (step_primal > 0))
+        step_primal[r, c] = 0
+        s = np.c_[dist_xl / step_primal, -dist_xu / step_primal]
+        s[s >= 0] = np.inf
+        s = np.minimum(1, np.nanmin(np.abs(s), axis=1))
+        step[:, : self.dim_p] = step_primal
+        return step, min(s)
+
+    def _check_uniqueness(self):
+        """check uniqueness of decision and objective points.
+        if two points are identical up to a high precision, then we remove one of them.
+        """
         primal_vars = self.state.primal
         D = cdist(primal_vars, primal_vars)
         drop_idx_X = set([])

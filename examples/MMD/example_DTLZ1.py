@@ -7,10 +7,11 @@ import numpy as np
 import pandas as pd
 from matplotlib import rcParams
 
+from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton, bootstrap_reference_set
+from hvd.mmd_newton import MMDNewton
 from hvd.newton import DpN
-from hvd.problems import DTLZ1, PymooProblemWithAD
+from hvd.problems import DTLZ1
 from hvd.reference_set import ClusteredReferenceSet
 from hvd.utils import get_non_dominated
 
@@ -30,15 +31,14 @@ rcParams["ytick.major.width"] = 1
 np.random.seed(66)
 max_iters = 16
 
-f = DTLZ1(boundry_constraints=True)
-problem = PymooProblemWithAD(f)
+problem = DTLZ1(n_var=7, boundry_constraints=True)
 pareto_front = problem.get_pareto_front()
 
 # read the reference set data
-ref_ = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_ref_1_gen0.csv", header=None).values
-X0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_x_gen0.csv", header=None).values
-Y0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_y_gen0.csv", header=None).values
-eta = {0: pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_eta_1_gen0.csv", header=None).values.ravel()}
+ref_ = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_run_1_ref_1_gen0.csv", header=None).values
+X0 = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_x_gen0.csv", header=None).values
+Y0 = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_y_gen0.csv", header=None).values
+eta = {0: pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_run_1_eta_1_gen0.csv", header=None).values.ravel()}
 Y_idx = None
 Y_label = np.array([0] * len(ref_))
 ref = {0: ref_}
@@ -67,11 +67,11 @@ opt = MMDNewton(
 if 1 < 2:
     opt.indicator.beta = 0.25
     # TODO: figure out how to determine when to bootstrap automatically
-    X, Y, _ = bootstrap_reference_set(opt, problem, 7)
+    X, Y, _ = bootstrap_reference_set(opt, problem, 5)
 else:
     X, Y, _ = opt.run()
 
-Y = get_non_dominated(Y)
+# Y = get_non_dominated(Y)
 igd_mmd = igd.compute(Y=Y)
 
 opt_dpn = DpN(
@@ -145,5 +145,4 @@ ax1.set_ylabel(r"$f_2$")
 ax1.set_ylabel(r"$f_3$")
 
 plt.tight_layout()
-# plt.show()
-plt.savefig(f"MMD-{f.__class__.__name__}.pdf", dpi=1000)
+plt.savefig(f"MMD-{problem.__class__.__name__}.pdf", dpi=1000)
