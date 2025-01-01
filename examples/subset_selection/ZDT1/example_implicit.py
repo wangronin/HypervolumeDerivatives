@@ -4,9 +4,8 @@ sys.path.insert(0, "./")
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
+from B_spline import hessian, jacobian, objective
 from matplotlib import rcParams
-from spline import pareto_front_approx
 
 from hvd.newton import HVN
 
@@ -28,55 +27,21 @@ np.random.seed(66)
 
 ref = np.array([2, 2])
 max_iters = 15
-Y0 = X0 = pd.read_csv("examples/subset_selection/ZDT1/points.csv", header=None, index_col=None).values
+X0 = np.random.rand(50)
+Y0 = np.array([objective(x) for x in X0])
 N = len(X0)
 
-
-def objective(x: np.ndarray) -> np.ndarray:
-    return x
-
-
-def jacobian(x: np.ndarray) -> np.ndarray:
-    # whenever a point is on the boundary, we set the corresponding Jacobian to zero
-    # to make the point stationary
-    jac = np.eye(2)
-    idx = np.nonzero(x == 0)[0]
-    jac[idx, idx] = 0
-    idx = np.nonzero(x == 1)[0]
-    jac[idx, idx] = 0
-    return jac
-
-
-def hessian(_) -> np.ndarray:
-    return np.array([np.zeros((2, 2))] * 2)
-
-
-def h(x: np.ndarray) -> float:
-    return pareto_front_approx(x[0])[0] - x[1]
-
-
-def h_Jacobian(x: np.ndarray) -> np.ndarray:
-    return np.array([pareto_front_approx(x[0])[1], -1])
-
-
-def h_Hessian(x: np.ndarray) -> np.ndarray:
-    return np.array([[pareto_front_approx(x[0])[2], 0], [0, 0]])
-
-
 opt = HVN(
-    n_var=2,
+    n_var=1,
     n_obj=2,
     ref=ref,
     func=objective,
     jac=jacobian,
     hessian=hessian,
-    h=h,
-    h_jac=h_Jacobian,
-    h_hessian=h_Hessian,
     N=len(X0),
     X0=X0,
-    xl=[0, 0],
-    xu=[1, 1],
+    xl=0,
+    xu=1,
     max_iters=max_iters,
     verbose=True,
     preconditioning=False,
@@ -107,9 +72,8 @@ if 11 < 2:
             headwidth=2.7,
         )
 
-x = np.linspace(0, 1, 1000)
-y = np.array([pareto_front_approx(_)[0] for _ in x])
-pareto_front = np.c_[x, y]
+t = np.linspace(0, 1, 1000)
+pareto_front = np.array([objective(_) for _ in t])
 
 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "k--", alpha=0.5)
 ax0.set_title("Objective space")
