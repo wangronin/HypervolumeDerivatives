@@ -71,7 +71,7 @@ if 1 < 2:
 else:
     X, Y, _ = opt.run()
 
-# Y = get_non_dominated(Y)
+Y = get_non_dominated(Y)
 igd_mmd = igd.compute(Y=Y)
 
 opt_dpn = DpN(
