@@ -173,7 +173,7 @@ class HVN:
             behavior of the infeasible ones falls back to case (1)
         """
         # check for anomalies in `X` and `Y`
-        self._check_uniqueness()
+        self._check_points_uniqueness()
         # first compute the current indicator value
         self._compute_indicator_value()
         # partition the approximation set to by feasibility
@@ -216,7 +216,7 @@ class HVN:
             self.history_metrics[name].append(func.compute(Y=self.state.Y))
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
-            self.logger.info(f"{self.indicator.__class__.__name__}: {self.curr_indicator_value}")
+            self.logger.info(f"HV: {self.curr_indicator_value}")
             self.logger.info(f"step size: {self.step_size.ravel()}")
             self.logger.info(f"R norm: {self.history_R_norm[-1]}")
 
@@ -254,7 +254,7 @@ class HVN:
     def _compute_netwon_step(self, state: State) -> Tuple[np.ndarray, np.ndarray]:
         grad, DR = self.indicator.compute_derivatives(X=state.primal, Y=state.Y, YdX=state.J)
         R, H, idx = self._compute_R(state, grad=grad)
-        # sometimes the Hessian is not NSD
+        # in case the Hessian is not NSD
         if self.preconditioning:
             DR = -1.0 * precondition_hessian(-1.0 * DR)
         if self._constrained:
@@ -286,7 +286,7 @@ class HVN:
         if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
             return max_step_size
 
-        def phi_func(alpha):
+        def phi_func(alpha: float) -> float:
             state_ = deepcopy(state)
             state_.update(state.X + alpha * step)
             R = self._compute_R(state_)[0]
@@ -333,7 +333,7 @@ class HVN:
         step[:, : self.dim_p] = step_primal
         return step, min(s)
 
-    def _check_uniqueness(self):
+    def _check_points_uniqueness(self):
         """check uniqueness of decision and objective points.
         if two points are identical up to a high precision, then we remove one of them.
         """

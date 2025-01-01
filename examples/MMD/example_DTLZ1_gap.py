@@ -9,10 +9,11 @@ import numpy as np
 import pandas as pd
 from matplotlib import rcParams
 
+from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton, bootstrap_reference_set
+from hvd.mmd_newton import MMDNewton
 from hvd.newton import DpN
-from hvd.problems import DTLZ1, PymooProblemWithAD
+from hvd.problems import DTLZ1
 from hvd.reference_set import ClusteredReferenceSet
 from hvd.utils import get_non_dominated
 
@@ -31,64 +32,46 @@ rcParams["ytick.major.width"] = 1
 
 random.seed(66)
 np.random.seed(66)
-max_iters = 20
+max_iters = 11
 
-f = DTLZ1(boundry_constraints=True)
-problem = PymooProblemWithAD(f)
+problem = DTLZ1(n_var=7, boundry_constraints=True)
 pareto_front = problem.get_pareto_front()
 
-ref_ = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_HOLE_run_1_ref_1_gen0.csv", header=None).values
-X0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_x_gen0.csv", header=None).values
-Y0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_y_gen0.csv", header=None).values
-
+ref_ = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_ref_1_gen0.csv", header=None).values
+X0 = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_x_gen0.csv", header=None).values
+Y0 = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_y_gen0.csv", header=None).values
+# retrieve two components manually
 idx = Y0[:, 2] >= 0.307
 X_component1 = X0[idx]
 Y_component1 = Y0[idx]
 ref1_ = pareto_front[pareto_front[:, 2] >= 0.307]
-idx = random.sample(range(len(ref1_)), len(Y_component1))
-ref1_ = ref1_[idx]
-
+# retrieve two components manually
 idx = Y0[:, 2] <= 0.2
 X_component2 = X0[idx]
 Y_component2 = Y0[idx]
 ref2_ = pareto_front[pareto_front[:, 2] <= 0.2]
-idx = random.sample(range(len(ref2_)), len(Y_component2))
-ref2_ = ref2_[idx]
 
-if 1 < 2:
-    # NOTE: for bootstrapping, the spread looks better
-    # if we used a clustered reference set to represent the gap
-    ref = {0: ref1_, 1: ref2_}
-    eta = {0: -1 * np.array([1 / np.sqrt(3)] * 3), 1: -1 * np.array([1 / np.sqrt(3)] * 3)}
-    Y_idx = [list(range(0, len(Y_component1))), list(range(len(Y_component1), len(Y0)))]
-    Y_label = np.array([0] * len(X_component1) + [1] * len(X_component2))
-else:
-    X0 = X_component2
-    Y0 = Y_component2
-    ref = ref2_
+# NOTE: for bootstrapping, the spread looks better
+# if we used a clustered reference set to represent the gap
+ref = {0: ref1_, 1: ref2_}
+eta = {0: -1 * np.array([1 / np.sqrt(3)] * 3), 1: -1 * np.array([1 / np.sqrt(3)] * 3)}
+Y_idx = [list(range(0, len(Y_component1))), list(range(len(Y_component1), len(Y0)))]
+Y_label = np.array([0] * len(X_component1) + [1] * len(X_component2))
 
-    # X0 = X_component1
-    # Y0 = Y_component1
-    # ref = ref1_
-
-    eta = {0: -1 * np.array([1 / np.sqrt(3)] * 3)}
-    Y_idx = None
-    Y_label = np.array([0] * len(X_component1))
-
-N = len(X0)
+N = len(X_component2)
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
 igd = InvertedGenerationalDistance(pareto_front)
 opt = MMDNewton(
     n_var=problem.n_var,
     n_obj=problem.n_obj,
-    ref=ClusteredReferenceSet(ref=ref, eta=eta, Y_idx=Y_idx),
+    ref=ClusteredReferenceSet(ref=ref2_, eta=None, Y_idx=None),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
     N=N,
-    X0=X0,
+    X0=X_component2,
     xl=problem.xl,
     xu=problem.xu,
     max_iters=max_iters,
@@ -97,11 +80,69 @@ opt = MMDNewton(
     preconditioning=False,
 )
 if 1 < 2:
-    opt.indicator.beta = 0.5  # start with a large spreading effect
-    X, Y, _ = bootstrap_reference_set(opt, problem, 10)
+    opt.indicator.beta = 0.2  # start with a large spreading effect
+    X, Y, _ = bootstrap_reference_set(opt, problem, 3)
 else:
     X, Y, _ = opt.run()
 
+X2, Y2 = X, Y
+ref2 = opt.indicator.ref.reference_set
+
+N = len(X_component1)
+metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
+igd = InvertedGenerationalDistance(pareto_front)
+opt = MMDNewton(
+    n_var=problem.n_var,
+    n_obj=problem.n_obj,
+    ref=ClusteredReferenceSet(ref=ref1_, eta=None, Y_idx=None),
+    func=problem.objective,
+    jac=problem.objective_jacobian,
+    hessian=problem.objective_hessian,
+    g=problem.ieq_constraint,
+    g_jac=problem.ieq_jacobian,
+    N=N,
+    X0=X_component1,
+    xl=problem.xl,
+    xu=problem.xu,
+    max_iters=max_iters,
+    verbose=True,
+    metrics=metrics,
+    preconditioning=False,
+)
+if 1 < 2:
+    opt.indicator.beta = 0.2  # start with a large spreading effect
+    X, Y, _ = bootstrap_reference_set(opt, problem, 3)
+else:
+    X, Y, _ = opt.run()
+
+X1, Y1 = X, Y
+ref1 = opt.indicator.ref.reference_set
+X_MMD = np.r_[X1, X2]
+Y_MMD = np.r_[Y1, Y2]
+ref_MMD = np.r_[ref1, ref2]
+
+N = len(X_MMD)
+metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
+igd = InvertedGenerationalDistance(pareto_front)
+opt = MMDNewton(
+    n_var=problem.n_var,
+    n_obj=problem.n_obj,
+    ref=ClusteredReferenceSet(ref=ref_MMD, eta=None, Y_idx=None),
+    func=problem.objective,
+    jac=problem.objective_jacobian,
+    hessian=problem.objective_hessian,
+    g=problem.ieq_constraint,
+    g_jac=problem.ieq_jacobian,
+    N=N,
+    X0=X_MMD,
+    xl=problem.xl,
+    xu=problem.xu,
+    max_iters=5,
+    verbose=True,
+    metrics=metrics,
+    preconditioning=False,
+)
+X, Y, _ = opt.run()
 Y = get_non_dominated(Y)
 igd_mmd = igd.compute(Y=Y)
 
@@ -177,5 +218,4 @@ ax1.set_ylabel(r"$f_2$")
 ax1.set_ylabel(r"$f_3$")
 
 plt.tight_layout()
-# plt.show()
-plt.savefig(f"MMD-{f.__class__.__name__}_gap.pdf", dpi=1000)
+plt.savefig(f"MMD-{problem.__class__.__name__}_gap.pdf", dpi=1000)

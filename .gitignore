@@ -12,6 +12,7 @@
 *.mat
 *.png
 *.txt
+*.pkl
 data/
 model/
 hv/

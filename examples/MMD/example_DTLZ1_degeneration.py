@@ -8,11 +8,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
+from sklearn_extra.cluster import KMedoids
 
+from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton, bootstrap_reference_set
+from hvd.mmd_newton import MMDNewton
 from hvd.newton import DpN
-from hvd.problems import DTLZ1, PymooProblemWithAD
+from hvd.problems import DTLZ1
 from hvd.reference_set import ClusteredReferenceSet
 from hvd.utils import get_non_dominated
 
@@ -31,63 +33,18 @@ rcParams["ytick.major.width"] = 1
 
 random.seed(66)
 np.random.seed(66)
-max_iters = 20
+interval = 3
+max_iters = 8 * interval + 1
 
-f = DTLZ1(boundry_constraints=True)
-problem = PymooProblemWithAD(f)
+problem = DTLZ1(n_var=7, boundry_constraints=True)
 pareto_front = problem.get_pareto_front()
-
-# read the reference set data
-# ref_ = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_ref_1_gen0.csv", header=None).values
-# X0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_x_gen0.csv", header=None).values
-# Y0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_y_gen0.csv", header=None).values
-# eta = {0: pd.read_csv("./DTLZ1/DTLZ1_RANDOM_run_1_eta_1_gen0.csv", header=None).values.ravel()}
-# Y_idx = None
-
-ref_ = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_HOLE_run_1_ref_1_gen0.csv", header=None).values
-X0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_x_gen0.csv", header=None).values
-Y0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_y_gen0.csv", header=None).values
-
-idx = Y0[:, 2] >= 0.307
-X_component1 = X0[idx]
-Y_component1 = Y0[idx]
-ref1_ = pareto_front[pareto_front[:, 2] >= 0.307]
-idx = random.sample(range(len(ref1_)), len(Y_component1))
-ref1_ = ref1_[idx]
-
-idx = Y0[:, 2] <= 0.2
-X_component2 = X0[idx]
-Y_component2 = Y0[idx]
-ref2_ = pareto_front[pareto_front[:, 2] <= 0.2]
-idx = random.sample(range(len(ref2_)), len(Y_component2))
-ref2_ = ref2_[idx]
-
-if 1 < 2:
-    # NOTE: for bootstrapping, the spread looks better
-    # if we used a clustered reference set to represent the gap
-    ref = {0: ref1_, 1: ref2_}
-    eta = {0: -1 * np.array([1 / np.sqrt(3)] * 3), 1: -1 * np.array([1 / np.sqrt(3)] * 3)}
-    Y_idx = [list(range(0, len(Y_component1))), list(range(len(Y_component1), len(Y0)))]
-    Y_label = np.array([0] * len(X_component1) + [1] * len(X_component2))
-else:
-    X0 = X_component2
-    Y0 = Y_component2
-    ref = ref2_
-
-    # X0 = X_component1
-    # Y0 = Y_component1
-    # ref = ref1_
-
-    eta = {0: -1 * np.array([1 / np.sqrt(3)] * 3)}
-    Y_idx = None
-    Y_label = np.array([0] * len(X_component1))
-
-# ref_ = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_DEGEN_run_1_ref_1_gen0.csv", header=None).values
-# X0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_DEGEN_run_1_lastpopu_x_gen0.csv", header=None).values
-# Y0 = pd.read_csv("./DTLZ1/DTLZ1_RANDOM_DEGEN_run_1_lastpopu_y_gen0.csv", header=None).values
-# eta = {0: pd.read_csv("./DTLZ1/DTLZ1_RANDOM_DEGEN_run_1_eta_1_gen0.csv", header=None).values.ravel()}
-# eta = {0: -1 * np.array([1 / np.sqrt(3)] * 3)}
-# Y_idx = None
+X = pd.read_csv("./data/DTLZ1/DTLZ1_degenerate.csv", header=None).values
+Y = np.array([problem.objective(x) for x in X])
+km = KMedoids(n_clusters=100, method="alternate", random_state=0, init="k-medoids++").fit(Y)
+X0 = X[km.medoid_indices_]
+Y0 = Y[km.medoid_indices_]
+ref = Y0.copy()
+eta = -1 * np.array([1 / np.sqrt(3)] * 3)
 
 N = len(X0)
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
@@ -95,7 +52,7 @@ igd = InvertedGenerationalDistance(pareto_front)
 opt = MMDNewton(
     n_var=problem.n_var,
     n_obj=problem.n_obj,
-    ref=ClusteredReferenceSet(ref=ref, eta=eta, Y_idx=Y_idx),
+    ref=ClusteredReferenceSet(ref=ref, eta=eta, Y_idx=None),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
@@ -111,11 +68,10 @@ opt = MMDNewton(
     preconditioning=False,
 )
 if 1 < 2:
-    opt.indicator.beta = 0.5  # start with a large spreading effect
-    X, Y, _ = bootstrap_reference_set(opt, problem, 10)
+    opt.indicator.beta = 0.3  # start with a large spreading effect
+    X, Y, _ = bootstrap_reference_set(opt, problem, interval=interval)
 else:
     X, Y, _ = opt.run()
-
 Y = get_non_dominated(Y)
 igd_mmd = igd.compute(Y=Y)
 
@@ -136,7 +92,7 @@ opt_dpn = DpN(
     verbose=True,
     type="igd",
     eta=eta,
-    Y_label=Y_label,
+    Y_label=None,
     pareto_front=pareto_front,
 )
 X_DpN, Y_DpN, _ = opt_dpn.run()
@@ -152,9 +108,7 @@ ax0 = fig.add_subplot(1, 3, 1, projection="3d")
 ax0.set_box_aspect((1, 1, 1))
 ax0.view_init(45, 45)
 ax0.plot(Y0[:, 0], Y0[:, 1], Y0[:, 2], "r+", ms=8, alpha=0.6)
-# ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "g.", ms=6, alpha=0.6)
-# ax0.plot(ref1_[:, 0], ref1_[:, 1], ref1_[:, 2], "g.", ms=6, alpha=0.6)
-# ax0.plot(ref2_[:, 0], ref2_[:, 1], ref2_[:, 2], "g.", ms=6, alpha=0.6)
+ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "g.", ms=6, alpha=0.6)
 ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", mec="none", ms=5, alpha=0.4)
 
 ax0.set_title("Initialization")
@@ -192,5 +146,4 @@ ax1.set_ylabel(r"$f_2$")
 ax1.set_ylabel(r"$f_3$")
 
 plt.tight_layout()
-# plt.show()
-plt.savefig(f"MMD-{f.__class__.__name__}_degeneration.pdf", dpi=1000)
+plt.savefig(f"MMD-{problem.__class__.__name__}_degeneration.pdf", dpi=1000)

@@ -1,3 +1,4 @@
+import pickle
 from copy import deepcopy
 from typing import Callable, Self, Tuple
 
@@ -19,6 +20,21 @@ class State:
         g_jac: Callable = None,
         g_hess: Callable = None,
     ) -> None:
+        """State object of numerical optimization
+
+        Args:
+            n_var (int): number of decision variable
+            n_eq (int): number of equality constraints
+            n_ieq (int): number of inequality constraints
+            func (Callable): objective function
+            jac (Callable): Jacobian of the objective function
+            h (Callable, optional): equality constraint. Defaults to None.
+            h_jac (Callable, optional): Jacobian of the equality constraint. Defaults to None.
+            h_hess (Callable, optional): Hessian of the equality constraint. Defaults to None.
+            g (Callable, optional): inequality constraint. Defaults to None.
+            g_jac (Callable, optional): Jacobian of the inequality constraint. Defaults to None.
+            g_hess (Callable, optional): Hessian of the inequality constraint. Defaults to None.
+        """
         self.n_var: int = n_var  # the number of the primal variables
         self.n_eq: int = n_eq
         self.n_ieq: int = n_ieq
@@ -38,7 +54,6 @@ class State:
 
     @property
     def N(self):
-        # TODO: maybe `N` -> `__len__`
         return len(self.X)
 
     def jac(self, x: np.ndarray) -> np.ndarray:
@@ -77,7 +92,7 @@ class State:
         return out if len(out) == 0 else out.reshape(self.n_cstr, self.n_var, self.n_var)
 
     def update(self, X: np.ndarray, compute_gradient: bool = True):
-        self.X = X
+        self.X = X.copy()
         primal_vars = self.primal
         self.Y = np.array([self.func(x) for x in primal_vars])
         self.J = np.array([self.jac(x) for x in primal_vars]) if compute_gradient else None
@@ -104,11 +119,30 @@ class State:
             self.cstr_hess[k] = cstr_hess
 
     def is_feasible(self) -> np.ndarray:
-        # TODO: should the active ieq cstr be considered infeasible?
+        """Check whether the solutions are feasible.
+        NOTE: the active iequality constraints are considered infeasible
+
+        Returns:
+            np.ndarray: Boolean array of feasibility
+        """
         ieq_active_idx = self.active_indices[:, self.n_eq :]
         eq_feasible = np.all(np.isclose(self.H, 0, atol=1e-4, rtol=0), axis=1)
         ieq_feasible = ~np.any(ieq_active_idx, axis=1)
         return np.bitwise_and(eq_feasible, ieq_feasible)
+
+    def check_KKT(self) -> np.ndarray:
+        """Check the KKT condition for each point in `self.X`"""
+        is_KKT = np.empty(self.N, dtype=np.bool_)
+        for i in range(self.N):
+            M = np.r_[self.J[i], self.cstr_grad[i][self.active_indices[i]]]
+            n = len(M)
+            _, S, Vh = np.linalg.svd(M.T)
+            tol = 1e-1 * max(S)
+            rank = sum(_ > tol for _ in S)
+            sign = np.sign(Vh[n - 1])
+            cond = np.all(sign == 1) or np.all(sign == -1)
+            is_KKT[i] = (rank == n - 1) and cond
+        return is_KKT
 
     @property
     def primal(self) -> np.ndarray:
@@ -129,6 +163,27 @@ class State:
     def G(self) -> np.ndarray:
         """Inequality constraint values"""
         return self.cstr_value[:, self.n_eq :]
+
+    def save(self, filename: str) -> None:
+        with open(filename + ".pkl", "wb") as file:
+            __dict__ = self.__dict__.copy()
+            del __dict__["func"]
+            del __dict__["_jac"]
+            del __dict__["h"]
+            del __dict__["h_jac"]
+            del __dict__["h_hess"]
+            del __dict__["g"]
+            del __dict__["g_jac"]
+            del __dict__["g_hess"]
+            pickle.dump(__dict__, file)
+
+    @classmethod
+    def load(cls, filename: str) -> Self:
+        with open(filename, "rb") as file:
+            data = pickle.load(file)
+            obj = cls.__new__(cls)
+            obj.__dict__.update(data)
+            return obj
 
     def __getitem__(self, indices: np.ndarray) -> Self:
         """Slicing the state class
