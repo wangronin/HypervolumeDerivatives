@@ -38,40 +38,25 @@ Consider an objective function $F:\mathbb{R}^d \rightarrow \mathbb{R}^m$, subjec
 $$\frac{\partial^2 HV(F(X))}{\partial X \partial X^\top},$$
 which is a $nd \times nd$-matrix. The implementation works for multi- and many-objective cases.
 
-### Examples
-
-Compute the HV Hessian w.r.t. the objective points, i.e., the objective function is an identity mapping:
-
-```Python
-from hvd import HypervolumeDerivatives
-
-ref = np.array([9, 10, 12])
-hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
-out = hvh.compute_hessian(X=np.array([[5, 3, 7], [2, 1, 10]]))
-
-# out["HVdY2"] = np.array(
-#     [
-#         [0, 3, 7, 0, 0, -7],
-#         [3, 0, 4, 0, 0, -4],
-#         [7, 4, 0, 0, 0, 0],
-#         [0, -0, 0, 0, 2, 9],
-#         [-0, 0, 0, 2, 0, 7],
-#         [-7, -4, 0, 9, 7, 0],
-#     ]
-# )
-```
-
-Compute the HV Hessian w.r.t. the decision points.
-First, we define an objective function (the objective space is $\mathbb{R}^3$):
+### Example
 
 ```Python
 import numpy as np
+from hvd import HypervolumeDerivatives
+from hvd.newton import HVN
 
+# Compute the HV Hessian w.r.t. the objective points
+ref = np.array([9, 10, 12])
+hvh = HypervolumeDerivatives(3, 3, ref, minimization=True)
+out = hvh.compute_derivatives(X=np.array([[5, 3, 7], [2, 1, 10]]), compute_hessian=True)
+
+# Define constants for the objective space
 c1 = np.array([1.5, 0, np.sqrt(3) / 3])
-c2 = np.array([1.5, 0.5, -1 * np.sqrt(3) / 6])
-c3 = np.array([1.5, -0.5, -1 * np.sqrt(3) / 6])
+c2 = np.array([1.5, 0.5, -np.sqrt(3) / 6])
+c3 = np.array([1.5, -0.5, -np.sqrt(3) / 6])
 ref = np.array([24, 24, 24])
 
+# Define the objective function and its derivatives
 def MOP1(x):
     x = np.array(x)
     return np.array(
@@ -93,39 +78,19 @@ def MOP1_Jacobian(x):
     )
 
 def MOP1_Hessian(x):
-    x = np.array(x)
     return np.array([2 * np.eye(3), 2 * np.eye(3), 2 * np.eye(3)])
-```
 
-Then, we compute the HV Hessian w.r.t. to the decision points in $X$:
-
-```Python
+# Compute the HV Hessian w.r.t. the decision points
 hvh = HypervolumeDerivatives(
-    n_decision_var=3, n_objective=3, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian
+    n_var=3, n_obj=3, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian
 )
 
 w = np.random.rand(20, 3)
 w /= np.sum(w, axis=1).reshape(-1, 1)
 X = w @ np.vstack([c1, c2, c3])
 out = hvh.compute(X)
-```
 
-## Hypervolume Newton Method
-
-The Hypervolume Newton Method is straightforward given the analytical computation of the HV Hessian:
-
-$$X^{t+1} = X^{t} - \sigma\Bigg[\frac{\partial^2 HV(F(X))}{\partial X \partial X^\top}\Bigg]^{-1}X^{t}.$$
-
-Note that, in the code base, we also implemented a HV Newton method for equality-constrained MOPs.
-
-### Example
-
-We took the `MOP1` problem defined above:
-
-```Python
-import numpy as np
-from hvd.newton import HVN
-
+# Hypervolume Newton Method
 max_iters = 10
 mu = 20
 ref = np.array([20, 20, 20])
@@ -134,20 +99,19 @@ w /= np.sum(w, axis=1).reshape(-1, 1)
 x0 = w @ np.vstack([c1, c2, c3])
 
 opt = HVN(
-    dim=2,
-    n_objective=2,
+    n_var=3,
+    n_obj=3,
     ref=ref,
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
-    mu=len(x0),
-    x0=x0,
-    lower_bounds=-2,
-    upper_bounds=2,
-    minimization=True,
+    X0=x0,
+    xl=np.full(3, -2),
+    xu=np.full(3, 2),
     max_iters=max_iters,
     verbose=True,
 )
+
 X, Y, stop = opt.run()
 ```
 
