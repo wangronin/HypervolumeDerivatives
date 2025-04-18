@@ -80,7 +80,8 @@ def read_reference_set_data(
     min_point_ref_cluster = np.min([len(r) for r in ref.values()])
     max_point_y_cluster = np.max(np.unique(Y_label, return_counts=True)[1])
     # if the number of clusters of `Y` is more than that of the reference set
-    if (len(np.unique(Y_label)) > len(ref)) or (max_point_y_cluster > min_point_ref_cluster):
+    # NOTE: for simple MMD, we always merge the clusters of the reference set
+    if 1 < 2 or (len(np.unique(Y_label)) > len(ref)) or (max_point_y_cluster > min_point_ref_cluster):
         ref = np.vstack([r for r in ref.values()])
         Y_label = np.zeros(len(y0))
         eta = None
