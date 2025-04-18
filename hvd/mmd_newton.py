@@ -235,6 +235,7 @@ class MMDNewton:
 
     def _compute_indicator_value(self, Y: np.ndarray):
         self.curr_indicator_value = self.indicator.compute(Y=Y)
+        self.ref.match(Y)
 
     def _compute_R(
         self, state: State, grad: np.ndarray = None
