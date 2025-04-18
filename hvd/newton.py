@@ -13,6 +13,7 @@ from scipy.spatial.distance import cdist
 from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume_derivatives import HypervolumeDerivatives
+from .reference_set import ReferenceSet
 from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
 
 __authors__ = ["Hao Wang"]
@@ -369,7 +370,7 @@ class DpN:
         func: callable,
         jac: callable,
         hessian: callable,
-        ref: Union[List[float], np.ndarray],
+        ref: ReferenceSet,
         xl: Union[List[float], np.ndarray],
         xu: Union[List[float], np.ndarray],
         type: str = "deltap",
@@ -384,9 +385,7 @@ class DpN:
         max_iters: Union[int, str] = np.inf,
         xtol: float = 0,
         verbose: bool = True,
-        pareto_front: Union[List[float], np.ndarray] = None,
-        eta=None,
-        Y_label=None,
+        metrics: Dict[str, Callable] = dict(),
         preconditioning: bool = False,
     ):
         """
@@ -428,30 +427,19 @@ class DpN:
         self.xu = xu
         self.preconditioning: bool = preconditioning
         self._check_constraints(h, g)
+        self.ref: ReferenceSet = ref
         self.state = State(
             self.dim_p, self.n_eq, self.n_ieq, func, jac, h, h_jac, h_hessian, g, g_jac, g_hessian
         )
         self._initialize(x0)
-        self._set_indicator(ref, func, jac, hessian)
+        self._set_indicator(self.ref, func, jac, hessian)
         self._set_logging(verbose)
-        # parameters controlling stop criteria
-        self.xtol = xtol
+        # parameters of the stop criteria
+        self.xtol: float = xtol
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
-        self.stop_dict: Dict = {}
-        # TODO: implement those as callbacks
-        self._pareto_front = pareto_front
-        self._perf_gd = GenerationalDistance(ref=pareto_front)
-        self._perf_igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
-        # TODO: fix those ad-hoc variable for shifting and clustering of `Y`
-        self._eta = eta
-        self.Y_label = Y_label
-        if self.Y_label is None:
-            self.Y_label = np.array([0] * self.N, dtype=int)
-            self.n_cluster = 1
-            self.Y_idx = [list(range(self.N))]
-        else:
-            self.n_cluster = len(np.unique(self.Y_label))
-            self.Y_idx = [np.nonzero(self.Y_label == i)[0] for i in range(self.n_cluster)]
+        self.stop_dict: Dict[str, float] = {}
+        self.metrics = metrics
+        self.preconditioning: bool = preconditioning
 
     def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables
@@ -486,31 +474,21 @@ class DpN:
         self.state.update(np.c_[X0, np.zeros((self.N, self.dim_d))])  # (mu, dim)
         self.iter_count: int = 0
 
-    def _set_indicator(
-        self, ref: Union[np.ndarray, Dict[int, np.ndarray]], func: Callable, jac: Callable, hessian: Callable
-    ):
+    def _set_indicator(self, ref: ReferenceSet, func: Callable, jac: Callable, hessian: Callable):
         self._gd = GenerationalDistance(ref, func, jac, hessian)
         self._igd = InvertedGenerationalDistance(ref, func, jac, hessian, cluster_matching=True)
 
     def _set_logging(self, verbose):
         """parameters for logging the history"""
         self.verbose: bool = verbose
-        self.GD_value: float = None
-        self.IGD_value: float = None
-        self.hist_Y: List[np.ndarray] = []
-        self.hist_X: List[np.ndarray] = []
-        self.hist_GD: List[float] = []
-        self.hist_IGD: List[float] = []
-        self._delta_X: float = np.inf
-        self._delta_Y: float = np.inf
-        self._delta_GD: float = np.inf
-        self._delta_IGD: float = np.inf
-        self.hist_R_norm: List[float] = []
-        self.history_medoids: Dict[int, List] = dict()
-        self.logger: logging.Logger = get_logger(
-            logger_id=f"{self.__class__.__name__}",
-            console=self.verbose,
-        )
+        self.curr_indicator_value: float = None
+        self.history_Y: List[np.ndarray] = []
+        self.history_X: List[np.ndarray] = []
+        self.history_indicator_value: List[float] = []
+        self.history_R_norm: List[float] = []
+        self.history_metrics: Dict[str, List] = defaultdict(list)
+        self.history_medoids: Dict[int, List] = defaultdict(list)
+        self.logger: logging.Logger = get_logger(logger_id=f"{self.__class__.__name__}", console=self.verbose)
 
     @property
     def xl(self):
@@ -561,39 +539,29 @@ class DpN:
 
     def log(self):
         self.iter_count += 1
-        self.hist_Y += [self.state.Y.copy()]
-        self.hist_X += [self.state.primal.copy()]
-        gd_value = self._perf_gd.compute(Y=self.state.Y)
-        igd_value = self._perf_igd.compute(Y=self.state.Y)
-        self.hist_GD += [gd_value]
-        self.hist_IGD += [igd_value]
-        self.hist_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
-
-        if self.iter_count >= 2:
-            self._delta_X = np.mean(np.sqrt(np.sum((self.hist_X[-1] - self.hist_X[-2]) ** 2, axis=1)))
-            self._delta_Y = np.mean(np.sqrt(np.sum((self.hist_Y[-1] - self.hist_Y[-2]) ** 2, axis=1)))
-            self._delta_GD = np.abs(self.hist_GD[-1] - self.hist_GD[-2])
-            self._delta_IGD = np.abs(self.hist_IGD[-1] - self.hist_IGD[-2])
-
+        self.history_Y += [self.state.Y.copy()]
+        self.history_X += [self.state.primal.copy()]
+        self.history_indicator_value += [self.curr_indicator_value]
+        self.history_R_norm += [np.median(np.linalg.norm(self.R, axis=1))]
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
-            self.logger.info(f"GD/IGD: {self.GD_value, igd_value}")
-            # self.logger.info(f"step size: {self.step_size.ravel()}")
-            self.logger.info(f"R norm: {self.hist_R_norm[-1]}")
+            self.logger.info(f"{self.active_indicator.__class__.__name__}: {self.curr_indicator_value}")
+            self.logger.info(f"step size: {self.step_size.ravel()}")
+            self.logger.info(f"R norm: {self.history_R_norm[-1]}")
+        # compute the performance metrics
+        for name, func in self.metrics.items():
+            value = func.compute(Y=self.state.Y)
+            self.history_metrics[name].append(value)
+            self.logger.info(f"{name}: {value}")
 
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:
             self.stop_dict["iter_count"] = self.iter_count
-
-        if self._delta_X < self.xtol:
-            self.stop_dict["xtol"] = self._delta_X
-            self.stop_dict["iter_count"] = self.iter_count
-
         return bool(self.stop_dict)
 
     def _compute_indicator_value(self, Y: np.ndarray):
         self.GD_value = self._gd.compute(Y=Y)
-        self.IGD_value = self._igd.compute(Y=Y, Y_label=self.Y_label)
+        self.IGD_value = self._igd.compute(Y=Y)
 
     def _compute_R(
         self, state: State, grad: np.ndarray = None
@@ -608,7 +576,7 @@ class DpN:
         primal_vars, dual_vars = state.primal, state.dual
         if grad is None:
             grad = self.active_indicator.compute_derivatives(
-                X=primal_vars, Y=state.Y, Y_label=self.Y_label, compute_hessian=False, Jacobian=state.J
+                X=primal_vars, Y=state.Y, compute_hessian=False, Jacobian=state.J
             )
         R = grad  # the unconstrained case
         dH, active_indices = None, np.array([[True] * state.n_var] * self.N)
@@ -624,12 +592,7 @@ class DpN:
         newton_step = np.zeros((self.N, self.dim))  # Netwon steps
         R = np.zeros((self.N, self.dim))  # the root-finding problem
         # gradient and Hessian of the incumbent indicator
-        grad, Hessian = self.active_indicator.compute_derivatives(
-            X=state.primal,
-            Y=state.Y,
-            Jacobian=state.J,
-            Y_label=self.Y_label,
-        )
+        grad, Hessian = self.active_indicator.compute_derivatives(X=state.primal, Y=state.Y, Jacobian=state.J)
         # the root-finding problem and the gradient of the active constraints
         R_list, dH, active_indices = self._compute_R(state, grad=grad)
         idx = active_indices[:, self.dim_p :]
@@ -664,53 +627,17 @@ class DpN:
         1. always shift the first reference set (`self.iter_count == 0`); Otherwise, weird matching can happen
         2. if at least one approximation point is close to its matched target and the Newton step is not zero.
         """
-        distance = np.linalg.norm(self.state.Y - self._igd._medoids, axis=1)
-        masks = (
-            np.array([True] * self.N)
-            if self.iter_count == 0
-            else np.bitwise_and(
-                np.isclose(distance, 0),
-                np.isclose(np.linalg.norm(self.step[:, : self.dim_p], axis=1), 0),
-            )
-        )
-        # import matplotlib.pyplot as plt
-
-        # fig, ax = plt.subplots(1, 1, figsize=(25, 6.5))
-        # plt.subplots_adjust(right=0.93, left=0.05)
-        # medoids = self._igd._medoids
-        # ax.plot(medoids[:, 0], medoids[:, 1], "k.", alpha=0.5)
-        # ax.plot(self.state.Y[:, 0], self.state.Y[:, 1], "k+", alpha=0.5)
-        # for i, m in enumerate(medoids):
-        #     ax.plot((m[0], self.state.Y[i, 0]), (m[1], self.state.Y[i, 1]), "r--", alpha=0.5)
-        # plt.savefig(f"{self.iter_count}.pdf", dpi=1000)
-
-        indices = np.nonzero(masks)[0]
-        if len(indices) == 0:
-            return
-
-        if self._eta is None:
-            self._eta = dict()
-            # compute the shift direction with CHIM
-            for i in range(self.n_cluster):
-                Y = self.state.Y[self.Y_idx[i]]
-                idx = non_domin_sort(Y, only_front_indices=True)[0]
-                self._eta[i] = compute_chim(Y[idx])
-
-        # shift the medoids
-        for i, k in enumerate(indices):
-            n = self._eta[self.Y_label[k]]
-            # NOTE: initial shift CF1: 0.6, CF2/3: 0.2
-            # DTLZ4: 0.08 seems to work a bit better
-            # TODO: create a configuration class to set those hyperparameter of this method, e.g., shift amount
-            v = 0.05 * n if self.iter_count > 0 else 0.08 * n  # the initial shift is a bit larger
-            self._igd.shift_medoids(v, k)
-
-        if self.iter_count == 0:  # record the initial medoids
-            self.history_medoids = [[m.copy()] for m in self._igd._medoids]
+        if self.iter_count == 0:  # TODO: maybe do not perform the initial shift here..
+            masks = np.array([True] * self.N)
         else:
-            # log the updated medoids
-            for i, k in enumerate(indices):
-                self.history_medoids[k].append(self._igd._medoids[indices][i])
+            distance = np.linalg.norm(self.state.Y - self.ref.medoids, axis=1)
+            step_len = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
+            masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_len, 0))
+        indices = np.nonzero(masks)[0]
+        # the initial shift is a bit larger
+        self.ref.shift(0.8 if self.iter_count == 0 else 0.05, indices)
+        for k in indices:  # log the updated medoids
+            self.history_medoids[k].append(self.ref.medoids[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
 
     def _backtracking_line_search(
@@ -766,6 +693,7 @@ class DpN:
         """The box-constraint handler projects the Newton step onto the box boundary, preventing the
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         """
+        # TODO: FIXIT
         if 1 < 2:
             return step, np.ones(len(step))
 

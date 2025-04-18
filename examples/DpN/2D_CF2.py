@@ -8,8 +8,10 @@ import numpy as np
 import pandas as pd
 from matplotlib import rcParams
 
+from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
-from hvd.problems import CF2
+from hvd.problems import CF2, IDTLZ1
+from hvd.reference_set import ReferenceSet
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -52,10 +54,11 @@ ax1.plot(ref[:, 0], ref[:, 1], "k.", ms=3)
 ax1.plot(y0[:, 0], y0[:, 1], "r+")
 ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "r.", ms=1)
 
+metrics = dict(GD=GenerationalDistance(ref=pareto_front), IGD=InvertedGenerationalDistance(ref=pareto_front))
 opt = DpN(
     dim=problem.n_decision_vars,
     n_obj=problem.n_objectives,
-    ref=ref,
+    ref=ReferenceSet(ref=ref),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
@@ -67,7 +70,6 @@ opt = DpN(
     xu=problem.upper_bounds,
     max_iters=max_iters,
     type="igd",
-    pareto_front=pareto_front,
     verbose=True,
 )
 
@@ -111,7 +113,7 @@ Y = opt.Y
 # CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
 
 if 1 < 2:
-    trajectory = np.array([y0] + opt.hist_Y)
+    trajectory = np.array([y0] + opt.history_Y)
     for i in range(N):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
         ax1.quiver(
@@ -140,7 +142,7 @@ ax1.set_ylabel(r"$f_2$")
 ax22 = ax2.twinx()
 ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
 ax2.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
-ax22.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
+ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
@@ -149,6 +151,6 @@ ax2.legend()
 
 plt.savefig(f"2D-CF2-{N}.pdf", dpi=1000)
 
-data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
+data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.history_Y[-1]]], axis=0)
 df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
 df.to_csv("CF2_example.csv")

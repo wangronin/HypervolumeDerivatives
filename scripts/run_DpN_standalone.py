@@ -53,8 +53,8 @@ if 1 < 2:
     df = df[(df.run == 10) & (df.iteration == 999)]
     # x0 = df.loc[:, "x1":f"x{problem.n_var}"].iloc[1:, :].values
     # y0 = df.loc[:, "f1":f"f{problem.n_obj}"].iloc[1:, :].values
-    x0 = df.loc[:, "x1":f"x{problem.n_decision_vars}"].iloc[10:13, :].values
-    y0 = df.loc[:, "f1":f"f{problem.n_objectives}"].iloc[10:13, :].values
+    x0 = df.loc[:, "x1" :f"x{problem.n_decision_vars}"].iloc[10:13, :].values
+    y0 = df.loc[:, "f1" :f"f{problem.n_objectives}"].iloc[10:13, :].values
 # else:
 #     ref = problem.get_pareto_front(100) - 0.02
 #     x0 = problem.get_pareto_set(N, kind="uniform")
@@ -111,7 +111,7 @@ Y = opt.Y
 ax1.plot(Y[:, 0], Y[:, 1], "r.", ms=7, alpha=0.5)
 
 if 1 < 2:
-    trajectory = np.array([y0] + opt.hist_Y)
+    trajectory = np.array([y0] + opt.history_Y)
     for i in range(N):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
         ax1.quiver(
@@ -145,7 +145,7 @@ ax1.set_ylabel(r"$f_2$")
 ax22 = ax2.twinx()
 ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
 ax2.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
-ax22.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
+ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")

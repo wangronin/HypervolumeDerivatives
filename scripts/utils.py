@@ -90,7 +90,8 @@ def read_reference_set_data(
             x0 = x0[:n]
             y0 = y0[:n]
             Y_label = Y_label[:n]
-    return ref, x0, y0, Y_label, eta
+    Y_index = [np.nonzero(Y_label == i)[0] for i in np.unique(Y_label)]
+    return ref, x0, y0, Y_index, eta
 
 
 def plot_2d(

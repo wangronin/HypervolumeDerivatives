@@ -1,3 +1,6 @@
+import sys
+
+sys.path.insert(0, "./")
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
@@ -5,7 +8,9 @@ import pandas as pd
 from matplotlib import rcParams
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
+from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
+from hvd.reference_set import ReferenceSet
 
 np.random.seed(42)
 np.set_printoptions(edgeitems=30, linewidth=100000)
@@ -79,7 +84,7 @@ point_set = np.concatenate(point_set, axis=0)
 pareto_front = np.array([MOP1(x) for x in point_set])
 
 dim = 3
-max_iters = 15
+max_iters = 20
 
 # x0 = np.array(
 #     [
@@ -104,17 +109,18 @@ x0 = np.c_[np.tile(1.5, (len(a), 1)), a]
 y0 = np.array([MOP1(_) for _ in x0])
 mu = len(x0)
 
+metrics = dict(GD=GenerationalDistance(ref=pareto_front), IGD=InvertedGenerationalDistance(ref=pareto_front))
 opt = DpN(
     dim=dim,
     n_obj=3,
-    ref=pareto_front,
+    ref=ReferenceSet(ref=pareto_front),
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
     g=g,
     g_jac=g_Jacobian,
     N=len(x0),
-    X0=x0,
+    x0=x0,
     xl=-4,
     xu=4,
     max_iters=max_iters,
@@ -146,7 +152,7 @@ ax.set_zlabel(r"$x_3$")
 ax.set_ylim([-2.5, 2])
 ax.set_xlim([-1.5, 1.5])
 
-trajectory = np.atleast_3d([x0] + opt.hist_X)
+trajectory = np.atleast_3d([x0] + opt.history_X)
 for i in range(len(x0)):
     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
     ax.quiver(
@@ -206,9 +212,9 @@ ax.set_zlabel(r"$f_3$")
 
 ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
-ax.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
-ax.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
-ax_.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
+# ax.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
+# ax.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
+ax_.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 ax_.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")

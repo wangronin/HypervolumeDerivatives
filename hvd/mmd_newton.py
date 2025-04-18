@@ -10,8 +10,8 @@ from matplotlib import rcParams
 from scipy.linalg import block_diag, solve
 
 from .base import State
-from .mmd import MMDMatching
-from .reference_set import ClusteredReferenceSet
+from .mmd import MMD, MMDMatching
+from .reference_set import ReferenceSet
 from .utils import get_logger, precondition_hessian, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
@@ -61,7 +61,7 @@ class MMDNewton:
         func: callable,
         jac: callable,
         hessian: callable,
-        ref: ClusteredReferenceSet,
+        ref: ReferenceSet,
         xl: Union[List[float], np.ndarray],
         xu: Union[List[float], np.ndarray],
         N: int = 5,
@@ -75,6 +75,7 @@ class MMDNewton:
         verbose: bool = True,
         metrics: Dict[str, Callable] = dict(),
         preconditioning: bool = False,
+        matching: bool = True,
         **kwargs,
     ):
         """
@@ -112,13 +113,15 @@ class MMDNewton:
         self.N: int = N
         self.xl: np.ndarray = xl
         self.xu: np.ndarray = xu
-        self.ref: ClusteredReferenceSet = ref  # TODO: we should pass ref to the indicator directly
+        self.ref: ReferenceSet = ref  # TODO: we should pass ref to the indicator directly
         self._check_constraints(h, g)
         self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
-        # TODO: move indicator out of this class
-        self.indicator = MMDMatching(
-            self.dim_p, self.n_obj, self.ref, func, jac, hessian, theta=1.0 / N, beta=0.25
-        )
+        if matching:
+            self.indicator = MMDMatching(
+                self.dim_p, self.n_obj, self.ref, func, jac, hessian, beta=0.25, **kwargs
+            )
+        else:
+            self.indicator = MMD(self.dim_p, self.n_obj, self.ref, func, jac, hessian, **kwargs)
         self._initialize(X0)
         self._set_logging(verbose)
         # parameters of the stop criteria
@@ -148,7 +151,7 @@ class MMDNewton:
             X0 = np.clip(X0, self.xl, self.xu)
             # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is not defined
             # on the decision boundary or the local Hessian is ill-conditioned.
-            if 1 < 2:
+            if 11 < 2:
                 X0 = np.clip(X0 - self.xl, 1e-2, 1) + self.xl
                 X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
             self.N = len(X0)
@@ -199,7 +202,7 @@ class MMDNewton:
         # compute the initial indicator values. The first clustering and matching is executed here.
         self._compute_indicator_value(self.state.Y)
         # shift the reference set if needed
-        self._shift_reference_set()
+        # self._shift_reference_set()
         # compute the Newton step
         self.step, self.R = self._compute_netwon_step()
         # prevent the decision points from moving out of the decision space.

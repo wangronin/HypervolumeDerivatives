@@ -1,4 +1,4 @@
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import matlab.engine
 import matplotlib.pyplot as plt
@@ -9,7 +9,7 @@ from sklearn.neighbors import LocalOutlierFactor
 from sklearn_extra.cluster import KMedoids
 
 from .problems import MOOAnalytical
-from .reference_set import ClusteredReferenceSet
+from .reference_set import ReferenceSet
 from .utils import compute_chim, get_non_dominated
 
 plt.style.use("ggplot")
@@ -73,39 +73,65 @@ def plot_bootstrap(
     plt.savefig(name, dpi=1000)
 
 
+def filter_outliers(data: List) -> np.ndarray:
+    X, Y = data[0], data[1]
+    idx = get_non_dominated(Y, return_index=True)
+    X, Y = X[idx], Y[idx]
+    idx = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
+    X, Y = X[idx == 1], Y[idx == 1]
+    # idx = np.isclose(Y.sum(axis=1), 0.5, atol=1e-1)
+    # X, Y = X[idx == 1], Y[idx == 1]
+    return X, Y
+
+
 def bootstrap_reference_set(
     optimizer,
     problem: MOOAnalytical,
     interval: int = 5,
-    plot: bool = True,
     with_rsg: bool = True,
-) -> Tuple[np.ndarray, np.ndarray, Dict]:
+    plot: bool = True,
+    save_reference_set: bool = False,
+    save_population: bool = False,
+    last_n: int = 3,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[np.ndarray]]:
     """Bootstrap the reference set with the intermediate population of an MOO algorithm
 
     Args:
         optimizer (_type_): an MOO algorithm
         problem (MOOAnalytical): the MOO problem to solve
         init_ref (np.ndarray): the initial reference set
-        interval (int, optional): intervals at which bootstrapping is performed. Defaults to 5.
+        interval (int, optional): intervals at which bootstrapping is performed. Defaults to 5
         with_rsg (bool, optional): whether to use Angel's RSG method to interpolate the reference set
-
+        save_reference_set (bool, optional): whether to save the intermediate reference sets or not
+        save_population (bool, optional): whether to save the population in each generation
     Returns:
         Tuple[np.ndarray, np.ndarray, Dict]: (efficient set, Pareto front approximation,
             the stopping criteria)
     """
     opt_name: str = optimizer.__class__.__name__
+    dim: int = optimizer.dim_p
     N: int = optimizer.N
     alpha: float = 0.05
     Y0: np.ndarray = optimizer.state.Y.copy()
     ref0: np.ndarray = optimizer.ref.reference_set.copy()
     ref_list: list = []
+    X_list: list = []
+    Y_list: list = []
     pareto_front: np.ndarray = problem.get_pareto_front()
+    problem_name: str = problem.__class__.__name__
 
     if with_rsg:  # initialize the matlab backend
         eng = matlab.engine.start_matlab()
         eng.cd(r"./RSG/", nargout=0)
 
     for i in range(optimizer.max_iters):
+        X_list.append(optimizer.state.X.copy()[:, :dim])  # only keep the primal variables
+        Y_list.append(optimizer.state.Y.copy())
+        if save_population:
+            X, Y = optimizer.state.X, optimizer.state.Y
+            pd.DataFrame(X).to_csv(f"X_{opt_name}_{problem_name}_iteration{i}.csv", index=False, header=False)
+            pd.DataFrame(Y).to_csv(f"Y_{opt_name}_{problem_name}_iteration{i}.csv", index=False, header=False)
+
         # TODO: generalize the condition to trigger the boostrap:
         # maybe if the R norm for most points are near zero?
         if i % interval == 0 and i > 0:
@@ -117,37 +143,55 @@ def bootstrap_reference_set(
                 is_KKT = optimizer.state.check_KKT()
                 idx = np.bitwise_and(is_KKT, is_feasible)
                 Y = Y[idx]
+
             # only take the non-dominated points
             idx = get_non_dominated(Y, return_index=True)
             Y = Y[idx]
             # take out the outliers
-            indices = LocalOutlierFactor(n_neighbors=2).fit_predict(Y)
-            Y = Y[indices == 1]
+            # TODO: FIXIT!
+            idx = np.isclose(Y.sum(axis=1), 0.5, atol=1e-1)
+            Y = Y[idx]
+            # indices = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
+            # Y = Y[indices == 1]
             if with_rsg:  # call the RSG method written in Matlab to fill the reference set
                 pd.DataFrame(Y).to_csv("./RSG/MMD_boostrap.csv", index=False, header=False)
                 ref = np.array(eng.RSG())
             else:
                 ref = Y.copy()
-            ref_list.append(ref)
+            # keep track of the new reference set
+            ref_list.append(ref.copy())
             if plot:  # plot the interpolated reference set for visual inspection
-                plot_bootstrap(ref0, ref, Y0, Y, pareto_front, f"{opt_name}-iteration{i}.pdf")
+                plot_bootstrap(ref0, ref, Y0, Y, pareto_front, f"{opt_name}_{problem_name}_iteration{i}.pdf")
                 Y0 = Y.copy()
                 ref0 = ref.copy()
-            # whether
+            # whether to use the reference set in the history as the new one
             if 11 < 2:
                 R = np.concatenate(ref_list, axis=0)
                 km = KMedoids(n_clusters=N, method="alternate", random_state=0, init="k-medoids++").fit(R)
                 ref = R[km.medoid_indices_]
-            # set the new reference set back to the optimizer
-            eta = compute_chim(ref)
+            if save_reference_set:
+                pd.DataFrame(ref).to_csv(f"ref_{opt_name}-iteration{i}.csv", index=False, header=False)
+
+            # TODO: computing shift direction seems to be problematic. FIXIT
+            # eta = compute_chim(ref)
+            eta = -1 * np.array([1 / np.sqrt(3)] * 3)
             ref += 0.05 * eta
-            ref = ClusteredReferenceSet(ref=ref, eta={0: eta}, Y_idx=None)
+            ref = ReferenceSet(ref=ref, eta={0: eta}, Y_idx=None)
             optimizer.indicator.ref = optimizer.ref = ref
-            optimizer.indicator.compute(Y=optimizer.state.Y)  # to compute the medoids
+            optimizer.indicator.compute(Y=optimizer.state.Y)
             # discount the weight of the spread term to reduce spread effect in the following iterations
-            optimizer.indicator.beta = optimizer.indicator.beta * 0.95
+            optimizer.indicator.beta = optimizer.indicator.beta * 1
 
         # the next iteration
         optimizer.newton_iteration()
         optimizer.log()
-    return optimizer.state.primal, optimizer.state.Y, optimizer.stop_dict
+
+    # filter out the outliers in the approximation set
+    filtered = map(filter_outliers, zip(X_list[-last_n:], Y_list[-last_n:]))
+    X_, Y_ = list(zip(*filtered))
+    X_ = np.concatenate(X_, axis=0)
+    Y_ = np.concatenate(Y_, axis=0)
+    km = KMedoids(n_clusters=N, method="alternate", random_state=42, init="k-medoids++").fit(Y_)
+    X0_bootstrap = X_[km.medoid_indices_]
+    Y0_bootstrap = Y_[km.medoid_indices_]
+    return X0_bootstrap, Y0_bootstrap, ref, ref_list

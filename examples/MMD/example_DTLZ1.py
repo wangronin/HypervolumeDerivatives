@@ -9,10 +9,11 @@ from matplotlib import rcParams
 
 from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
+from hvd.mmd import MMD
 from hvd.mmd_newton import MMDNewton
 from hvd.newton import DpN
 from hvd.problems import DTLZ1
-from hvd.reference_set import ClusteredReferenceSet
+from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 
 plt.style.use("ggplot")
@@ -29,7 +30,8 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
-max_iters = 16
+max_iters = 10
+interval = 5
 
 problem = DTLZ1(n_var=7, boundry_constraints=True)
 pareto_front = problem.get_pareto_front()
@@ -46,10 +48,11 @@ ref = {0: ref_}
 N = len(X0)
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
 igd = InvertedGenerationalDistance(pareto_front)
+mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=1.0 / N)
 opt = MMDNewton(
     n_var=problem.n_var,
     n_obj=problem.n_obj,
-    ref=ClusteredReferenceSet(ref=ref, eta=eta, Y_idx=Y_idx),
+    ref=ReferenceSet(ref=ref, eta=eta, Y_idx=Y_idx),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
@@ -64,20 +67,20 @@ opt = MMDNewton(
     metrics=metrics,
     preconditioning=False,
 )
-if 1 < 2:
-    opt.indicator.beta = 0.25
-    # TODO: figure out how to determine when to bootstrap automatically
-    X, Y, _ = bootstrap_reference_set(opt, problem, 5)
-else:
-    X, Y, _ = opt.run()
+opt.indicator.beta = 0.25
+# TODO: figure out how to determine when to bootstrap automatically
+X, Y, _, __ = bootstrap_reference_set(
+    opt, problem, interval=interval, plot=True, save_reference_set=False, save_population=False
+)
+# TODO: maybe create a `ref0` in the optimizer
+ref_new = opt.ref.reference_set - 0.05 * opt.ref.eta[0]
 
-Y = get_non_dominated(Y)
-igd_mmd = igd.compute(Y=Y)
-
-opt_dpn = DpN(
+# Several DpN runs for the convergence
+metrics = dict(GD=GenerationalDistance(ref=pareto_front), IGD=InvertedGenerationalDistance(ref=pareto_front))
+opt = DpN(
     dim=problem.n_var,
     n_obj=problem.n_obj,
-    ref=ref,
+    ref=ReferenceSet(ref=ref_new, eta=eta),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
@@ -90,13 +93,35 @@ opt_dpn = DpN(
     max_iters=max_iters,
     verbose=True,
     type="igd",
-    eta=eta,
-    Y_label=Y_label,
-    pareto_front=pareto_front,
+    metrics=metrics,
+)
+X, Y, _ = opt.run()
+Y = get_non_dominated(Y)
+igd_mmd = igd.compute(Y=Y)
+mmd_mmd = mmd.compute(Y=Y)
+
+opt_dpn = DpN(
+    dim=problem.n_var,
+    n_obj=problem.n_obj,
+    ref=ReferenceSet(ref=ref, eta=eta),
+    func=problem.objective,
+    jac=problem.objective_jacobian,
+    hessian=problem.objective_hessian,
+    g=problem.ieq_constraint,
+    g_jac=problem.ieq_jacobian,
+    N=N,
+    x0=X0,
+    xl=problem.xl,
+    xu=problem.xu,
+    max_iters=max_iters,
+    verbose=True,
+    type="igd",
+    metrics=metrics,
 )
 X_DpN, Y_DpN, _ = opt_dpn.run()
 Y_DpN = get_non_dominated(Y_DpN)
 igd_dpn = igd.compute(Y=Y_DpN)
+mmd_dpn = mmd.compute(Y=Y_DpN)
 
 colors = plt.get_cmap("tab20").colors
 colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
@@ -129,20 +154,20 @@ ax1.set_box_aspect((1, 1, 1))
 ax1.view_init(45, 45)
 ax1.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r*", ms=8, alpha=0.6)
 ax1.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", mec="none", ms=5, alpha=0.4)
-ax1.set_title(f"MMD's IGD: {igd_mmd}")
+ax1.set_title(f"MMD: {mmd_mmd}\n IGD:{igd_mmd}", fontsize=10)
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 ax1.set_ylabel(r"$f_3$")
 
-ax1 = fig.add_subplot(1, 3, 3, projection="3d")
-ax1.set_box_aspect((1, 1, 1))
-ax1.view_init(45, 45)
-ax1.plot(Y_DpN[:, 0], Y_DpN[:, 1], Y_DpN[:, 2], "r*", ms=8, alpha=0.6)
-ax1.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", mec="none", ms=5, alpha=0.4)
-ax1.set_title(f"DpN's IGD: {igd_dpn}")
-ax1.set_xlabel(r"$f_1$")
-ax1.set_ylabel(r"$f_2$")
-ax1.set_ylabel(r"$f_3$")
+ax2 = fig.add_subplot(1, 3, 3, projection="3d")
+ax2.set_box_aspect((1, 1, 1))
+ax2.view_init(45, 45)
+ax2.plot(Y_DpN[:, 0], Y_DpN[:, 1], Y_DpN[:, 2], "r*", ms=8, alpha=0.6)
+ax2.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "k.", mec="none", ms=5, alpha=0.4)
+ax2.set_title(f"MMD: {mmd_dpn}\n IGD:{igd_dpn}", fontsize=10)
+ax2.set_xlabel(r"$f_1$")
+ax2.set_ylabel(r"$f_2$")
+ax2.set_ylabel(r"$f_3$")
 
 plt.tight_layout()
 plt.savefig(f"MMD-{problem.__class__.__name__}.pdf", dpi=1000)

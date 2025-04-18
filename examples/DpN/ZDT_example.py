@@ -5,8 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
 
+from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
 from hvd.problems import ZDT1, PymooProblemWithAD
+from hvd.reference_set import ReferenceSet
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 17
@@ -64,10 +66,11 @@ ax2.plot(x0[:, 0], x0[:, 1], "r.", ms=9, alpha=0.8, clip_on=False)
 ax3.plot(x0[:, 0], x0[:, 1], "r.", ms=9, alpha=0.8, clip_on=False)
 # ax3.plot(pareto_set[:, 0], pareto_set[:, 1], "g.", mec="none", ms=5, alpha=0.4)
 
+metrics = dict(GD=GenerationalDistance(ref=pareto_front), IGD=InvertedGenerationalDistance(ref=pareto_front))
 opt = DpN(
     dim=problem.n_var,
     n_obj=problem.n_obj,
-    ref=ref,
+    ref=ReferenceSet(ref=ref),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
@@ -80,7 +83,6 @@ opt = DpN(
     max_iters=max_iters,
     type="igd",
     verbose=True,
-    pareto_front=pareto_front,
 )
 
 X, Y, _ = opt.run()
@@ -191,18 +193,18 @@ ax3.set_ylabel(r"$x_2$")
 # ax3.set_ylim([-1e-5, 1e-4])
 
 
-M = np.vstack([m[-1] for m in opt.history_medoids])
+# M = np.vstack([m[-1] for m in opt.history_medoids])
 # x1 = M[:, 0]
 # x2 = [f_x2(*_) for _ in zip(x1, M[:, 1])]
 # M_x = np.c_[x1, x2]
 
-ax1.plot(M[:, 0], M[:, 1], "r^", ms=7, alpha=0.5, clip_on=False)
+# ax1.plot(M[:, 0], M[:, 1], "r^", ms=7, alpha=0.5, clip_on=False)
 # ax2.plot(M_x[:, 0], M_x[:, 1], "r^", ms=7, alpha=0.5)
 ax1.plot(Y[:, 0], Y[:, 1], "r*", ms=7, alpha=0.5, clip_on=False)
 ax2.plot(X[:, 0], X[:, 1], "r*", ms=7, alpha=0.5, clip_on=False)
 # ax3.plot(X[:, 0], X[:, 1], "r*", ms=7, alpha=0.5, clip_on=False)
 # plot the trajectory
-trajectory = np.array([x0] + opt.hist_X)
+trajectory = np.array([x0] + opt.history_X)
 for i in range(N):
     x, y = trajectory[:, i, 0], trajectory[:, i, 1]
     ax2.quiver(
@@ -220,7 +222,7 @@ for i in range(N):
         headwidth=2.7,
         clip_on=False,
     )
-trajectory = np.array([y0] + opt.hist_Y)
+trajectory = np.array([y0] + opt.history_Y)
 for i in range(N):
     x, y = trajectory[:, i, 0], trajectory[:, i, 1]
     ax1.quiver(

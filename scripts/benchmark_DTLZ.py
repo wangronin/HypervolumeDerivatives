@@ -85,7 +85,9 @@ def execute(run: int) -> np.ndarray:
     # plotting the final approximation set
     if 1 < 2:
         fig_name = f"./plots/{problem_name}_DpN_{emoa}_run{run}_{gen}"
-        plot_3d(y0, Y, all_ref, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+        plot_3d(
+            y0, Y, all_ref, opt.history_Y, opt.history_medoids, opt.hist_IGD, opt.history_R_norm, fig_name
+        )
     # save the final approximation set
     if 1 < 2:
         df = pd.DataFrame(Y, columns=[f"f{i}" for i in range(1, Y.shape[1] + 1)])

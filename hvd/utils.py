@@ -149,7 +149,6 @@ def timeit(func):
     return __func__
 
 
-# TODO: this is too slow, improve the algorithm
 def get_non_dominated(pareto_front: np.ndarray, return_index: bool = False, weakly_dominated: bool = True):
     """Find pareto front (undominated part) of the input performance data.
     Minimization is assumed
