@@ -44,7 +44,7 @@ ref_point = dict(
 def execute(run: int) -> np.ndarray:
     # read the reference set
     ref, x0, y0, Y_index, eta = read_reference_set_data(path, problem_name, emoa, run, gen)
-    ref_ = np.vstack([r for r in ref.values()])
+    ref_ = np.vstack([r for r in ref])
     N = len(x0)
     # create the algorithm
     pareto_front = problem.get_pareto_front()
@@ -102,7 +102,7 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 1 < 2:
+if 11 < 2:
     for i in run_id:
         execute(i)
 else:
