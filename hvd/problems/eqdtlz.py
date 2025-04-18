@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import numpy as np
 
 from ..utils import timeit
 from .dtlz import DTLZ1, DTLZ2, DTLZ3, DTLZ4, BaseDTLZ
@@ -11,6 +12,10 @@ class InvertedDTLZ(BaseDTLZ):
         g = self.g(x_M)
         x1, x2 = self._transform_x(x_, g)
         return (1 + g) / 2 - self.scale * (1 + g) * jnp.cumprod(jnp.r_[[1], x1])[::-1] * jnp.r_[[1], x2[::-1]]
+
+    def get_pareto_front(self, **kwargs) -> np.ndarray:
+        ref_dirs = super().get_pareto_front(**kwargs)
+        return 1 / 2 - ref_dirs
 
 
 class ConstrainedDTLZ(BaseDTLZ):

@@ -117,7 +117,7 @@ CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
 CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
 
 if 11 < 2:
-    trajectory = np.array([X0] + opt.hist_X)
+    trajectory = np.array([X0] + opt.history_X)
     for i in range(mu):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
         ax0.quiver(
@@ -134,7 +134,7 @@ if 11 < 2:
             headlength=4.7,
             headwidth=2.7,
         )
-    trajectory = np.array([Y0] + opt.hist_Y)
+    trajectory = np.array([Y0] + opt.history_Y)
     for i in range(mu):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
         ax1.quiver(
@@ -166,7 +166,7 @@ ax1.set_ylabel(r"$f_2$")
 ax22 = ax2.twinx()
 # ax2.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
 ax2.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
-ax22.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
+ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")

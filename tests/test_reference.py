@@ -7,14 +7,14 @@ import numpy as np
 import pytest
 from scipy.spatial.distance import cdist
 
-from hvd.reference_set import ClusteredReferenceSet
+from hvd.reference_set import ReferenceSet
 
 
 @pytest.mark.parametrize("n_component", [1, 3, 5])
 def test_initialization_reference(n_component: int):
     x = np.linspace(0, 1, 20)
     ref_ = {i: np.c_[x, 1 - x] + i for i in range(n_component)}
-    ref = ClusteredReferenceSet(ref=ref_, eta=None, Y_idx=None)
+    ref = ReferenceSet(ref=ref_, eta=None, Y_idx=None)
     assert len(ref._ref) == n_component
     assert ref.n_obj == 2
     assert ref.n_components == n_component
@@ -41,7 +41,7 @@ def test_match(n_component: int):
 
         plt.show()
 
-    ref = ClusteredReferenceSet(ref=ref_, eta=None, Y_idx=Y_idx)
+    ref = ReferenceSet(ref=ref_, eta=None, Y_idx=Y_idx)
     for i in range(n_component):
         assert np.all(np.isclose(ref.eta[i], np.array([-0.70710678, -0.70710678])))
         assert np.all(np.isclose(ref._ref[i], ref_[i]))

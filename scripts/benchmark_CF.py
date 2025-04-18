@@ -60,10 +60,10 @@ def execute(run: int) -> np.ndarray:
     if 1 < 2:
         fig_name = f"./plots/{problem_name}_DpN_{emoa}_run{run}_{gen}"
         hist_Y, hist_medoids, hist_perf, hist_R_norm = (
-            opt.hist_Y,
+            opt.history_Y,
             opt.history_medoids,
             opt.hist_IGD,
-            opt.hist_R_norm,
+            opt.history_R_norm,
         )
         if problem.n_obj == 2:
             plot_2d(y0, Y, ref_, pareto_front, hist_Y, hist_medoids, hist_perf, hist_R_norm, fig_name)

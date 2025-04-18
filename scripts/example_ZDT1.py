@@ -45,7 +45,9 @@ opt = DpN(
 X, Y, _ = opt.run()
 
 fig_name = f"ZDT1_example.pdf"
-plot_2d(y0, Y, ref, pareto_front, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
-data = [np.c_[[i + 1] * N, y] for i, y in enumerate(opt.hist_Y)]
+plot_2d(
+    y0, Y, ref, pareto_front, opt.history_Y, opt.history_medoids, opt.hist_IGD, opt.history_R_norm, fig_name
+)
+data = [np.c_[[i + 1] * N, y] for i, y in enumerate(opt.history_Y)]
 df = pd.DataFrame(np.concatenate(data, axis=0), columns=["iteration", "f1", "f2"])
 df.to_csv("ZDT1_example.csv")

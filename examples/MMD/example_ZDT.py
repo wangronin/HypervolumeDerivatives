@@ -10,7 +10,7 @@ from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.mmd_newton import MMDNewton
 from hvd.newton import DpN
 from hvd.problems import ZDT1, PymooProblemWithAD
-from hvd.reference_set import ClusteredReferenceSet
+from hvd.reference_set import ReferenceSet
 from hvd.utils import read_reference_set_data
 
 plt.style.use("ggplot")
@@ -56,7 +56,7 @@ else:
     eta, Y_idx = {0: np.array([-0.70710678, -0.70710678])}, None
 
 N = len(X0)
-ref = ClusteredReferenceSet(ref=ref_, eta=eta, Y_idx=Y_idx)
+ref = ReferenceSet(ref=ref_, eta=eta, Y_idx=Y_idx)
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
 opt = MMDNewton(
     n_var=problem.n_var,
@@ -133,7 +133,7 @@ if 1 < 2:
             headwidth=2.5,
         )
 
-    trajectory = np.array([Y0] + opt2.hist_Y)
+    trajectory = np.array([Y0] + opt2.history_Y)
     for i in range(N):
         x, y = trajectory[:, i, 0], trajectory[:, i, 1]
         ax1.quiver(
@@ -219,7 +219,7 @@ ax1.set_ylabel(r"$f_2$")
 
 xticks = range(1, len(opt.history_indicator_value) + 1)
 ax2.semilogy(xticks, opt.history_R_norm, "k--", label=r"$||R(\mathbf{X})||_{\mathrm{MMD}}$")
-ax2.semilogy(xticks, opt2.hist_R_norm, "r--", label=r"$||R(\mathbf{X})||_{\mathrm{DpN}}$")
+ax2.semilogy(xticks, opt2.history_R_norm, "r--", label=r"$||R(\mathbf{X})||_{\mathrm{DpN}}$")
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
 ax2.legend()

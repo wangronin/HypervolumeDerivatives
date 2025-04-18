@@ -69,8 +69,10 @@ opt = DpN(
 X, Y, _ = opt.run()
 
 fig_name = f"ZDT6_example.pdf"
-plot_2d(y0, Y, ref, pareto_front, opt.hist_Y, opt.history_medoids, opt.hist_IGD, opt.hist_R_norm, fig_name)
+plot_2d(
+    y0, Y, ref, pareto_front, opt.history_Y, opt.history_medoids, opt.hist_IGD, opt.history_R_norm, fig_name
+)
 
-data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
+data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.history_Y[-1]]], axis=0)
 df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
 df.to_csv("ZDT6_example.csv")

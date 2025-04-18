@@ -87,7 +87,7 @@ ax.plot(X[:, 0], X[:, 1], X[:, 2], "g*", ms=7, alpha=0.5)
 # plot the constraint boundary
 ax.plot3D(pareto_set[:, 0], pareto_set[:, 1], pareto_set[:, 2], "gray", alpha=0.4)
 # plot the trajectory of decision points
-trajectory = np.atleast_3d([x0] + opt.hist_X)
+trajectory = np.atleast_3d([x0] + opt.history_X)
 for i in range(len(trajectory[0])):
     x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
     ax.quiver(
@@ -137,7 +137,7 @@ ax = fig.add_subplot(1, 3, 3)
 ax_ = ax.twinx()
 ax.semilogy(range(1, len(opt.hist_GD) + 1), opt.hist_GD, "b-", label="GD")
 ax.semilogy(range(1, len(opt.hist_IGD) + 1), opt.hist_IGD, "r-", label="IGD")
-ax_.semilogy(range(1, len(opt.hist_R_norm) + 1), opt.hist_R_norm, "g--")
+ax_.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 ax_.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
 ax.set_title("Performance")
 ax.set_xlabel("iteration")
@@ -146,6 +146,6 @@ ax.legend()
 plt.tight_layout()
 plt.savefig(f"{type(f).__name__}-{len(x0)}.pdf", dpi=700)
 
-data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.hist_Y[-1]]], axis=0)
+data = np.concatenate([np.c_[[0] * N, y0], np.c_[[max_iters] * N, opt.history_Y[-1]]], axis=0)
 df = pd.DataFrame(data, columns=["iteration", "f1", "f2"])
 df.to_csv(f"{f.__class__.__name__}_example.csv")

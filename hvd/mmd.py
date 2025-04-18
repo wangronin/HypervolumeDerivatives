@@ -8,7 +8,7 @@ from jax import jacfwd, jacrev, jit
 from scipy.linalg import block_diag
 from scipy.spatial.distance import cdist
 
-from .reference_set import ClusteredReferenceSet
+from .reference_set import ReferenceSet
 
 # enable double-precision of JAX
 os.environ["JAX_ENABLE_X64"] = "True"
@@ -38,11 +38,11 @@ class MMD:
         self,
         n_var: int,
         n_obj: int,
-        ref: np.ndarray,
+        ref: Union[np.ndarray, ReferenceSet],
         func: callable = None,
         jac: callable = None,
         hessian: callable = None,
-        kernel: callable = rational_quadratic,
+        kernel: callable = rbf,
         theta: float = 1.0,
     ) -> None:
         """Maximum Mean Discrepancy (MMD) indicator for multi-objective optimization
@@ -57,6 +57,8 @@ class MMD:
             kernel (callable, optional): the kernel function. Defaults to `rational_quadratic`.
             theta (float, optional): length-scale of the kernel. Defaults to 1.0.
         """
+        if isinstance(ref, np.ndarray):
+            ref = ReferenceSet(ref)
         self.func = func if func is not None else lambda x: x
         self.jac = jac if jac is not None else lambda x: np.diag(np.ones(len(x)))
         self.hessian = hessian if hessian is not None else lambda x: np.zeros((len(x), len(x), len(x)))
@@ -64,7 +66,7 @@ class MMD:
         self.n_obj = int(n_obj)
         self.theta: float = theta  # kernel's length-scale
         self.ref = ref
-        self.N = self.ref.shape[0]
+        self.N = self.ref.N
         # kernel for correlations between `ref` and `Y`
         self.k = partial(kernel, theta=self.theta)
         self.k_dx = jit(jacrev(self.k))
@@ -86,12 +88,42 @@ class MMD:
             assert X is not None
             assert self.func is not None
             Y = np.array([self.func(x) for x in X])
-        RR = cdist(self.ref, self.ref, metric=self.k)
+        reference_set = self.ref.reference_set
+        RR = cdist(reference_set, reference_set, metric=self.k)
         YY = cdist(Y, Y, metric=self.k)
-        RY = cdist(self.ref, Y, metric=self.k)
+        RY = cdist(reference_set, Y, metric=self.k)
         return RR.mean() + YY.mean() - 2 * RY.mean()
 
-    def compute_gradient(self, X: np.ndarray, Y: np.ndarray = None) -> Dict[str, np.ndarray]:
+    def compute_derivatives(
+        self,
+        X: np.ndarray,
+        Y: np.ndarray = None,
+        compute_hessian: bool = True,
+        jacobian: np.ndarray = None,
+    ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+        """compute the derivatives of the inverted generational distance^p
+
+        Args:
+            X (np.ndarray): the decision points of shape (N, dim).
+            Y (np.ndarray, optional): the objective points of shape (N, n_objective). Defaults to None.
+            compute_hessian (bool, optional): whether the Hessian is computed. Defaults to True.
+            jacobian (np.ndarray, optional): Jacobian of the objective function at `X`. Defaults to None.
+
+        Returns:
+            Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+                if `compute_hessian` = True, it returns (gradient, Hessian)
+                otherwise, it returns (gradient, )
+        """
+        if compute_hessian:
+            out = self.compute_hessian(X, Y)
+            grad, hessian = out["MMDdX"], out["MMDdX2"]
+        else:
+            grad = self.compute_gradient(X, Y, jacobian)["MMDdX"]
+        return (grad, hessian) if compute_hessian else grad
+
+    def compute_gradient(
+        self, X: np.ndarray, Y: np.ndarray = None, jacobian: np.ndarray = None
+    ) -> Dict[str, np.ndarray]:
         """compute the gradient of the MMD indicator w.r.t. objective points
 
         Args:
@@ -101,13 +133,13 @@ class MMD:
             np.ndarray: the gradient of shape (`N`, `self.n_objective`)
         """
         X = self._check_X(X)
-        Y, YdX, YdX2 = self._compute_objective_derivatives(X, Y)
+        Y, YdX, YdX2 = self._compute_objective_derivatives(X, Y, jacobian)
         N = Y.shape[0]
         MMDdY = np.zeros((N, self.n_obj))
         for l, y in enumerate(Y):
             # TODO: `term1` is only correct for stationary kernels
             term1 = np.sum([self.k_dx(y, Y[i]) for i in range(N) if i != l], axis=0)
-            term2 = np.sum([self.k_dx(y, self.ref[i]) for i in range(self.N)], axis=0)
+            term2 = np.sum([self.k_dx(y, self.ref.reference_set[i]) for i in range(self.N)], axis=0)
             MMDdY[l] = 2 * (term1 / N**2 - term2 / (N * self.N))
         MMDdX = np.einsum("ij,ijk->ik", MMDdY, YdX)
         return dict(MMDdX=MMDdX, MMDdY=MMDdY, Y=Y, YdX=YdX, YdX2=YdX2)
@@ -137,7 +169,9 @@ class MMD:
                 else:
                     # TODO: `term1` is only correct for stationary kernels
                     term1 = np.sum([self.k_dx2(Y[l], Y[i]) for i in range(N) if i != l], axis=0)
-                    term2 = np.sum([self.k_dx2(Y[l], self.ref[i]) for i in range(self.N)], axis=0)
+                    term2 = np.sum(
+                        [self.k_dx2(Y[l], self.ref.reference_set[i]) for i in range(self.N)], axis=0
+                    )
                     MMDdY2[r, c] = 2 * (term1 / N**2 - term2 / (N * self.N))
                 # compute MMDdX2
                 rr, cc = slice(m * dim_x, (m + 1) * dim_x), slice(l * dim_x, (l + 1) * dim_x)
@@ -147,14 +181,17 @@ class MMD:
         return dict(MMDdX2=MMDdX2, MMDdY2=MMDdY2, MMDdX=MMDdX, MMDdY=MMDdY)
 
     def _compute_objective_derivatives(
-        self, X: np.ndarray, Y: np.ndarray = None
+        self,
+        X: np.ndarray,
+        Y: np.ndarray = None,
+        jacobian: np.ndarray = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """compute the objective function value, the Jacobian, and Hessian tensor"""
         if Y is None:
             Y = np.array([self.func(x) for x in X])  # `(N, n_objective)`
         assert Y.shape[1] == self.n_obj
         # Jacobians of the objective function
-        YdX = np.array([self.jac(x) for x in X])  # `(N, n_objective, n_decision_var)`
+        YdX = np.array([self.jac(x) for x in X]) if jacobian is None else jacobian
         # Hessians of the objective function
         YdX2 = np.array([self.hessian(x) for x in X])  # `(N, n_objective, n_decision_var, n_decision_var)`
         return Y, YdX, YdX2
@@ -174,7 +211,7 @@ class MMDMatching:
         self,
         n_var: int,
         n_obj: int,
-        ref: Union[np.ndarray, ClusteredReferenceSet],
+        ref: Union[np.ndarray, ReferenceSet],
         func: callable = None,
         jac: callable = None,
         hessian: callable = None,
@@ -197,7 +234,7 @@ class MMDMatching:
                 Defaults to 0.5.
         """
         if isinstance(ref, np.ndarray):
-            ref = ClusteredReferenceSet(ref)
+            ref = ReferenceSet(ref)
         self.func = func if func is not None else lambda x: x
         self.jac = jac if jac is not None else lambda x: np.diag(np.ones(len(x)))
         self.hessian = hessian if hessian is not None else lambda x: np.zeros((len(x), len(x), len(x)))

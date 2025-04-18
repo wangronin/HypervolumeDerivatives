@@ -2,28 +2,14 @@ from typing import Tuple
 
 import jax.numpy as jnp
 import numpy as np
-from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 from pymoo.util.remote import Remote
 
 from ..utils import timeit
 from .base import ConstrainedMOOAnalytical
+from .reference import generic_sphere, get_ref_dirs
 
 # NOTE: `eps` is to cap the decision variables below for DTLZ6 since it is not differentiable at x = 0
 eps = 1e-30
-
-
-def get_ref_dirs(n_obj: int) -> np.ndarray:
-    if n_obj == 2:
-        ref_dirs = UniformReferenceDirectionFactory(2, n_points=100).do()
-    elif n_obj == 3:
-        ref_dirs = UniformReferenceDirectionFactory(3, n_partitions=30).do()
-    else:
-        raise Exception("Please provide reference directions for more than 3 objectives!")
-    return ref_dirs
-
-
-def generic_sphere(ref_dirs):
-    return ref_dirs / np.tile(np.linalg.norm(ref_dirs, axis=1)[:, None], (1, ref_dirs.shape[1]))
 
 
 class BaseDTLZ(ConstrainedMOOAnalytical):

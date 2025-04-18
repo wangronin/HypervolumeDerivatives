@@ -1,10 +1,27 @@
+import datetime
 from functools import cached_property
 from typing import Dict, List, Optional, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import rcParams
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist, directed_hausdorff
 from sklearn_extra.cluster import KMedoids
+
+plt.style.use("ggplot")
+rcParams["font.size"] = 15
+rcParams["xtick.direction"] = "out"
+rcParams["ytick.direction"] = "out"
+rcParams["text.usetex"] = True
+rcParams["legend.numpoints"] = 1
+rcParams["xtick.labelsize"] = 15
+rcParams["ytick.labelsize"] = 15
+rcParams["xtick.major.size"] = 7
+rcParams["xtick.major.width"] = 1
+rcParams["ytick.major.size"] = 7
+rcParams["ytick.major.width"] = 1
+
 
 from .utils import compute_chim
 
@@ -20,12 +37,13 @@ class Medoids:
         self._idx_ref_cluster = None
 
 
-class ClusteredReferenceSet:
+class ReferenceSet:
     def __init__(
         self,
         ref: Union[Dict[int, np.ndarray], np.ndarray],
         eta: Union[Dict[int, np.ndarray], np.ndarray] = None,
         Y_idx: Optional[np.ndarray] = None,
+        plot: bool = False,
     ) -> None:
         """Clustered Reference Set
 
@@ -45,6 +63,7 @@ class ClusteredReferenceSet:
         if self.eta is None:
             self._compute_shift_direction()
         self._medoids: Dict[int, np.ndarray] = {i: None for i in range(self.n_components)}
+        self.plot = plot
 
     @cached_property
     def N(self) -> np.ndarray:
@@ -61,6 +80,8 @@ class ClusteredReferenceSet:
     def match(self, Y: np.ndarray) -> np.ndarray:
         if not self.re_match and hasattr(self, "_matched_medoids"):
             return
+
+        Y_old = Y.copy()
         Y = self._partition_Y(Y)
         N = sum([len(y) for y in Y])
         # match the components of the reference set and `Y`
@@ -81,6 +102,43 @@ class ClusteredReferenceSet:
             for i, j in enumerate(self.Y_idx[v]):
                 self._medoids_idx[j] = (k, i)
         self._matched_medoids = out
+
+        if self.plot:
+            colors = plt.get_cmap("tab20").colors
+            colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
+            colors = ["m", "c"]
+            fig = plt.figure(figsize=plt.figaspect(1))
+            plt.subplots_adjust(bottom=0.08, top=0.9, right=0.93, left=0.05)
+            ax0 = fig.add_subplot(1, 1, 1, projection="3d")
+            ax0.set_box_aspect((1, 1, 1))
+            ax0.view_init(45, 45)
+            for i, Y_ in enumerate(Y):
+                ax0.plot(Y_[:, 0], Y_[:, 1], Y_[:, 2], mfc=colors[i], ls="none", marker=".", ms=10, alpha=0.8)
+            ax0.plot(
+                self._matched_medoids[:, 0],
+                self._matched_medoids[:, 1],
+                self._matched_medoids[:, 2],
+                "g+",
+                ms=10,
+                alpha=0.6,
+            )
+            for i, p in enumerate(Y_old):
+                ax0.plot(
+                    (p[0], self._matched_medoids[i, 0]),
+                    (p[1], self._matched_medoids[i, 1]),
+                    zs=(p[2], self._matched_medoids[i, 2]),
+                    ls="dashed",
+                    color="k",
+                    ms=5,
+                    alpha=0.5,
+                )
+            ax0.set_title("reference set")
+            ax0.set_xlabel(r"$f_1$")
+            ax0.set_ylabel(r"$f_2$")
+            ax0.set_zlabel(r"$f_3$")
+            plt.show()
+            # plt.tight_layout()
+            # plt.savefig(f"matching{datetime.datetime.now()}.pdf", dpi=1000)
 
     def shift(self, c: float = 0.05, indices: np.ndarray = None):
         # shift the medoids
@@ -116,8 +174,8 @@ class ClusteredReferenceSet:
             self.Y_idx = [list(range(len(Y)))]
             Y_partitions = [Y]
         else:
-            # if the clustering/partition of `Y` is not given,
-            # we assign each `Y` to the closest cluster of the reference set
+            # if the clustering/partition of `Y` is not given, we partition `Y` in the way that
+            # each point is assigned to the closest cluster of the reference set
             if self.Y_idx is None:
                 D = np.array([cdist(self._ref[i], Y).min(axis=0) for i in range(self.n_components)])
                 labels = np.argmin(D, axis=0)
