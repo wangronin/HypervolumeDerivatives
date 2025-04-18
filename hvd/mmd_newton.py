@@ -202,7 +202,7 @@ class MMDNewton:
         # compute the initial indicator values. The first clustering and matching is executed here.
         self._compute_indicator_value(self.state.Y)
         # shift the reference set if needed
-        # self._shift_reference_set()
+        self._shift_reference_set()
         # compute the Newton step
         self.step, self.R = self._compute_netwon_step()
         # prevent the decision points from moving out of the decision space.
