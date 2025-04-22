@@ -17,6 +17,11 @@ from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.utils import plot_2d, read_reference_set_data
 
+import time
+import os
+
+t1 = time.time()
+
 np.random.seed(66)
 
 max_iters = 10
@@ -108,5 +113,17 @@ if 11 < 2:
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 
+folder = 'result' + problem_name
+
+if not os.path.exists(folder):
+    os.makedirs(folder)
+
+folder_path = './' + folder + f'/{problem_name}-MMD-{emoa}-{gen}.csv'
+
 df = pd.DataFrame(np.array(data), columns=["HV", "IGD", "GD", "MMD", "Jac_calls"])
-df.to_csv(f"results/{problem_name}-MMD-{emoa}-{gen}.csv", index=False)
+df.to_csv(folder_path, index=False)
+
+t2 = time.time()
+
+print('total time used:')
+print(t2-t1)
