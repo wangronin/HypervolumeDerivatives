@@ -79,8 +79,9 @@ def filter_outliers(data: List) -> np.ndarray:
     X, Y = X[idx], Y[idx]
     idx = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
     X, Y = X[idx == 1], Y[idx == 1]
-    # idx = np.isclose(Y.sum(axis=1), 0.5, atol=1e-1)
-    # X, Y = X[idx == 1], Y[idx == 1]
+    if 11 < 2:
+        idx = np.isclose(Y.sum(axis=1), 0.5, atol=1e-1)
+        X, Y = X[idx == 1], Y[idx == 1]
     return X, Y
 
 

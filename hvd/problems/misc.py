@@ -10,6 +10,8 @@ import numpy as np
 from ..utils import timeit
 from .base import ConstrainedMOOAnalytical, MOOAnalytical
 
+__authors__ = ["Hao Wang"]
+
 
 class DENT(MOOAnalytical):
     def __init__(self, **kwargs):

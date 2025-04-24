@@ -4,6 +4,8 @@ import numpy as np
 from ..utils import timeit
 from .dtlz import DTLZ1, DTLZ2, DTLZ3, DTLZ4, BaseDTLZ
 
+__authors__ = ["Hao Wang"]
+
 
 class InvertedDTLZ(BaseDTLZ):
     @timeit

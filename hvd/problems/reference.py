@@ -1,6 +1,10 @@
 import numpy as np
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
+__authors__ = ["Hao Wang"]
+
+# TODO: get rid of pymoo dependency
+
 
 def get_ref_dirs(n_obj: int) -> np.ndarray:
     if n_obj == 2:

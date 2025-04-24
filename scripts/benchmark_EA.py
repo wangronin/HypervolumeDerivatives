@@ -43,9 +43,7 @@ from hvd.problems.base import MOOAnalytical, PymooProblemWrapper
 from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([ind.F for ind in pop])
-
-
-reference_points = {"CONV4_2F": np.array([2, 2, 2, 10])}
+reference_points = {"CONV4_2F": np.array([2, 2, 2, 10])}  # reference point of HV
 
 
 def minimize(
@@ -140,7 +138,7 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
 
 
 n_iter_newton = 6
-gen = 600
+gen = 300
 # NOTE: the following running budget is estimated with upper bounds of AD's theory
 # gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
 # NOTE: 1.836 is obtained on ZDTs

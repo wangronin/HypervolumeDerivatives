@@ -114,9 +114,10 @@ class MMDNewton:
         self.xl: np.ndarray = xl
         self.xu: np.ndarray = xu
         self.ref: ReferenceSet = ref  # TODO: we should pass ref to the indicator directly
+        self.matching: bool = matching
         self._check_constraints(h, g)
         self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
-        if matching:
+        if self.matching:
             self.indicator = MMDMatching(
                 self.dim_p, self.n_obj, self.ref, func, jac, hessian, beta=0.25, **kwargs
             )
@@ -128,7 +129,7 @@ class MMDNewton:
         self.xtol: float = xtol
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
         self.stop_dict: Dict[str, float] = {}
-        self.metrics = metrics
+        self.metrics: Dict[str, Callable] = metrics
         self.preconditioning: bool = preconditioning
 
     def _check_constraints(self, h: Callable, g: Callable):
@@ -208,9 +209,9 @@ class MMDNewton:
         # prevent the decision points from moving out of the decision space.
         self.step, max_step_size = self._handle_box_constraint(self.step)
         # backtracking line search for the step size
-        self.step_size = self._backtracking_line_search(self.step, self.R, max_step_size)
+        self.step_size = self._backtracking_line_search_single_step_size(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
-        self.state.update(self.state.X + self.step_size * self.step)
+        self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
         self.iter_count += 1
 
     def log(self):
@@ -221,7 +222,7 @@ class MMDNewton:
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"{self.indicator.__class__.__name__}: {self.curr_indicator_value}")
-            self.logger.info(f"step size: {self.step_size.ravel()}")
+            self.logger.info(f"step size: {self.step_size}")
             self.logger.info(f"R norm: {self.history_R_norm[-1]}")
         for name, func in self.metrics.items():  # compute the performance metrics
             value = func.compute(Y=self.state.Y)
@@ -235,7 +236,6 @@ class MMDNewton:
 
     def _compute_indicator_value(self, Y: np.ndarray):
         self.curr_indicator_value = self.indicator.compute(Y=Y)
-        self.ref.match(Y)
 
     def _compute_R(
         self, state: State, grad: np.ndarray = None
@@ -298,13 +298,14 @@ class MMDNewton:
         if self.iter_count == 0:  # TODO: maybe do not perform the initial shift here..
             masks = np.array([True] * self.N)
         else:
-            distance = np.linalg.norm(self.state.Y - self.ref.medoids, axis=1)
-            step_len = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
-            masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_len, 0))
+            distance = np.linalg.norm(self.state.Y - self.ref.reference_set, axis=1)
+            step_norm = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
+            masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_norm, 0))
+
         indices = np.nonzero(masks)[0]
         self.ref.shift(0.08, indices)
         for k in indices:  # log the updated medoids
-            self.history_medoids[k].append(self.ref.medoids[k].copy())
+            self.history_medoids[k].append(self.ref.reference_set[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
 
     def _backtracking_line_search_single_step_size(
@@ -312,7 +313,7 @@ class MMDNewton:
     ) -> float:
         """backtracking line search with Armijo's condition. Global step-size control"""
         c1 = 1e-5
-        if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
+        if 1 < 2 or np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
             return np.array([1])
 
         def phi_func(alpha):
@@ -361,11 +362,11 @@ class MMDNewton:
             self.state.n_jac_evals = state.n_jac_evals
             return np.linalg.norm(R_)
 
-        step_size = max_step_size.reshape(-1, 1) if max_step_size is not None else np.ones((self.N, 1))
+        step_size = max_step_size if max_step_size is not None else np.ones(self.N)
         for i in range(self.N):
             phi = [np.linalg.norm(R[i])]
             s = [0, step_size[i]]
-            for _ in range(8):
+            for _ in range(6):
                 phi.append(phi_func(s[-1], i))
                 # Armijo–Goldstein condition
                 # when R norm is close to machine precision, it makes no sense to perform the line search

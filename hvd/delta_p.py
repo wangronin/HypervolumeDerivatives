@@ -81,19 +81,13 @@ class GenerationalDistance:
         """
         N, dim = X.shape
         c1 = self.p / N
-
         if Y is None:
             Y = np.array([self.func(x) for x in X])
 
         self._compute_indices(Y)
-        # Jacobian of the objective function
-        if Jacobian is None:
-            J = np.array([self.jac(x) for x in X])  # (N, n_obj, dim)
-        else:
-            J = Jacobian
-        # J = np.array([self.jac(x) for x in X])  # (N, n_objective, dim)
-        # TODO: maybe `self.ref.reference_set` below?
-        diff = Y - self.ref[self.indices]  # (N, n_objective)
+        # Jacobian of the objective function of shape (N, n_objective, dim)
+        J = np.array([self.jac(x) for x in X]) if Jacobian is None else Jacobian
+        diff = Y - self.ref.reference_set[self.indices]  # (N, n_objective)
         diff_norm = np.sqrt(np.sum(diff**2, axis=1)).reshape(-1, 1)  # (N, 1)
         grad_ = np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
         grad = c1 * diff_norm ** (self.p - 2) * grad_  # (N, dim)
@@ -128,7 +122,7 @@ class InvertedGenerationalDistance:
         jac: Callable = None,
         hess: Callable = None,
         p: float = 2,
-        cluster_matching: bool = False,
+        matching: bool = False,
     ):
         """Generational Distance
 
@@ -147,11 +141,11 @@ class InvertedGenerationalDistance:
         self.jac = jac
         self.hess = hess
         self.M = self.ref.N
-        self.cluster_matching = cluster_matching
+        self.matching = matching
         self.re_match = True
 
     def __str__(self) -> str:
-        return "IGD (w/matching)" if self.cluster_matching else "IGD"
+        return "IGD (w/matching)" if self.matching else "IGD"
 
     def _compute_indices(self, Y: np.ndarray):
         """find for each reference point, the index of its closest point in the approximation set
@@ -187,9 +181,9 @@ class InvertedGenerationalDistance:
             assert X is not None
             assert self.func is not None
             Y = np.array([self.func(x) for x in X])
-        if self.cluster_matching:
+        if self.matching:
             self.ref.match(Y)
-            return np.mean(np.sum((Y - self.ref.medoids) ** 2, axis=1))
+            return np.mean(np.sum((Y - self.ref.reference_set) ** 2, axis=1))
         else:
             self._compute_indices(Y)
             return np.mean(self.D[np.arange(self.M), self._indices] ** self.p) ** (1 / self.p)
@@ -217,7 +211,7 @@ class InvertedGenerationalDistance:
         assert self.hess is not None
         # TODO: implement p != 2
         # NOTE: for the matching method, `self.M = 1` since it is one-to-one matching
-        c = 2 if self.cluster_matching else 2 / self.M
+        c = 2 if self.matching else 2 / self.M
         dim = X.shape[1]
         if Y is None:
             Y = np.array([self.func(x) for x in X])
@@ -226,9 +220,9 @@ class InvertedGenerationalDistance:
             J = np.array([self.jac(x) for x in X])  # (N, n_obj, dim)
         else:
             J = Jacobian
-        if self.cluster_matching:
+        if self.matching:
             self.ref.match(Y)
-            diff = Y - self.ref.medoids  # (N, n_obj)
+            diff = Y - self.ref.reference_set  # (N, n_obj)
         else:
             self._compute_indices(Y)
             Z = np.array([np.sum(self.ref.reference_set[idx], axis=0) for idx in self.indices])  # (N, n_obj)
@@ -237,7 +231,7 @@ class InvertedGenerationalDistance:
         grad = c * np.einsum("ijk,ij->ik", J, diff)  # (N, dim)
         if compute_hessian:
             H = np.array([self.hess(x) for x in X])  # (N, n_obj, dim, dim)
-            m = np.tile(self.m[..., np.newaxis], (1, dim, dim)) if not self.cluster_matching else 1
+            m = np.tile(self.m[..., np.newaxis], (1, dim, dim)) if not self.matching else 1
             hessian = c * (
                 m * np.einsum("ijk,ijl->ikl", J, J) + np.einsum("ijkl,ij->ikl", H, diff)
             )  # (N, dim, dim)

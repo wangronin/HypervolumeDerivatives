@@ -68,7 +68,7 @@ pareto_front = np.array([MOP1(_) for _ in pareto_set])
 # performance indicator
 mmd_metric = MMD(2, 2, ref=pareto_front, func=MOP1, kernel=kernel, theta=theta)
 gd_metric = GenerationalDistance(ref=pareto_front)
-igd_metric = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
+igd_metric = InvertedGenerationalDistance(ref=pareto_front, matching=False)
 angel_best = mmd_metric.compute(best_from_angel)
 # performance metrics
 hist_value = [mmd_metric.compute(Y)]

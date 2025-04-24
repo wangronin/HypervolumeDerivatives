@@ -10,6 +10,8 @@ from pymoo.core.problem import Problem as PymooProblem
 from ..utils import timeit
 from .base import MOOAnalytical, hessian
 
+__authors__ = ["Hao Wang"]
+
 
 # TODO: unify this class with the `ConstrainedMOOAnalytical`
 class PymooProblemWithAD:

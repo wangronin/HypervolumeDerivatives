@@ -4,6 +4,7 @@ from jax.lax import select
 from pymoo.core.problem import Problem
 from pymoo.util.normalization import normalize
 
+__authors__ = ["Hao Wang"]
 # NOTE: `jnp.abs` is taken on `f1 / g` for ZDT1, 3, and 4 to avoid numerical issues
 # when the decision var. are out of bound
 # TODO: remove the dependency of pymoo here
