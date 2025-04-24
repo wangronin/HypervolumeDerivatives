@@ -22,7 +22,19 @@ rcParams["ytick.major.width"] = 1
 
 def read_reference_set_data(
     path: str, problem_name: str, emoa: str, run: int, gen: int
-) -> Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray], List[int]]:
+) -> Tuple[Dict[int, np.ndarray], np.ndarray, np.ndarray, np.ndarray, Dict[int, np.ndarray]]:
+    """_summary_
+
+    Args:
+        path (str): path to the data folder
+        problem_name (str): problem name
+        emoa (str): EMOA algorithm name
+        run (int): run ID
+        gen (int): the stopping generation of EMOA
+
+    Returns:
+        Tuple[Dict[int, np.ndarray], np.ndarray, np.ndarray, np.ndarray, Dict[int, np.ndarray]]: _description_
+    """
     ref_label = pd.read_csv(
         f"{path}/{problem_name}_{emoa}_run_{run}_component_id_gen{gen}.csv", header=None
     ).values[0]
@@ -81,12 +93,12 @@ def read_reference_set_data(
     max_point_y_cluster = np.max(np.unique(Y_label, return_counts=True)[1])
     # if the number of clusters of `Y` is more than that of the reference set
     # NOTE: for simple MMD, we always merge the clusters of the reference set
-    if 1 < 2 or (len(np.unique(Y_label)) > len(ref)) or (max_point_y_cluster > min_point_ref_cluster):
-        ref = np.vstack([r for r in ref.values()])
-        Y_label = np.zeros(len(y0))
+    if len(ref) > 1 or (len(np.unique(Y_label)) > len(ref)) or (max_point_y_cluster > min_point_ref_cluster):
+        ref = {0: np.vstack([r for r in ref.values()])}
+        Y_label = np.zeros(len(y0), dtype=int)
         eta = None
         # ensure the number of approximation points is less than the number of reference points
-        if len(ref) < len(y0):
+        if len(ref[0]) < len(y0):
             n = len(ref)
             x0 = x0[:n]
             y0 = y0[:n]
@@ -96,25 +108,50 @@ def read_reference_set_data(
 
 
 def plot_2d(
-    y0: np.ndarray,
+    Y0: np.ndarray,
     Y: np.ndarray,
     ref: np.ndarray,
     pareto_front: np.ndarray,
     hist_Y: List[np.ndarray],
     history_medoids: List[np.ndarray],
-    hist_IGD: np.ndarray,
+    history_metric: np.ndarray,
     hist_R_norm: np.ndarray,
     fig_name: str,
     plot_trajectory: bool = True,
 ) -> None:
+    """plot the convergence results in 2D objective space for reference set-based methods, e.g., DpN.
+
+    Args:
+        Y0 (np.ndarray): initial approximation set
+        Y (np.ndarray): the final approximation set
+        ref (np.ndarray): the initial reference set
+        pareto_front (np.ndarray): target Pareto front
+        hist_Y (List[np.ndarray]): history/trajectory of the approximation set
+        history_medoids (List[np.ndarray]): history/trajectory of medoids of the reference set
+        history_metric (np.ndarray): history/trajectory of performance metrics
+        hist_R_norm (np.ndarray): history/trajectory of the norm of the root-finding problem
+        fig_name (str): name to save the figure
+        plot_trajectory (bool, optional): if plotting the trajectory of approximation points. Defaults to True.
+    """
     colors = plt.get_cmap("tab20").colors
     colors = [colors[2], colors[12], colors[13], colors[17], colors[19]]
+    n_colors = len(colors)
+    quiver_kwargs = dict(
+        scale_units="xy",
+        angles="xy",
+        scale=1,
+        color="k",
+        width=0.003,
+        alpha=0.5,
+        headlength=4.5,
+        headwidth=2.5,
+    )
     plt.style.use("ggplot")
     fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
     plt.subplots_adjust(right=0.93, left=0.05)
 
-    ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.4)
-    ax0.plot(y0[:, 0], y0[:, 1], "k+", ms=12, alpha=1)
+    ax0.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=6, alpha=0.4)
+    ax0.plot(Y0[:, 0], Y0[:, 1], "k+", ms=9, alpha=1)
     ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
     ax0.set_title("Objective space (Initialization)")
     ax0.set_xlabel(r"$f_1$")
@@ -123,30 +160,17 @@ def plot_2d(
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
 
-    N = len(y0)
+    N = len(Y0)
     if plot_trajectory:
-        trajectory = np.array([y0] + hist_Y)
+        trajectory = np.array([Y0] + hist_Y)
         for i in range(N):
             x, y = trajectory[:, i, 0], trajectory[:, i, 1]
-            ax1.quiver(
-                x[:-1],
-                y[:-1],
-                x[1:] - x[:-1],
-                y[1:] - y[:-1],
-                scale_units="xy",
-                angles="xy",
-                scale=1,
-                color="k",
-                width=0.003,
-                alpha=0.5,
-                headlength=4.5,
-                headwidth=2.5,
-            )
+            ax1.quiver(x[:-1], y[:-1], x[1:] - x[:-1], y[1:] - y[:-1], **quiver_kwargs)
 
     lines = []
     lines += ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.3)
     shifts = []
-    for i, M in enumerate(history_medoids):
+    for i, M in history_medoids.items():
         c = colors[len(M) - 1]
         for j, x in enumerate(M):
             line = ax1.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
@@ -154,8 +178,8 @@ def plot_2d(
                 shifts.append(line)
 
     lines += shifts
-    lines += ax1.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
-    counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
+    lines += ax1.plot(Y[:, 0], Y[:, 1], "r+", ms=9, alpha=0.9)
+    counts = np.unique([len(m) for _, m in history_medoids.items()], return_counts=True)[1]
     lgnd = ax1.legend(
         lines,
         ["Pareto front"]
@@ -170,13 +194,14 @@ def plot_2d(
     ax1.set_ylabel(r"$f_2$")
 
     ax22 = ax2.twinx()
-    ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
+    for i, (k, v) in enumerate(history_metric.items()):
+        ax2.semilogy(range(1, len(v) + 1), v, color=colors[i % n_colors], ls="solid", label=k)
     ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
     ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
     ax22.set_ylabel(r"R norm", color="g")
     ax2.set_title("Performance")
     ax2.set_xlabel("iteration")
-    ax2.set_xticks(range(1, len(hist_IGD) + 1))
+    ax2.set_xticks(range(1, len(hist_R_norm) + 1))
     ax2.legend()
     plt.tight_layout()
     plt.savefig(fig_name, dpi=1000)

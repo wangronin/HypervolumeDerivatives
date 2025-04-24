@@ -59,7 +59,7 @@ Y = np.array([MOP1(_) for _ in X])
 dim = Y.shape[1]
 # performance indicator
 gd = GenerationalDistance(ref=pareto_front)
-igd = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
+igd = InvertedGenerationalDistance(ref=pareto_front, matching=False)
 
 p = np.linspace(-1, 1, 1000)
 pareto_set = np.c_[p, p]

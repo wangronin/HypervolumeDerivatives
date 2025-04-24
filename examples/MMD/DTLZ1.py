@@ -57,7 +57,7 @@ mmd_metric = MMD(
     2, 2, ref=pareto_front, func=problem.objective, jac=problem.objective_jacobian, kernel=kernel, theta=theta
 )
 gd_metric = GenerationalDistance(ref=pareto_front)
-igd_metric = InvertedGenerationalDistance(ref=pareto_front, cluster_matching=False)
+igd_metric = InvertedGenerationalDistance(ref=pareto_front, matching=False)
 # performance metrics
 hist_value = []
 hist_deltap = []

@@ -151,7 +151,7 @@ if 1 < 2:
             headwidth=2.5,
         )
 
-medoids = opt.ref.medoids
+medoids = opt.ref.reference_set
 for i, m in enumerate(medoids):
     ax0.plot((m[0], Y[i, 0]), (m[1], Y[i, 1]), "k--", alpha=0.5)
 

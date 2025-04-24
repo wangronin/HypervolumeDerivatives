@@ -13,7 +13,7 @@ from .reference_set import ReferenceSet
 # enable double-precision of JAX
 os.environ["JAX_ENABLE_X64"] = "True"
 
-__author__ = "Hao Wang"
+__authors__ = ["Hao Wang"]
 
 
 @jit
@@ -88,6 +88,7 @@ class MMD:
             assert X is not None
             assert self.func is not None
             Y = np.array([self.func(x) for x in X])
+
         reference_set = self.ref.reference_set
         RR = cdist(reference_set, reference_set, metric=self.k)
         YY = cdist(Y, Y, metric=self.k)
@@ -134,12 +135,13 @@ class MMD:
         """
         X = self._check_X(X)
         Y, YdX, YdX2 = self._compute_objective_derivatives(X, Y, jacobian)
-        N = Y.shape[0]
+        reference_set = self.ref.reference_set
+        N, M = len(Y), len(reference_set)
         MMDdY = np.zeros((N, self.n_obj))
         for l, y in enumerate(Y):
             # TODO: `term1` is only correct for stationary kernels
             term1 = np.sum([self.k_dx(y, Y[i]) for i in range(N) if i != l], axis=0)
-            term2 = np.sum([self.k_dx(y, self.ref.reference_set[i]) for i in range(self.N)], axis=0)
+            term2 = np.sum([self.k_dx(y, reference_set[i]) for i in range(M)], axis=0)
             MMDdY[l] = 2 * (term1 / N**2 - term2 / (N * self.N))
         MMDdX = np.einsum("ij,ijk->ik", MMDdY, YdX)
         return dict(MMDdX=MMDdX, MMDdY=MMDdY, Y=Y, YdX=YdX, YdX2=YdX2)
@@ -157,6 +159,8 @@ class MMD:
         Y, YdX, YdX2, MMDdY, MMDdX = out["Y"], out["YdX"], out["YdX2"], out["MMDdY"], out["MMDdX"]
         N, dim_y = Y.shape
         dim_x = self.n_var
+        reference_set = self.ref.reference_set
+        N, M = len(Y), len(reference_set)
         MMDdY2 = np.zeros((N * dim_y, N * dim_y))
         MMDdX2 = np.zeros((N * dim_x, N * dim_x))
         for l in range(N):
@@ -169,9 +173,7 @@ class MMD:
                 else:
                     # TODO: `term1` is only correct for stationary kernels
                     term1 = np.sum([self.k_dx2(Y[l], Y[i]) for i in range(N) if i != l], axis=0)
-                    term2 = np.sum(
-                        [self.k_dx2(Y[l], self.ref.reference_set[i]) for i in range(self.N)], axis=0
-                    )
+                    term2 = np.sum([self.k_dx2(Y[l], reference_set[i]) for i in range(M)], axis=0)
                     MMDdY2[r, c] = 2 * (term1 / N**2 - term2 / (N * self.N))
                 # compute MMDdX2
                 rr, cc = slice(m * dim_x, (m + 1) * dim_x), slice(l * dim_x, (l + 1) * dim_x)
@@ -267,7 +269,7 @@ class MMDMatching:
         self.ref.match(Y)
         return (
             self.beta * cdist(Y, Y, metric=self.k).mean()
-            + np.array([2 - 2 * self.k(y, self.ref.medoids[i]) for i, y in enumerate(Y)]).mean()
+            + np.array([2 - 2 * self.k(y, self.ref.reference_set[i]) for i, y in enumerate(Y)]).mean()
         )
 
     def compute_derivatives(
@@ -316,7 +318,7 @@ class MMDMatching:
         for l, y in enumerate(Y):
             # TODO: `term1` is only correct for stationary kernels
             term1 = 2 * self.beta * np.sum([self.k_dx(y, Y[i]) for i in range(N) if i != l], axis=0) / N**2
-            term2 = 2 * self.k_dx(y, self.ref.medoids[l]) / N
+            term2 = 2 * self.k_dx(y, self.ref.reference_set[l]) / N
             MMDdY[l] = term1 - term2
         MMDdX = np.einsum("ijk,ij->ik", YdX, MMDdY)
         return dict(MMDdX=MMDdX, MMDdY=MMDdY, Y=Y, YdX=YdX, YdX2=YdX2)
@@ -346,7 +348,7 @@ class MMDMatching:
                 else:
                     # TODO: `term1` is only correct for stationary kernels
                     term1 = np.sum([self.k_dx2(Y[l], Y[i]) for i in range(N) if i != l], axis=0) / N**2
-                    term2 = self.k_dx2(Y[l], self.ref.medoids[l]) / N
+                    term2 = self.k_dx2(Y[l], self.ref.reference_set[l]) / N
                     MMDdY2[r, c] = 2 * (self.beta * term1 - term2)
                 # compute MMDdX2
                 rr, cc = slice(m * dim_x, (m + 1) * dim_x), slice(l * dim_x, (l + 1) * dim_x)

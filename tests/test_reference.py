@@ -48,7 +48,7 @@ def test_match(n_component: int):
 
     ref.match(Y)
     # testing if the matching function yields the smallest total distance
-    M = ref.medoids
+    M = ref.reference_set
     dist_min = cdist(M, Y).sum()
     for i in range(100):
         random.shuffle(M)

@@ -123,7 +123,7 @@ if 1 < 2:
             headwidth=2.7,
         )
 
-ref = opt.ref.medoids
+ref = opt.ref.reference_set
 ax1.plot(ref[:, 0], ref[:, 1], "r.", alpha=0.4)
 ax0.plot(pareto_set[:, 0], pareto_set[:, 1], "k.", alpha=0.4)
 ax1.plot(Y[:, 0], Y[:, 1], "g*")

@@ -32,8 +32,13 @@ def MOP1_Hessian(x):
 
 
 @jit
-def kernel(x: np.ndarray, y: np.ndarray, theta: float = 1.0, alpha: float = 1.0) -> float:
-    return (jnp.sum((x - y) ** 2) * theta / (2 * alpha) + 1) ** (-alpha)
+def kernel(x: np.ndarray, y: np.ndarray, theta: float = 1.0) -> float:
+    return jnp.exp(-theta * jnp.sum((x - y) ** 2))
+
+
+# @jit
+# def kernel(x: np.ndarray, y: np.ndarray, theta: float = 1.0, alpha: float = 1.0) -> float:
+#     return (jnp.sum((x - y) ** 2) * theta / (2 * alpha) + 1) ** (-alpha)
 
 
 def distance(reference_set):
@@ -67,10 +72,10 @@ ref = np.array([MOP1(_) for _ in ref_X])
 
 
 def test_2D_objective_space_against_ad():
-    mmd = MMD(n_var=2, n_obj=2, ref=ref)
-    value = mmd.compute(Y=Y)
-    grad = mmd.compute_gradient(Y)["MMDdX"]
-    H = mmd.compute_hessian(Y)["MMDdX2"]
+    mmd = MMD(n_var=2, n_obj=2, ref=ref, func=lambda x: x, jac=lambda _: np.diag([1, 1]))
+    value = mmd.compute(X=Y)
+    grad = mmd.compute_gradient(X=Y)["MMDdX"]
+    H = mmd.compute_hessian(X=Y)["MMDdX2"]
     f = distance(ref)
     jac = jacrev(f)
     hess = jacfwd(jac)
@@ -89,8 +94,8 @@ def test_2D_objective_space_against_ad():
 def test_2D_decision_space_against_ad():
     mmd = MMD(n_var=dim, n_obj=2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian)
     value = mmd.compute(Y=Y)
-    grad = mmd.compute_gradient(X)["MMDdX"]
-    H = mmd.compute_hessian(X)["MMDdX2"]
+    grad = mmd.compute_gradient(X=X)["MMDdX"]
+    H = mmd.compute_hessian(X=X)["MMDdX2"]
     f = distance2(MOP1, ref)
     jac = jacrev(f)
     hess = jacfwd(jac)
@@ -104,7 +109,3 @@ def test_2D_decision_space_against_ad():
     assert np.isclose(value, float(f(X)))
     assert np.all(np.isclose(grad, grad_ad))
     assert np.all(np.isclose(H, H_ad))
-
-
-test_2D_objective_space_against_ad()
-test_2D_decision_space_against_ad()

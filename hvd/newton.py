@@ -476,7 +476,7 @@ class DpN:
 
     def _set_indicator(self, ref: ReferenceSet, func: Callable, jac: Callable, hessian: Callable):
         self._gd = GenerationalDistance(ref, func, jac, hessian)
-        self._igd = InvertedGenerationalDistance(ref, func, jac, hessian, cluster_matching=True)
+        self._igd = InvertedGenerationalDistance(ref, func, jac, hessian, matching=True)
 
     def _set_logging(self, verbose):
         """parameters for logging the history"""
@@ -630,14 +630,14 @@ class DpN:
         if self.iter_count == 0:  # TODO: maybe do not perform the initial shift here..
             masks = np.array([True] * self.N)
         else:
-            distance = np.linalg.norm(self.state.Y - self.ref.medoids, axis=1)
+            distance = np.linalg.norm(self.state.Y - self.ref.reference_set, axis=1)
             step_len = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_len, 0))
         indices = np.nonzero(masks)[0]
         # the initial shift is a bit larger
-        self.ref.shift(0.8 if self.iter_count == 0 else 0.05, indices)
+        self.ref.shift(0.08 if self.iter_count == 0 else 0.05, indices)
         for k in indices:  # log the updated medoids
-            self.history_medoids[k].append(self.ref.medoids[k].copy())
+            self.history_medoids[k].append(self.ref.reference_set[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
 
     def _backtracking_line_search(

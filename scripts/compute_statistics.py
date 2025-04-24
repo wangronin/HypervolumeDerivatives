@@ -3,51 +3,54 @@ import pandas as pd
 from scipy.stats import mannwhitneyu
 from statsmodels.stats.multitest import multipletests
 
-gen = 300
+gen = 300  # the number of MOEA iterations
 pvalues = []
 stats = []
 index = []
 stats_func = lambda x: [np.median(x), np.quantile(x, 0.9) - np.quantile(x, 0.1)]
+# MOEA algorithms to compare to
 MOEAs = [
     "NSGA-II",
-    "NSGA-III",
-    "SMS-EMOA",
-    "MOEAD",
+    # "NSGA-III",
+    # "SMS-EMOA",
+    # "MOEAD",
 ]
+Newton_method = "MMD"
+# test problem to include
 problems = [
-    "CF1",
-    "CF2",
-    "CF3",
-    "CF4",
-    "CF5",
-    "CF6",
-    "CF7",
-    "CF8",
-    "CF9",
-    "CF10",
+    # "CF1",
+    # "CF2",
+    # "CF3",
+    # "CF4",
+    # "CF5",
+    # "CF6",
+    # "CF7",
+    # "CF8",
+    # "CF9",
+    # "CF10",
     "ZDT1",
     "ZDT2",
     "ZDT3",
-    "ZDT4",
+    # "ZDT4",
     "ZDT6",
-    "DTLZ1",
-    "DTLZ2",
-    "DTLZ3",
-    "DTLZ4",
-    "DTLZ5",
-    "DTLZ6",
-    "DTLZ7",
-    "IDTLZ1",
-    "IDTLZ2",
-    "IDTLZ3",
-    "IDTLZ4",
-    "CONV4_2F",
+    # "DTLZ1",
+    # "DTLZ2",
+    # "DTLZ3",
+    # "DTLZ4",
+    # "DTLZ5",
+    # "DTLZ6",
+    # "DTLZ7",
+    # "IDTLZ1",
+    # "IDTLZ2",
+    # "IDTLZ3",
+    # "IDTLZ4",
+    # "CONV4_2F",
 ]
 
 for moea in MOEAs:
     for problem in problems:
         try:
-            data1 = pd.read_csv(f"./results/{problem}-DpN-{moea}-{gen}.csv")
+            data1 = pd.read_csv(f"./results/{problem}-{Newton_method}-{moea}-{gen}.csv")
             data2 = pd.read_csv(f"./results/{problem}-{moea}-{gen}.csv")
         except:
             continue

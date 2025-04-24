@@ -1,40 +1,14 @@
-import datetime
 from functools import cached_property
 from typing import Dict, List, Optional, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rcParams
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist, directed_hausdorff
 from sklearn_extra.cluster import KMedoids
 
-plt.style.use("ggplot")
-rcParams["font.size"] = 15
-rcParams["xtick.direction"] = "out"
-rcParams["ytick.direction"] = "out"
-rcParams["text.usetex"] = True
-rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 15
-rcParams["ytick.labelsize"] = 15
-rcParams["xtick.major.size"] = 7
-rcParams["xtick.major.width"] = 1
-rcParams["ytick.major.size"] = 7
-rcParams["ytick.major.width"] = 1
-
-
-from .utils import compute_chim
+from .utils import compute_chim, plot_reference_set_matching
 
 __authors__ = ["Hao Wang"]
-
-
-# TODO: I am still not happy with the design here
-# TODO: abstract medoids from reference set
-# TODO: test the correctness of the code for multiple shifting of the same medoid
-class Medoids:
-    def __init__(self) -> None:
-        self._medoids = None
-        self._idx_ref_cluster = None
 
 
 class ReferenceSet:
@@ -42,7 +16,7 @@ class ReferenceSet:
         self,
         ref: Union[Dict[int, np.ndarray], np.ndarray],
         eta: Union[Dict[int, np.ndarray], np.ndarray] = None,
-        Y_idx: Optional[np.ndarray] = None,
+        Y_idx: Optional[np.ndarray] = None,  # TODO: `Y_idx` should not be passed in here.
         plot: bool = False,
     ) -> None:
         """Clustered Reference Set
@@ -51,7 +25,8 @@ class ReferenceSet:
             ref (Union[Dict[int, np.ndarray], np.ndarray]): the reference set
             eta (Union[Dict[int, np.ndarray], np.ndarray], optional): direction to shift each component of
                 the reference set. Defaults to None.
-            Y_idx (Optional[np.ndarray], optional): indices to indicate . Defaults to None.
+            Y_idx (Optional[np.ndarray], optional): indices to indicate the cluster of approximation set.
+                Defaults to None.
         """
         self._ref: Dict[int, np.ndarray] = {0: ref} if isinstance(ref, np.ndarray) else ref
         assert isinstance(self._ref, dict)
@@ -65,23 +40,26 @@ class ReferenceSet:
         self._medoids: Dict[int, np.ndarray] = {i: None for i in range(self.n_components)}
         self.plot = plot
 
-    @cached_property
-    def N(self) -> np.ndarray:
+    @property
+    def N(self) -> int:
         return len(self.reference_set)
 
-    @cached_property
-    def reference_set(self) -> np.ndarray:
-        return np.concatenate(list(self._ref.values()), axis=0)
-
     @property
-    def medoids(self) -> np.ndarray:
-        return self._matched_medoids
+    def reference_set(self) -> np.ndarray:
+        return (
+            self._matched_medoids
+            if hasattr(self, "_matched_medoids")
+            else np.concatenate(list(self._ref.values()), axis=0)
+        )
+
+    # @property
+    # def medoids(self) -> np.ndarray:
+    #     return self._matched_medoids
 
     def match(self, Y: np.ndarray) -> np.ndarray:
         if not self.re_match and hasattr(self, "_matched_medoids"):
             return
 
-        Y_old = Y.copy()
         Y = self._partition_Y(Y)
         N = sum([len(y) for y in Y])
         # match the components of the reference set and `Y`
@@ -104,52 +82,29 @@ class ReferenceSet:
         self._matched_medoids = out
 
         if self.plot:
-            colors = plt.get_cmap("tab20").colors
-            colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
-            colors = ["m", "c"]
-            fig = plt.figure(figsize=plt.figaspect(1))
-            plt.subplots_adjust(bottom=0.08, top=0.9, right=0.93, left=0.05)
-            ax0 = fig.add_subplot(1, 1, 1, projection="3d")
-            ax0.set_box_aspect((1, 1, 1))
-            ax0.view_init(45, 45)
-            for i, Y_ in enumerate(Y):
-                ax0.plot(Y_[:, 0], Y_[:, 1], Y_[:, 2], mfc=colors[i], ls="none", marker=".", ms=10, alpha=0.8)
-            ax0.plot(
-                self._matched_medoids[:, 0],
-                self._matched_medoids[:, 1],
-                self._matched_medoids[:, 2],
-                "g+",
-                ms=10,
-                alpha=0.6,
-            )
-            for i, p in enumerate(Y_old):
-                ax0.plot(
-                    (p[0], self._matched_medoids[i, 0]),
-                    (p[1], self._matched_medoids[i, 1]),
-                    zs=(p[2], self._matched_medoids[i, 2]),
-                    ls="dashed",
-                    color="k",
-                    ms=5,
-                    alpha=0.5,
-                )
-            ax0.set_title("reference set")
-            ax0.set_xlabel(r"$f_1$")
-            ax0.set_ylabel(r"$f_2$")
-            ax0.set_zlabel(r"$f_3$")
-            plt.show()
-            # plt.tight_layout()
-            # plt.savefig(f"matching{datetime.datetime.now()}.pdf", dpi=1000)
+            plot_reference_set_matching(self._matched_medoids, Y)
 
     def shift(self, c: float = 0.05, indices: np.ndarray = None):
-        # shift the medoids
-        # TODO: also shift each component of the reference set
-        if indices is None:
-            indices = np.arange(len(self._matched_medoids))
-        for k in indices:
-            v = c * self.eta[self._medoids_idx[k][0]]
-            # TODO: also shift the reference set here
-            self._matched_medoids[k] += v
-            self.set_medoids(self._matched_medoids[k], k)
+        """Shift the reference set. It operates in two cases:
+        - shift the medoids if `self.match` has been called, representing a reference set matched to the
+            approximation set.
+        - shift the entire reference set if`self.match` is never called.
+
+        Args:
+            c (float, optional): the step-size of the shift. Defaults to 0.05.
+            indices (np.ndarray, optional): the indices of the medoids to shift. Defaults to None.
+        """
+        if hasattr(self, "_matched_medoids"):
+            if indices is None:  # shift all medoids if indices is None
+                indices = np.arange(len(self._matched_medoids))
+            for k in indices:
+                v = c * self.eta[self._medoids_idx[k][0]]
+                # TODO: also shift the reference set here
+                self._matched_medoids[k] += v
+                self.set_medoids(self._matched_medoids[k], k)
+        else:  # if the `self.match` is not called yet
+            for k, ref in self._ref.items():
+                self._ref[k] = ref + c * self.eta[k]
 
     def set_medoids(self, medoid: np.ndarray, k: int):
         # update the medoids

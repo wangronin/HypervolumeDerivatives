@@ -1,3 +1,4 @@
+import datetime
 import functools
 import logging
 import statistics
@@ -6,11 +7,64 @@ import time
 from collections import defaultdict
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import rcParams
 from scipy.linalg import cholesky, qr
 from sklearn.neighbors import LocalOutlierFactor
 
-__author__ = "Hao Wang"
+__authors__ = ["Hao Wang"]
+
+plt.style.use("ggplot")
+rcParams["font.size"] = 15
+rcParams["xtick.direction"] = "out"
+rcParams["ytick.direction"] = "out"
+rcParams["text.usetex"] = True
+rcParams["legend.numpoints"] = 1
+rcParams["xtick.labelsize"] = 15
+rcParams["ytick.labelsize"] = 15
+rcParams["xtick.major.size"] = 7
+rcParams["xtick.major.width"] = 1
+rcParams["ytick.major.size"] = 7
+rcParams["ytick.major.width"] = 1
+
+
+def plot_reference_set_matching(matched_medoids: np.ndarray, Y: np.ndarray) -> None:
+    colors = plt.get_cmap("tab20").colors
+    colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
+    colors = ["m", "c"]
+    fig = plt.figure(figsize=plt.figaspect(1))
+    plt.subplots_adjust(bottom=0.08, top=0.9, right=0.93, left=0.05)
+    ax0 = fig.add_subplot(1, 1, 1, projection="3d")
+    ax0.set_box_aspect((1, 1, 1))
+    ax0.view_init(45, 45)
+    ax0.plot(
+        matched_medoids[:, 0],
+        matched_medoids[:, 1],
+        matched_medoids[:, 2],
+        "g+",
+        ms=10,
+        alpha=0.6,
+    )
+    for i, Y_ in enumerate(Y):
+        ax0.plot(Y_[:, 0], Y_[:, 1], Y_[:, 2], mfc=colors[i], ls="none", marker=".", ms=10, alpha=0.8)
+
+    # for i, p in enumerate(Y_old):
+    #     ax0.plot(
+    #         (p[0], matched_medoids[i, 0]),
+    #         (p[1], matched_medoids[i, 1]),
+    #         zs=(p[2], matched_medoids[i, 2]),
+    #         ls="dashed",
+    #         color="k",
+    #         ms=5,
+    #         alpha=0.5,
+    #     )
+    ax0.set_title("reference set")
+    ax0.set_xlabel(r"$f_1$")
+    ax0.set_ylabel(r"$f_2$")
+    ax0.set_zlabel(r"$f_3$")
+    plt.tight_layout()
+    plt.savefig(f"matching{datetime.datetime.now()}.pdf", dpi=1000)
 
 
 def compute_chim(Y: np.ndarray) -> np.ndarray:
