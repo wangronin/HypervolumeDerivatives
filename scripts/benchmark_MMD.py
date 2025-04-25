@@ -19,7 +19,7 @@ from scripts.utils import plot_2d, read_reference_set_data
 
 np.random.seed(66)
 
-max_iters = 8
+max_iters = 6
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
@@ -86,7 +86,7 @@ def execute(run: int) -> np.ndarray:
     Y = opt.run()[1]
     Y = get_non_dominated(Y)
     # plotting the final approximation set
-    if 1 < 2:
+    if 11 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
         plot_2d(
             y0,
