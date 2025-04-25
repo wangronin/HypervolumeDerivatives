@@ -139,12 +139,11 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
 
 n_iter_newton = 6
 gen = 300
-# NOTE: the following running budget is estimated with upper bounds of AD's theory
-# gen_func = lambda n_var, scale: 4 * scale + 10 * n_var
 # NOTE: 1.836 is obtained on ZDTs
 gen_func = lambda n_var, scale: int(1.836 * scale + 3)
 N = 30
 problem_names = sys.argv[1]
+algorithms = ("NSGA-II",)
 
 for problem_name in [problem_names]:
     print(problem_name)
@@ -162,13 +161,22 @@ for problem_name in [problem_names]:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ("SMS-EMOA",):
+    for algorithm_name in algorithms:
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
         termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
-        # minimize(problem, algorithm, algorithm_name, termination, run_id=1, seed=1, reference_point=reference_point, verbose=True)
+        # minimize(
+        #     problem,
+        #     algorithm,
+        #     algorithm_name,
+        #     termination,
+        #     run_id=1,
+        #     seed=1,
+        #     reference_point=reference_point,
+        #     verbose=True,
+        # )
         data = Parallel(n_jobs=N)(
             delayed(minimize)(
                 problem,
@@ -182,7 +190,6 @@ for problem_name in [problem_names]:
             )
             for i in range(N)
         )
-        # df = pd.DataFrame(np.array(data), columns=["IGD", "GD", "HV"])
         data = np.array(data)
         data = data[~np.any(np.isnan(data), axis=1)]
         df = pd.DataFrame(data, columns=["IGD", "GD", "HV"])
