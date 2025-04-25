@@ -52,10 +52,6 @@ class ReferenceSet:
             else np.concatenate(list(self._ref.values()), axis=0)
         )
 
-    # @property
-    # def medoids(self) -> np.ndarray:
-    #     return self._matched_medoids
-
     def match(self, Y: np.ndarray) -> np.ndarray:
         if not self.re_match and hasattr(self, "_matched_medoids"):
             return

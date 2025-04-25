@@ -17,7 +17,7 @@ from scripts.utils import plot_2d, read_reference_set_data
 
 np.random.seed(66)
 
-max_iters = 5
+max_iters = 15
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
@@ -69,6 +69,7 @@ def execute(run: int) -> np.ndarray:
         type="igd",
         verbose=True,
         metrics=metrics,
+        preconditioning=True,
     )
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
@@ -107,6 +108,7 @@ if 1 < 2:
     data = []
     for i in run_id:
         data.append(execute(i))
+        breakpoint()
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 
