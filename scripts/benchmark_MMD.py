@@ -49,7 +49,7 @@ def execute(run: int) -> np.ndarray:
     pareto_front = problem.get_pareto_front(1000)
     # `theta` parameter is very important, `1/N` is empirically good
     # TODO: this parameter should be set according to the average distance between points
-    theta = 2000
+    theta = 1000
     mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
@@ -86,7 +86,7 @@ def execute(run: int) -> np.ndarray:
     Y = opt.run()[1]
     Y = get_non_dominated(Y)
     # plotting the final approximation set
-    if 11 < 2:
+    if 1 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
         plot_2d(
             y0,
