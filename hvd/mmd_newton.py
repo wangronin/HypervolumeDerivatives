@@ -4,31 +4,13 @@ from collections import defaultdict
 from copy import deepcopy
 from typing import Callable, Dict, List, Tuple, Union
 
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import rcParams
 from scipy.linalg import block_diag, solve
 
 from .base import State
 from .mmd import MMD, MMDMatching
 from .reference_set import ReferenceSet
 from .utils import get_logger, precondition_hessian, set_bounds
-
-np.seterr(divide="ignore", invalid="ignore")
-
-plt.style.use("ggplot")
-rcParams["font.size"] = 15
-rcParams["xtick.direction"] = "out"
-rcParams["ytick.direction"] = "out"
-rcParams["text.usetex"] = True
-rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 15
-rcParams["ytick.labelsize"] = 15
-rcParams["xtick.major.size"] = 7
-rcParams["xtick.major.width"] = 1
-rcParams["ytick.major.size"] = 7
-rcParams["ytick.major.width"] = 1
-
 
 __authors__ = ["Hao Wang"]
 
@@ -209,7 +191,7 @@ class MMDNewton:
         # prevent the decision points from moving out of the decision space.
         self.step, max_step_size = self._handle_box_constraint(self.step)
         # backtracking line search for the step size
-        self.step_size = self._backtracking_line_search_single_step_size(self.step, self.R, max_step_size)
+        self.step_size = self._backtracking_line_search_global(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
         self.iter_count += 1
@@ -303,17 +285,17 @@ class MMDNewton:
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_norm, 0))
 
         indices = np.nonzero(masks)[0]
-        self.ref.shift(0.08, indices)
+        self.ref.shift(0.05, indices)
         for k in indices:  # log the updated medoids
             self.history_medoids[k].append(self.ref.reference_set[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
 
-    def _backtracking_line_search_single_step_size(
+    def _backtracking_line_search_global(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> float:
         """backtracking line search with Armijo's condition. Global step-size control"""
-        c1 = 1e-5
-        if 1 < 2 or np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
+        c1 = 1e-6
+        if 11 < 2 or np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
             return np.array([1])
 
         def phi_func(alpha):
@@ -327,7 +309,7 @@ class MMDNewton:
         step_size = min(max_step_size) if max_step_size is not None else 1
         phi = [np.linalg.norm(R)]
         s = [0, step_size]
-        for _ in range(8):
+        for _ in range(6):
             phi.append(phi_func(s[-1]))
             # Armijo–Goldstein condition
             # when R norm is close to machine precision, it makes no sense to perform the line search
@@ -341,7 +323,7 @@ class MMDNewton:
         step_size = s[-1]
         return step_size
 
-    def _backtracking_line_search(
+    def _backtracking_line_search_individual(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> np.ndarray:
         # TODO: use the backtracking line search in scipy

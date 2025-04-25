@@ -118,7 +118,7 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 1 < 2:
+if 11 < 2:
     data = []
     for i in run_id:
         data.append(execute(i))

@@ -8,7 +8,6 @@ __authors__ = ["Hao Wang"]
 # NOTE: `jnp.abs` is taken on `f1 / g` for ZDT1, 3, and 4 to avoid numerical issues
 # when the decision var. are out of bound
 # TODO: remove the dependency of pymoo here
-
 eps = 1e-6
 
 
@@ -185,7 +184,8 @@ class ZDT6(ZDT):
     def _evaluate(self, x):
         x = jnp.atleast_2d(x)
         f1 = 1 - jnp.exp(-4 * x[:, 0]) * jnp.power(jnp.sin(6 * jnp.pi * x[:, 0]), 6)
-        g = 1 + 9.0 * jnp.power(jnp.abs(jnp.sum(x[:, 1:], axis=1) / (self.n_var - 1.0)), 0.25)
-        # g = 1 + 9.0 * jnp.power(jnp.sum(x[:, 1:], axis=1) / (self.n_var - 1.0), 0.25)
+        # NOTE: the gradient will explore at the Pareto set
+        # TODO: find a workaround for MMD and DpN method
+        g = 1 + 9.0 * jnp.power(jnp.max(jnp.r_[jnp.sum(x[:, 1:], axis=1) / (self.n_var - 1.0), 1e-10]), 0.25)
         f2 = g * (1 - jnp.power(f1 / g, 2))
         return jnp.column_stack([f1, f2])[0]

@@ -693,7 +693,7 @@ class DpN:
         """The box-constraint handler projects the Newton step onto the box boundary, preventing the
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         """
-        # TODO: FIXIT
+        # NOTE: for ZDT6, we have to project the gradient
         if 1 < 2:
             return step, np.ones(len(step))
 
