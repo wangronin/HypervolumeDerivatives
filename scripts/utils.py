@@ -157,7 +157,7 @@ def plot_2d(
     ax0.set_title("Objective space (Initialization)")
     ax0.set_xlabel(r"$f_1$")
     ax0.set_ylabel(r"$f_2$")
-    lgnd = ax0.legend(["Pareto front", r"$Y_0$", "reference set", "matched points"])
+    lgnd = ax0.legend(["Pareto front", "Y0", "reference set", "matched points"])
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
 
@@ -194,12 +194,12 @@ def plot_2d(
     ax1.set_xlabel(r"$f_1$")
     ax1.set_ylabel(r"$f_2$")
 
-    ax22 = ax2.twinx()
+    # ax22 = ax2.twinx()
     for i, (k, v) in enumerate(history_metric.items()):
         ax2.semilogy(range(1, len(v) + 1), v, color=colors[i % n_colors], ls="solid", label=k)
-    ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
-    ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
-    ax22.set_ylabel(r"R norm", color="g")
+    # ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
+    # ax22.set_ylabel(r"R norm", color="g")
+    # ax22.set_ylabel(r"R norm", color="g")
     ax2.set_title("Performance")
     ax2.set_xlabel("iteration")
     ax2.set_xticks(range(1, len(hist_R_norm) + 1))

@@ -191,7 +191,7 @@ class MMDNewton:
         # prevent the decision points from moving out of the decision space.
         self.step, max_step_size = self._handle_box_constraint(self.step)
         # backtracking line search for the step size
-        self.step_size = self._backtracking_line_search_global(self.step, self.R, max_step_size)
+        self.step_size = self._backtracking_line_search_individual(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
         self.iter_count += 1
@@ -204,9 +204,10 @@ class MMDNewton:
         if self.verbose:
             self.logger.info(f"iteration {self.iter_count} ---")
             self.logger.info(f"{self.indicator.__class__.__name__}: {self.curr_indicator_value}")
-            self.logger.info(f"step size: {self.step_size}")
+            self.logger.info(f"step size: {self.step_size.ravel()}")
             self.logger.info(f"R norm: {self.history_R_norm[-1]}")
-        for name, func in self.metrics.items():  # compute the performance metrics
+        # compute the performance metrics
+        for name, func in self.metrics.items():
             value = func.compute(Y=self.state.Y)
             self.history_metrics[name].append(value)
             self.logger.info(f"{name}: {value}")

@@ -1,42 +1,3 @@
-#    Slightly modified from the original code of Simon Wessing
-#    Copyright (C) 2010 Simon Wessing
-#    TU Dortmund University
-#
-#    In personal communication, the original authors authorized DEAP team
-#    to use this file under the Lesser General Public License.
-#
-#    You can find the original library here :
-#    http://ls11-www.cs.uni-dortmund.de/_media/rudolph/hypervolume/hv_python.zip
-#
-#    DEAP is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU Lesser General Public License as
-#    published by the Free Software Foundation, either version 3 of
-#    the License, or (at your option) any later version.
-#
-#    DEAP is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-#    GNU Lesser General Public License for more details.
-#
-#    You should have received a copy of the GNU Lesser General Public
-#    License along with DEAP. If not, see <http://www.gnu.org/licenses/>.
-
-#    Copyright (C) 2010 Simon Wessing
-#    TU Dortmund University
-#
-#    This program is free software: you can redistribute it and/or modify
-#    it under the terms of the GNU General Public License as published by
-#    the Free Software Foundation, either version 3 of the License, or
-#    (at your option) any later version.
-#
-#    This program is distributed in the hope that it will be useful,
-#    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#    GNU General Public License for more details.
-#
-#    You should have received a copy of the GNU General Public License
-#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 import numpy as np
 
 __author__ = "Simon Wessing"
@@ -61,9 +22,9 @@ class HyperVolume:
 
     """
 
-    def __init__(self, referencePoint):
+    def __init__(self, ref):
         """Constructor."""
-        self.referencePoint = referencePoint
+        self.ref = ref
         self.list = []
 
     def compute(self, front):
@@ -81,7 +42,7 @@ class HyperVolume:
             return True
 
         relevantPoints = []
-        referencePoint = self.referencePoint
+        referencePoint = self.ref
         dimensions = len(referencePoint)
         for point in front:
             # only consider points that dominate the reference point
@@ -182,7 +143,7 @@ class HyperVolume:
 
     def preProcess(self, front):
         """Sets up the list data structure needed for calculation."""
-        dimensions = len(self.referencePoint)
+        dimensions = len(self.ref)
         nodeList = MultiList(dimensions)
         nodes = [MultiList.Node(dimensions, point) for point in front]
         for i in range(dimensions):

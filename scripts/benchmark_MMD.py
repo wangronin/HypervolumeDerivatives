@@ -10,7 +10,7 @@ from joblib import Parallel, delayed
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
-from hvd.mmd import MMD
+from hvd.mmd import MMD, laplace, rbf
 from hvd.mmd_newton import MMDNewton
 from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 from hvd.reference_set import ReferenceSet
@@ -49,8 +49,8 @@ def execute(run: int) -> np.ndarray:
     pareto_front = problem.get_pareto_front(1000)
     # `theta` parameter is very important, `1/N` is empirically good
     # TODO: this parameter should be set according to the average distance between points
-    theta = 1000
-    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta)
+    theta = 10
+    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=laplace)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
     hv_value0 = hypervolume(y0, ref=ref_point[problem_name])
@@ -81,6 +81,7 @@ def execute(run: int) -> np.ndarray:
         matching=False,
         preconditioning=True,
         theta=theta,
+        kernel=laplace,
     )
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
