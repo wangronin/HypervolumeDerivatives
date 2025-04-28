@@ -49,7 +49,7 @@ def execute(run: int) -> np.ndarray:
     pareto_front = problem.get_pareto_front(1000)
     # `theta` parameter is very important, `1/N` is empirically good
     # TODO: this parameter should be set according to the average distance between points
-    theta = 10
+    theta = 1
     mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=laplace)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
@@ -86,6 +86,8 @@ def execute(run: int) -> np.ndarray:
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
     Y = get_non_dominated(Y)
+    idx = np.nonzero(np.all(Y < 10, axis=1))
+    Y = Y[idx]
     # plotting the final approximation set
     if 1 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
