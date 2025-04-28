@@ -376,7 +376,7 @@ class MMDNewton:
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         NOTE: this function is experimental
         """
-        if 1 < 2:
+        if 11 < 2:
             return step, np.ones(len(step))
 
         primal_vars = self.state.primal
