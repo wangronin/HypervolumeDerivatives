@@ -198,9 +198,8 @@ class State:
         obj.X = obj.X[indices]
         obj.Y = obj.Y[indices]
         obj.J = obj.J[indices]
-        if self._constrained:
-            obj.cstr_value = obj.cstr_value[indices]
-            obj.active_indices = obj.active_indices[indices]
-            obj.cstr_grad = obj.cstr_grad[indices]
-            obj.cstr_hess = obj.cstr_hess[indices]
+        obj.cstr_value = obj.cstr_value[indices]
+        obj.active_indices = obj.active_indices[indices]
+        obj.cstr_grad = obj.cstr_grad[indices]
+        obj.cstr_hess = obj.cstr_hess[indices]
         return obj
