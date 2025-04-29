@@ -59,9 +59,9 @@ for moea in MOEAs:
         if moea == "NSGA-III" and problem == "Eq1IDTLZ4":
             x = x[x <= 1.7]
         # filtering out the outliers in DpN
-        q = np.quantile(x, q=(0.25, 0.75))
-        iqr = q[1] - q[0]
-        x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
+        # q = np.quantile(x, q=(0.25, 0.75))
+        # iqr = q[1] - q[0]
+        # x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
         pvalue = mannwhitneyu(x=x, y=y, alternative="two-sided").pvalue
         pvalues.append(pvalue)
         stats.append([stats_func(x), stats_func(y)])

@@ -10,7 +10,7 @@ plt.style.use("ggplot")
 rcParams["font.size"] = 12
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
-rcParams["text.usetex"] = True
+# rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
 rcParams["xtick.labelsize"] = 12
 rcParams["ytick.labelsize"] = 12
