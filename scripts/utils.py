@@ -208,30 +208,32 @@ def plot_2d(
 
 
 def plot_3d(
-    y0: np.ndarray,
+    Y0: np.ndarray,
     Y: np.ndarray,
     ref: np.ndarray,
+    pareto_front: np.ndarray,
     hist_Y: List[np.ndarray],
     history_medoids: List[np.ndarray],
-    hist_IGD: np.ndarray,
+    history_metric: np.ndarray,
     hist_R_norm: np.ndarray,
     fig_name: str,
+    plot_trajectory: bool = False,
 ) -> None:
     colors = plt.get_cmap("tab20").colors
     colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
-    medoids0 = np.array([h[0] for h in history_medoids])
+    medoids0 = np.array([h[0] for h in history_medoids.values()])
 
-    # fig = plt.figure(figsize=plt.figaspect(1 / 3.0))
-    # plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
-    # ax0 = fig.add_subplot(1, 3, 1, projection="3d")
-    fig = plt.figure(figsize=plt.figaspect(1 / 1.0))
-    plt.subplots_adjust(bottom=0.1, top=0.9, right=0.9, left=0.1)
-    ax0 = fig.add_subplot(1, 1, 1, projection="3d")
+    fig = plt.figure(figsize=plt.figaspect(1 / 2.0))
+    plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
+    ax0 = fig.add_subplot(1, 2, 1, projection="3d")
+    # fig = plt.figure(figsize=plt.figaspect(1 / 1.0))
+    # plt.subplots_adjust(bottom=0.1, top=0.9, right=0.9, left=0.1)
+    # ax0 = fig.add_subplot(1, 1, 1, projection="3d")
     ax0.set_box_aspect((1, 1, 1))
     ax0.view_init(45, 45)
-    ax0.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=8, alpha=0.6)
-    # ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.4)
-    # ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "b.", mec="none", ms=5, alpha=0.2)
+    ax0.plot(Y0[:, 0], Y0[:, 1], Y0[:, 2], "k+", ms=8, alpha=0.6)
+    ax0.plot(pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.4)
+    ax0.plot(ref[:, 0], ref[:, 1], ref[:, 2], "b.", mec="none", ms=5, alpha=0.2)
     ax0.plot(
         medoids0[:, 0],
         medoids0[:, 1],
@@ -245,12 +247,12 @@ def plot_3d(
     )
 
     ax0.set_title("Initialization")
-    ax0.set_xlabel(r"$f_1$")
-    ax0.set_ylabel(r"$f_2$")
-    ax0.set_zlabel(r"$f_3$")
+    ax0.set_xlabel(r"f1")
+    ax0.set_ylabel(r"f2")
+    ax0.set_zlabel(r"f3")
     lgnd = ax0.legend(
         # [r"$Y_0$", "Pareto front", "medoids"],
-        [r"$Y_0$", "reference set"],
+        [r"Y0", "reference set"],
         loc="lower center",
         bbox_to_anchor=(0.5, 0.1),
         ncol=2,
@@ -258,22 +260,22 @@ def plot_3d(
     )
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
-    plt.savefig(fig_name + "_1.pdf", dpi=1000)
+    # plt.savefig(fig_name + "_1.pdf", dpi=1000)
 
     # for i in range(len(y0)):
     # ax0.plot((medoids0[i, 0], y0[i, 0]), (medoids0[i, 1], y0[i, 1]), (medoids0[i, 2], y0[i, 2]), "k-")
 
-    fig = plt.figure(figsize=plt.figaspect(1 / 1.0))
-    # plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
-    plt.subplots_adjust(bottom=0.1, top=0.9, right=0.9, left=0.1)
-    ax1 = fig.add_subplot(1, 1, 1, projection="3d")
+    # fig = plt.figure(figsize=plt.figaspect(1 / 1.0))
+    # # plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
+    # plt.subplots_adjust(bottom=0.1, top=0.9, right=0.9, left=0.1)
+    # ax1 = fig.add_subplot(1, 1, 1, projection="3d")
 
-    # ax1 = fig.add_subplot(1, 3, 2, projection="3d")
+    ax1 = fig.add_subplot(1, 2, 2, projection="3d")
     ax1.set_box_aspect((1, 1, 1))
     ax1.view_init(45, 45)
-    if 11 < 2:
-        trajectory = np.array([y0] + hist_Y)
-        for i in range(len(y0)):
+    if plot_trajectory:
+        trajectory = np.array([Y0] + hist_Y)
+        for i in range(len(Y0)):
             x, y, z = trajectory[:, i, 0], trajectory[:, i, 1], trajectory[:, i, 2]
             ax1.quiver(
                 x[:-1],
@@ -292,20 +294,24 @@ def plot_3d(
     #     pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.2
     # )
     shifts = []
-    for i, M in enumerate(history_medoids):
-        c = colors[len(M) - 1]
-        for j, x in enumerate(M):
-            line = ax1.plot(x[0], x[1], x[2], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
-            if j == len(shifts):
-                shifts.append(line)
+    # for i, M in enumerate(history_medoids):
+    #     c = colors[len(M) - 1]
+    #     for j, x in enumerate(M):
+    #         line = ax1.plot(x[0], x[1], x[2], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
+    #         if j == len(shifts):
+    #             shifts.append(line)
 
-    lines += shifts
-    lines += ax1.plot(Y[:, 0], Y[:, 1], Y[:, 2], "k*", mec="none", ms=8, alpha=0.9)
-    counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
+    # lines += shifts
+    lines += ax1.plot(Y0[:, 0], Y0[:, 1], Y0[:, 2], "k+", mfc="none", ms=6, alpha=0.9)
+    lines += ax1.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r*", mfc="none", ms=8, alpha=0.9)
+    lines += ax1.plot(
+        pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.4
+    )
+    # counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
     lgnd = ax1.legend(
         handles=lines,
         # labels=[f"{i + 1} shift(s): {k} medoids" for i, k in enumerate(counts)]  # ["Pareto front"]
-        labels=["reference set"] + [r"$Y_{\mathrm{final}}$"],
+        labels=["Y0", "Y-final", "Pareto front"],
         loc="lower center",
         bbox_to_anchor=(0.5, 0.1),
         ncol=2,
@@ -315,10 +321,10 @@ def plot_3d(
         handle.set_markersize(10)
 
     ax1.set_title("Final population")
-    ax1.set_xlabel(r"$f_1$")
-    ax1.set_ylabel(r"$f_2$")
-    ax1.set_ylabel(r"$f_3$")
-    plt.savefig(fig_name + "_2.pdf", dpi=1000)
+    ax1.set_xlabel(r"f1")
+    ax1.set_ylabel(r"f2")
+    ax1.set_ylabel(r"f3")
+    # plt.savefig(fig_name + "_2.pdf", dpi=1000)
 
     # ax2 = fig.add_subplot(1, 3, 3, projection="3d")
     # ax2.set_box_aspect((1, 1, 1))
@@ -339,22 +345,23 @@ def plot_3d(
     # for handle in lgnd.legend_handles:
     #     handle.set_markersize(10)
 
-    fig, ax2 = plt.subplots(1, 1, figsize=(8, 6.5))
-    plt.subplots_adjust(right=0.85, left=0.2)
+    # fig, ax2 = plt.subplots(1, 1, figsize=(8, 6.5))
+    # plt.subplots_adjust(right=0.85, left=0.2)
 
-    ax22 = ax2.twinx()
-    ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
-    ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
-    ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
-    ax2.set_ylabel("IGD", color="r")
-    # ax22.set_ylabel(r"R norm", color="g")
-    ax2.set_title("Performance")
-    ax2.set_xlabel("iteration")
-    ax2.set_xticks(range(1, len(hist_IGD) + 1))
-    ax2.legend()
-    # plt.tight_layout()
-    plt.savefig(fig_name + "_3.pdf", dpi=1000)
-    # plt.savefig(fig_name, dpi=1000)
+    # ax22 = ax2.twinx()
+    # ax2.semilogy(range(1, len(hist_IGD) + 1), hist_IGD, "r-", label="IGD")
+    # ax22.semilogy(range(1, len(hist_R_norm) + 1), hist_R_norm, "g--")
+    # ax22.set_ylabel(r"$||R(\mathbf{X})||$", color="g")
+    # ax2.set_ylabel("IGD", color="r")
+    # # ax22.set_ylabel(r"R norm", color="g")
+    # ax2.set_title("Performance")
+    # ax2.set_xlabel("iteration")
+    # ax2.set_xticks(range(1, len(hist_IGD) + 1))
+    # ax2.legend()
+    # # plt.tight_layout()
+    # plt.savefig(fig_name + "_3.pdf", dpi=1000)
+    plt.show()
+    plt.savefig(fig_name, dpi=1000)
     plt.close(fig)
 
 

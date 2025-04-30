@@ -7,24 +7,30 @@ from glob import glob
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
+from sklearn.neighbors import LocalOutlierFactor
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.mmd import MMD, laplace, rbf
 from hvd.mmd_newton import MMDNewton
-from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
-from scripts.utils import plot_2d, read_reference_set_data
+from scripts.utils import plot_2d, plot_3d, read_reference_set_data
 
 np.random.seed(66)
 
-max_iters = 6
+max_iters = 5
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
-problem = PymooProblemWithAD(locals()[problem_name]())
-path = "./ZDT/"
+
+if problem_name.startswith("DTLZ"):
+    problem = locals()[problem_name](n_var=7, boundry_constraints=True)
+elif problem_name.startswith("ZDT"):
+    problem = PymooProblemWithAD(locals()[problem_name]())
+
+path = "./MMD_data/"
 emoa = "NSGA-II"
 gen = 300
 ref_point = dict(
@@ -46,7 +52,7 @@ def execute(run: int) -> np.ndarray:
     ref_list = np.vstack([r for r in ref.values()])
     N = len(x0)
     # create the algorithm
-    pareto_front = problem.get_pareto_front(1000)
+    pareto_front = problem.get_pareto_front()
     # `theta` parameter is very important, `1/N` is empirically good
     # TODO: this parameter should be set according to the average distance between points
     theta = 1
@@ -61,7 +67,6 @@ def execute(run: int) -> np.ndarray:
     print(f"initial GD: {gd_value0}")
     print(f"initial IGD: {igd_value0}")
     print(f"initial MMD: {mmd_value0}")
-
     opt = MMDNewton(
         n_var=problem.n_var,
         n_obj=problem.n_obj,
@@ -86,22 +91,37 @@ def execute(run: int) -> np.ndarray:
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
     Y = get_non_dominated(Y)
-    idx = np.nonzero(np.all(Y < 10, axis=1))
-    Y = Y[idx]
+    score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
+    Y = Y[score != -1]
+    # idx = np.nonzero(np.all(Y < 10, axis=1))
+    # Y = Y[idx]
     # plotting the final approximation set
     if 1 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
-        plot_2d(
-            y0,
-            Y,
-            ref_list,
-            pareto_front,
-            opt.history_Y,
-            opt.history_medoids,
-            opt.history_metrics,
-            opt.history_R_norm,
-            fig_name,
-        )
+        if problem.n_obj == 2:
+            plot_2d(
+                y0,
+                Y,
+                ref_list,
+                pareto_front,
+                opt.history_Y,
+                opt.history_medoids,
+                opt.history_metrics,
+                opt.history_R_norm,
+                fig_name,
+            )
+        elif problem.n_obj == 3:
+            plot_3d(
+                y0,
+                Y,
+                ref_list,
+                pareto_front,
+                opt.history_Y,
+                opt.history_medoids,
+                opt.history_metrics,
+                opt.history_R_norm,
+                fig_name,
+            )
     # save the final approximation set
     if 11 < 2:
         df = pd.DataFrame(Y, columns=[f"f{i}" for i in range(1, Y.shape[1] + 1)])
