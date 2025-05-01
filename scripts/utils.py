@@ -247,12 +247,12 @@ def plot_3d(
     )
 
     ax0.set_title("Initialization")
-    ax0.set_xlabel(r"f1")
-    ax0.set_ylabel(r"f2")
-    ax0.set_zlabel(r"f3")
+    ax0.set_xlabel("f1")
+    ax0.set_ylabel("f2")
+    ax0.set_zlabel("f3")
     lgnd = ax0.legend(
         # [r"$Y_0$", "Pareto front", "medoids"],
-        [r"Y0", "reference set"],
+        ["Y0", "reference set"],
         loc="lower center",
         bbox_to_anchor=(0.5, 0.1),
         ncol=2,
@@ -321,9 +321,9 @@ def plot_3d(
         handle.set_markersize(10)
 
     ax1.set_title("Final population")
-    ax1.set_xlabel(r"f1")
-    ax1.set_ylabel(r"f2")
-    ax1.set_ylabel(r"f3")
+    ax1.set_xlabel("f1")
+    ax1.set_ylabel("f2")
+    ax1.set_ylabel("f3")
     # plt.savefig(fig_name + "_2.pdf", dpi=1000)
 
     # ax2 = fig.add_subplot(1, 3, 3, projection="3d")
@@ -358,8 +358,9 @@ def plot_3d(
     # ax2.set_xlabel("iteration")
     # ax2.set_xticks(range(1, len(hist_IGD) + 1))
     # ax2.legend()
-    # # plt.tight_layout()
+    #
     # plt.savefig(fig_name + "_3.pdf", dpi=1000)
+    plt.tight_layout()
     plt.savefig(fig_name, dpi=1000)
     plt.close(fig)
 
