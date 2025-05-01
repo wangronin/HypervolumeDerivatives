@@ -20,12 +20,13 @@ from scripts.utils import plot_2d, plot_3d, read_reference_set_data
 
 np.random.seed(66)
 
-max_iters = 1
+max_iters = 5
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
 
 if problem_name.startswith("DTLZ"):
+    n_var = 7 if problem_name == "DTLZ1" else 10
     problem = locals()[problem_name](n_var=7, boundry_constraints=True)
 elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
@@ -93,35 +94,33 @@ def execute(run: int) -> np.ndarray:
     Y = get_non_dominated(Y)
     score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
     Y = Y[score != -1]
-    # idx = np.nonzero(np.all(Y < 10, axis=1))
-    # Y = Y[idx]
     # plotting the final approximation set
-    if 1 < 2:
+    if 11 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
-        # if problem.n_obj == 2:
-        #     plot_2d(
-        #         y0,
-        #         Y,
-        #         ref_list,
-        #         pareto_front,
-        #         opt.history_Y,
-        #         opt.history_medoids,
-        #         opt.history_metrics,
-        #         opt.history_R_norm,
-        #         fig_name,
-        #     )
-        # elif problem.n_obj == 3:
-        plot_3d(
-            y0,
-            Y,
-            ref_list,
-            pareto_front,
-            opt.history_Y,
-            opt.history_medoids,
-            opt.history_metrics,
-            opt.history_R_norm,
-            fig_name,
-        )
+        if problem.n_obj == 2:
+            plot_2d(
+                y0,
+                Y,
+                ref_list,
+                pareto_front,
+                opt.history_Y,
+                opt.history_medoids,
+                opt.history_metrics,
+                opt.history_R_norm,
+                fig_name,
+            )
+        elif problem.n_obj == 3:
+            plot_3d(
+                y0,
+                Y,
+                ref_list,
+                pareto_front,
+                opt.history_Y,
+                opt.history_medoids,
+                opt.history_metrics,
+                opt.history_R_norm,
+                fig_name,
+            )
     # save the final approximation set
     if 11 < 2:
         df = pd.DataFrame(Y, columns=[f"f{i}" for i in range(1, Y.shape[1] + 1)])
