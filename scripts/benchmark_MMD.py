@@ -20,7 +20,7 @@ from scripts.utils import plot_2d, plot_3d, read_reference_set_data
 
 np.random.seed(66)
 
-max_iters = 5
+max_iters = 1
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
@@ -98,30 +98,30 @@ def execute(run: int) -> np.ndarray:
     # plotting the final approximation set
     if 1 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
-        if problem.n_obj == 2:
-            plot_2d(
-                y0,
-                Y,
-                ref_list,
-                pareto_front,
-                opt.history_Y,
-                opt.history_medoids,
-                opt.history_metrics,
-                opt.history_R_norm,
-                fig_name,
-            )
-        elif problem.n_obj == 3:
-            plot_3d(
-                y0,
-                Y,
-                ref_list,
-                pareto_front,
-                opt.history_Y,
-                opt.history_medoids,
-                opt.history_metrics,
-                opt.history_R_norm,
-                fig_name,
-            )
+        # if problem.n_obj == 2:
+        #     plot_2d(
+        #         y0,
+        #         Y,
+        #         ref_list,
+        #         pareto_front,
+        #         opt.history_Y,
+        #         opt.history_medoids,
+        #         opt.history_metrics,
+        #         opt.history_R_norm,
+        #         fig_name,
+        #     )
+        # elif problem.n_obj == 3:
+        plot_3d(
+            y0,
+            Y,
+            ref_list,
+            pareto_front,
+            opt.history_Y,
+            opt.history_medoids,
+            opt.history_metrics,
+            opt.history_R_norm,
+            fig_name,
+        )
     # save the final approximation set
     if 11 < 2:
         df = pd.DataFrame(Y, columns=[f"f{i}" for i in range(1, Y.shape[1] + 1)])

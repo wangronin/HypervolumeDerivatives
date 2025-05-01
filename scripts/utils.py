@@ -360,7 +360,6 @@ def plot_3d(
     # ax2.legend()
     # # plt.tight_layout()
     # plt.savefig(fig_name + "_3.pdf", dpi=1000)
-    plt.show()
     plt.savefig(fig_name, dpi=1000)
     plt.close(fig)
 
