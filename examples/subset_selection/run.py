@@ -35,7 +35,7 @@ path = "./spline"
 
 def HV_subset_selection(problem_name: str):
     print(problem_name)
-    t0 = time.process_time()
+    t0 = time.time()
     components = glob(f"{path}/fit_Sy_{problem_name}_comp*.csv")
     data = pd.read_csv(f"{path}/Y0_{problem_name}.csv", header=None, index_col=False).values
     bs = PiecewiseBS(components)
@@ -69,7 +69,7 @@ def HV_subset_selection(problem_name: str):
     D = scipy.spatial.distance.cdist(Y, archive_Y, metric="euclidean")
     indices = np.argmin(D, axis=1)
     Y_sel = archive_Y[indices]
-    CPU_time = time.process_time() - t0
+    CPU_time = time.time() - t0
 
     fig, ((ax0, ax1), (ax2, ax3)) = plt.subplots(2, 2, figsize=(12, 12))
     plt.subplots_adjust(right=0.93, left=0.05)
@@ -130,7 +130,6 @@ def HV_subset_selection(problem_name: str):
 
 
 problem_names = ["ZDT1", "ZDT2", "ZDT3", "ZDT4", "ZDT6", "DTLZ1", "DTLZ2", "DENT", "CONV2", "2on1"]
-# problem_names = ["ZDT1"]
 selection_indices = []
 reference_points = []
 HV_values = []
