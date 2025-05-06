@@ -56,8 +56,8 @@ def execute(run: int) -> np.ndarray:
     pareto_front = problem.get_pareto_front()
     # `theta` parameter is very important, `1/N` is empirically good
     # TODO: this parameter should be set according to the average distance between points
-    theta = 1
-    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=laplace)
+    theta = 2000
+    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=rbf)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
     hv_value0 = hypervolume(y0, ref=ref_point[problem_name])
@@ -87,7 +87,7 @@ def execute(run: int) -> np.ndarray:
         matching=False,
         preconditioning=True,
         theta=theta,
-        kernel=laplace,
+        kernel=rbf,
     )
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
@@ -95,7 +95,7 @@ def execute(run: int) -> np.ndarray:
     score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
     Y = Y[score != -1]
     # plotting the final approximation set
-    if 11 < 2:
+    if 1 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
         if problem.n_obj == 2:
             plot_2d(
@@ -140,9 +140,10 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 11 < 2:
+if 1 < 2:
     data = []
     for i in run_id:
+        print(i)
         data.append(execute(i))
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)

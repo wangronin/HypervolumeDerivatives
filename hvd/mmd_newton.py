@@ -191,7 +191,7 @@ class MMDNewton:
         # prevent the decision points from moving out of the decision space.
         self.step, max_step_size = self._handle_box_constraint(self.step)
         # backtracking line search for the step size
-        self.step_size = self._backtracking_line_search_individual(self.step, self.R, max_step_size)
+        self.step_size = self._backtracking_line_search_global(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
         self.iter_count += 1
