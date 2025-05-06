@@ -36,11 +36,12 @@ path = "./spline"
 
 def HV_subset_selection(
     problem_name: str,
+    run_id: int,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, float, float, float, np.ndarray, np.ndarray]:
     print(problem_name)
     t0 = time.time()
     components = glob(f"{path}/fit_Sy_{problem_name}_comp*.csv")
-    data = pd.read_csv(f"{path}/Y0_{problem_name}.csv", header=None, index_col=False).values
+    data = pd.read_csv(f"{path}/Y0_{problem_name}_run{run_id}.csv", header=None, index_col=False).values
     bs = PiecewiseBS(components)
 
     ref = 1.5 * np.max(data, axis=0)  # set the reference point based on the data
@@ -61,20 +62,21 @@ def HV_subset_selection(
         xu=1,
         max_iters=max_iters,
         verbose=False,
-        preconditioning=True,
+        preconditioning=False,
     )
     Y = opt.run()[1]
     best_so_far_HV = np.maximum.accumulate(np.array(opt.history_indicator_value))
     best_so_far_R_norm = np.minimum.accumulate(np.array(opt.history_R_norm))
     HV0, HV1 = best_so_far_HV[0], best_so_far_HV[-1]
     # select points from the archive
-    # mat = scipy.io.loadmat(f"{path}/A_{problem_name}.mat")
-    # archive_Y = mat["Ay"]
-    archive_Y = pd.read_csv(f"{path}/Ay_{problem_name}.csv", index_col=None, header=None).values
+    mat = scipy.io.loadmat(f"{path}/A_{problem_name}_run{run_id}.mat")
+    archive_Y = mat["Ay"]
+    # archive_Y = pd.read_csv(f"{path}/Ay_{problem_name}.csv", index_col=None, header=None).values
     D = scipy.spatial.distance.cdist(Y, archive_Y, metric="euclidean")
     indices = np.argmin(D, axis=1)
     Y_sel = archive_Y[indices]
     wall_clock_time = time.time() - t0
+    HV2 = hypervolume(Y_sel, ref)
 
     t = np.linspace(0, 1, 1000)
     pareto_front = np.array([bs.objective(_) for _ in t])
@@ -113,7 +115,7 @@ def HV_subset_selection(
     ax3.set_xlabel("iteration")
     ax3.set_xticks(range(1, max_iters + 1))
     plt.tight_layout()
-    plt.savefig(f"{path}/plots/HV_subset_selection_{problem_name}-{N}.pdf", dpi=1000)
+    plt.savefig(f"{path}/plots/HV_subset_selection_{problem_name}_run{run_id}.pdf", dpi=1000)
     plt.close(fig)
     # save the performance chart of HVN as a standalone figure
     fig, ax = plt.subplots(1, 1, figsize=(7, 6))
@@ -129,40 +131,49 @@ def HV_subset_selection(
     ax.set_xlabel("iteration")
     ax.set_xticks(range(1, max_iters + 1))
     plt.tight_layout()
-    plt.savefig(f"{path}/plots/HV_subset_selection_{problem_name}-{N}_performance.pdf", dpi=1000)
+    plt.savefig(f"{path}/plots/HV_subset_selection_{problem_name}_performance_run{run_id}.pdf", dpi=1000)
     plt.close(fig)
-    return Y, indices, ref, HV0, HV1, wall_clock_time, best_so_far_HV, best_so_far_R_norm
+    return Y, indices, ref, HV0, HV1, HV2, wall_clock_time, best_so_far_HV, best_so_far_R_norm
 
 
 problem_names = ["ZDT1", "ZDT2", "ZDT3", "ZDT4", "ZDT6", "DTLZ1", "DTLZ2", "DENT", "CONV2", "2on1"]
-selection_indices = []
-reference_points = []
-HV_values = []
-CPU_times = []
-best_so_far_HV = []
-best_so_far_R_norm = []
-problem_names = ["DENT"]
-for problem_name in problem_names:
-    Y, indices, ref, HV0, HV1, CPU_time, HV_hist, R_norm_hist = HV_subset_selection(problem_name)
-    pd.DataFrame(Y, columns=["f1", "f2"]).to_csv(f"{path}/results/{problem_name}_HV_final_points.csv")
-    selection_indices.append(indices)
-    reference_points.append(ref)
-    HV_values.append([HV0, HV1])
-    CPU_times.append(CPU_time)
-    best_so_far_HV.append(HV_hist)
-    best_so_far_R_norm.append(R_norm_hist)
+for run in range(10, 11):
+    print(run)
+    selection_indices = []
+    reference_points = []
+    HV_values = []
+    CPU_times = []
+    best_so_far_HV = []
+    best_so_far_R_norm = []
+    for problem_name in problem_names:
+        Y, indices, ref, HV0, HV1, HV2, CPU_time, HV_hist, R_norm_hist = HV_subset_selection(
+            problem_name, run
+        )
+        pd.DataFrame(Y, columns=["f1", "f2"]).to_csv(
+            f"{path}/results/{problem_name}_HV_final_points_run{run}.csv"
+        )
+        selection_indices.append(indices)
+        reference_points.append(ref)
+        HV_values.append([HV0, HV1, HV2])
+        CPU_times.append(CPU_time)
+        best_so_far_HV.append(HV_hist)
+        best_so_far_R_norm.append(R_norm_hist)
 
-pd.DataFrame(selection_indices, index=problem_names).to_csv(f"{path}/results/HV_subset_selection_indices.csv")
-pd.DataFrame(reference_points, index=problem_names, columns=["y1", "y2"]).to_csv(
-    f"{path}/results/HV_subset_selection_ref.csv"
-)
-pd.DataFrame(HV_values, index=problem_names, columns=["HV initial", "HV final"]).to_csv(
-    f"{path}/results/HV_subset_selection_HV.csv"
-)
-pd.DataFrame(np.array(CPU_times).reshape(-1, 1), index=problem_names, columns=["Seconds"]).to_csv(
-    f"{path}/results/HV_subset_selection_CPU_time.csv"
-)
-pd.DataFrame(best_so_far_HV, index=problem_names).to_csv(f"{path}/results/HV_subset_selection_HV_history.csv")
-pd.DataFrame(best_so_far_R_norm, index=problem_names).to_csv(
-    f"{path}/results/HV_subset_selection_R_norm_history.csv"
-)
+    pd.DataFrame(selection_indices, index=problem_names).to_csv(
+        f"{path}/results/HV_subset_selection_indices_run{run}.csv"
+    )
+    pd.DataFrame(reference_points, index=problem_names, columns=["y1", "y2"]).to_csv(
+        f"{path}/results/HV_subset_selection_ref_run{run}.csv"
+    )
+    pd.DataFrame(HV_values, index=problem_names, columns=["HV initial", "HV final", "HV selected"]).to_csv(
+        f"{path}/results/HV_subset_selection_HV_run{run}.csv"
+    )
+    pd.DataFrame(np.array(CPU_times).reshape(-1, 1), index=problem_names, columns=["Seconds"]).to_csv(
+        f"{path}/results/HV_subset_selection_CPU_time_run{run}.csv"
+    )
+    pd.DataFrame(best_so_far_HV, index=problem_names).to_csv(
+        f"{path}/results/HV_subset_selection_HV_history_run{run}.csv"
+    )
+    pd.DataFrame(best_so_far_R_norm, index=problem_names).to_csv(
+        f"{path}/results/HV_subset_selection_R_norm_history_run{run}.csv"
+    )

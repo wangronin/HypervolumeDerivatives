@@ -67,10 +67,10 @@ class PiecewiseBS:
         return splines[indices]
 
     def get_index(self, t: float) -> int:
-        k = int(t / (self.size))
-        if t == k * self.size and t != 0:
+        k = np.floor(t / (self.size))
+        if np.isclose(t, k * self.size) and t != 0:
             k -= 1
-        return k
+        return int(k)
 
     def __func__(self, t: Union[np.ndarray, float], type: str):
         k = self.get_index(t)
