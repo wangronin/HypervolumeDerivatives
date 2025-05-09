@@ -27,7 +27,7 @@ print(problem_name)
 
 if problem_name.startswith("DTLZ"):
     n_var = 7 if problem_name == "DTLZ1" else 10
-    problem = locals()[problem_name](n_var=7, boundry_constraints=True)
+    problem = locals()[problem_name](n_var=n_var, boundry_constraints=True)
 elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
