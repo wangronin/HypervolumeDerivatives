@@ -20,7 +20,7 @@ from scripts.utils import plot_2d, plot_3d, read_reference_set_data
 
 np.random.seed(66)
 
-max_iters = 3
+max_iters = 5
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
@@ -32,7 +32,7 @@ elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
 path = "./MMD_data/"
-emoa = "NSGA-III"
+emoa = "NSGA-II"
 gen = 300
 ref_point = dict(
     ZDT1=[11, 11],
@@ -47,7 +47,7 @@ ref_point = dict(
 )
 
 # NOTE:
-# - for ZDT1-3, `rbf` kernel and `theta = 2000` gives the best results
+# - for ZDT1-3, `rbf` kernel and `theta = 4000` gives the best results
 # - for ZDT4 `laplace` kernel and `theta = 1`
 # - for DTLZ1, `laplace` kernel, `theta = 5e2`
 
@@ -58,10 +58,10 @@ def execute(run: int) -> np.ndarray:
     ref_list = np.vstack([r for r in ref.values()])
     N = len(x0)
     # create the algorithm
-    pareto_front = problem.get_pareto_front()
+    pareto_front = problem.get_pareto_front(1000)
     # `theta` parameter is very important, `1/N` is empirically good
     # TODO: this parameter should be set according to the average distance between points
-    theta = 2000
+    theta = 4000
     kernel = rbf
     mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=kernel)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
@@ -101,7 +101,7 @@ def execute(run: int) -> np.ndarray:
     score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
     Y = Y[score != -1]
     # plotting the final approximation set
-    if 1 < 2:
+    if 11 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
         if problem.n_obj == 2:
             plot_2d(
