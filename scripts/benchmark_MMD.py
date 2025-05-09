@@ -27,7 +27,7 @@ print(problem_name)
 
 if problem_name.startswith("DTLZ"):
     n_var = 7 if problem_name == "DTLZ1" else 10
-    problem = locals()[problem_name](n_var=7, boundry_constraints=True)
+    problem = locals()[problem_name](n_var=n_var, boundry_constraints=True)
 elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
@@ -145,7 +145,7 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 11 < 2:
+if 1 < 2:
     data = []
     for i in run_id:
         print(i)
