@@ -331,7 +331,7 @@ class MMDNewton:
         # TODO: use the backtracking line search in scipy
         """backtracking line search with Armijo's condition"""
         c1 = 1e-4
-        if 11 < 2 and np.all(np.isclose(step, 0)):
+        if 11 < 2 or np.all(np.isclose(step, 0)):
             return np.ones((self.N, 1))
 
         def phi_func(alpha, i):
@@ -377,7 +377,7 @@ class MMDNewton:
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         NOTE: this function is experimental
         """
-        if 11 < 2:
+        if 1 < 2:
             return step, np.ones(len(step))
 
         primal_vars = self.state.primal
