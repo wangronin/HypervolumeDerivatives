@@ -20,7 +20,7 @@ from scripts.utils import plot_2d, plot_3d, read_reference_set_data
 
 np.random.seed(66)
 
-max_iters = 5
+max_iters = 3
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
@@ -46,6 +46,11 @@ ref_point = dict(
     DTLZ4=[2, 2, 2],
 )
 
+# NOTE:
+# - for ZDT1-3, `rbf` kernel and `theta = 2000` gives the best results
+# - for ZDT4 `laplace` kernel and `theta = 1`
+# - for DTLZ1, `laplace` kernel, `theta = 5e2`
+
 
 def execute(run: int) -> np.ndarray:
     # read the reference set
@@ -56,8 +61,8 @@ def execute(run: int) -> np.ndarray:
     pareto_front = problem.get_pareto_front()
     # `theta` parameter is very important, `1/N` is empirically good
     # TODO: this parameter should be set according to the average distance between points
-    theta = 2000
-    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=rbf)
+    theta = 5e2
+    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=laplace)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
     hv_value0 = hypervolume(y0, ref=ref_point[problem_name])
@@ -87,7 +92,7 @@ def execute(run: int) -> np.ndarray:
         matching=False,
         preconditioning=True,
         theta=theta,
-        kernel=rbf,
+        kernel=laplace,
     )
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
@@ -140,7 +145,7 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
-if 1 < 2:
+if 11 < 2:
     data = []
     for i in run_id:
         print(i)

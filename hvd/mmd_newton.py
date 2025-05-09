@@ -330,7 +330,7 @@ class MMDNewton:
         # TODO: use the backtracking line search in scipy
         """backtracking line search with Armijo's condition"""
         c1 = 1e-4
-        if np.all(np.isclose(step, 0)):
+        if 11 < 2 and np.all(np.isclose(step, 0)):
             return np.ones((self.N, 1))
 
         def phi_func(alpha, i):

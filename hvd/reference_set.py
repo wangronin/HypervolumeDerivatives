@@ -97,7 +97,7 @@ class ReferenceSet:
                 # TODO: also shift the reference set here
                 self._matched_medoids[k] += v
                 self.set_medoids(self._matched_medoids[k], k)
-        else:  # if the `self.match` is not called yet
+        else:  # if the `self.match` is not called yet, then ignore `indices` and shift all reference points
             for k, ref in self._ref.items():
                 self._ref[k] = ref + c * self.eta[k]
 
