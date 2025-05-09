@@ -32,7 +32,7 @@ elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
 path = "./MMD_data/"
-emoa = "NSGA-II"
+emoa = "NSGA-III"
 gen = 300
 ref_point = dict(
     ZDT1=[11, 11],
@@ -61,7 +61,7 @@ def execute(run: int) -> np.ndarray:
     pareto_front = problem.get_pareto_front(1000)
     # `theta` parameter is very important, `1/N` is empirically good
     # TODO: this parameter should be set according to the average distance between points
-    theta = 4000
+    theta = 2000
     kernel = rbf
     mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=kernel)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
@@ -98,8 +98,8 @@ def execute(run: int) -> np.ndarray:
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
     Y = get_non_dominated(Y)
-    score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
-    Y = Y[score != -1]
+    # score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
+    # Y = Y[score != -1]
     # plotting the final approximation set
     if 11 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
