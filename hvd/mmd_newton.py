@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from scipy.linalg import block_diag, solve
+from scipy.spatial.distance import cdist
 
 from .base import State
 from .mmd import MMD, MMDMatching
@@ -281,7 +282,7 @@ class MMDNewton:
         if self.iter_count == 0:  # TODO: maybe do not perform the initial shift here..
             masks = np.array([True] * self.N)
         else:
-            distance = np.linalg.norm(self.state.Y - self.ref.reference_set, axis=1)
+            distance = np.min(cdist(self.state.Y, self.ref.reference_set), axis=1)
             step_norm = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_norm, 0))
 
