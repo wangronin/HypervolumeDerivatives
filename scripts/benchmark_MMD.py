@@ -123,7 +123,7 @@ def execute(run: int) -> np.ndarray:
         score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
         Y = Y[score != -1]
     # plotting the final approximation set
-    if 1 < 2:
+    if 11 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
         if problem.n_obj == 2:
             plot_2d(
