@@ -33,9 +33,8 @@ problems = [
 for moea in MOEAs:
     for problem in problems:
         try:
-            gen_ = 200 if moea == "MOEAD" else 300
             data1 = pd.read_csv(f"./results/{problem}-{method}-{moea}-{gen}.csv")
-            data2 = pd.read_csv(f"./results/{problem}-{moea}-{gen_}.csv")
+            data2 = pd.read_csv(f"./results/{problem}-{moea}-{gen}.csv")
         except:
             continue
         x, y = np.maximum(data1.GD.values, data1.IGD.values), np.maximum(data2.GD.values, data2.IGD.values)
