@@ -119,7 +119,7 @@ for problem in problems:
         # Jacobians
         YdX = jac(x)  # `(N, dim_m, dim_d)`
         # Hessians
-        # YdX2 = hessian(x)  # `(N, dim_m, dim_d, dim_d)`
+        YdX2 = hessian(x)  # `(N, dim_m, dim_d, dim_d)`
         # HdX = h_jac(x)
         # HdX2 = h_hessian(x)
         t1 = time.process_time_ns()
@@ -141,20 +141,24 @@ data = pd.DataFrame(
 data.time = pd.to_numeric(data.time)
 ratios = []
 for p in problems_name:
-    res = data[(data.problem == p)].groupby("type")["time"].mean()
-    ratios.append(res["automatic differentiation"] / res["function evaluation"])
+    data_ = data[(data.problem == p)].groupby("type")["time"].mean()
+    ratios.append(data_["automatic differentiation"] / data_["function evaluation"])
 print(rf"CPU time ratio (AD/FE): {np.mean(ratios)}")
 
 df = pd.DataFrame(res, columns=["type", "problem", "mean_CPU", "median_CPU", "upper quantile"])
 df.to_csv("CPU_time.csv", index=False)
 print(df)
 
+from matplotlib.ticker import LogLocator
+
 data = data.astype({"time": "float64"})
 ax = sns.violinplot(
     data=data, x="problem", y="time", hue="type", log_scale=True, split=True, gap=0.1, inner="quart"
 )
 ax.set_ylabel("CPU time (sec)")
-ax.set_ylim(2, 30)
+ax.yaxis.set_major_locator(LogLocator(base=10.0, numticks=10))
+ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=10))
+# ax.set_ylim(2, 30)
 ax.get_legend().set_title("")
 plt.tight_layout()
 fig = ax.get_figure()
