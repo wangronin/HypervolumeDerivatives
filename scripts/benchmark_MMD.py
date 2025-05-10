@@ -61,9 +61,9 @@ elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
 path = "./MMD_data/"
-emoa = "NSGA-II"
-# emoa = "MOEAD"
-gen = 200 if emoa == "MOEAD" else 300
+# emoa = "NSGA-II"
+emoa = "MOEAD"
+gen = 300
 # get hyperparameters
 params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
 params = params[(params.algorithm == emoa) & (params.problem == problem_name)]
