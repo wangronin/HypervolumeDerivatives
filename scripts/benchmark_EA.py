@@ -19,6 +19,7 @@ from pymoo.problems.multi import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
+from sklearn_extra.cluster import KMedoids
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
@@ -38,12 +39,27 @@ from hvd.problems import (
     IDTLZ2,
     IDTLZ3,
     IDTLZ4,
+    MOOAnalytical,
+    PymooProblemWrapper,
 )
-from hvd.problems.base import MOOAnalytical, PymooProblemWrapper
 from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([ind.F for ind in pop])
-reference_points = {"CONV4_2F": np.array([2, 2, 2, 10])}  # reference point of HV
+reference_points = dict(
+    ZDT1=[11, 11],
+    ZDT2=[11, 11],
+    ZDT3=[11, 11],
+    ZDT4=[11, 11],
+    ZDT6=[11, 11],
+    DTLZ1=[2, 2, 2],
+    DTLZ2=[2, 2, 2],
+    DTLZ3=[2, 2, 2],
+    DTLZ4=[2, 2, 2],
+    DTLZ5=[2, 2, 2],
+    DTLZ6=[2, 2, 2],
+    DTLZ7=[2, 2, 10],
+    CONV4_2F=[2, 2, 2, 10],
+)
 
 
 def minimize(
@@ -81,6 +97,11 @@ def minimize(
     if problem.name().startswith("DTLZ"):
         if problem_name in ["DTLZ5", "DTLZ6", "DTLZ7"]:
             pareto_front = problem.pareto_front()
+            if len(pareto_front) > 1000:
+                km = KMedoids(n_clusters=1000, method="alternate", random_state=0, init="k-medoids++").fit(
+                    pareto_front
+                )
+                pareto_front = pareto_front[km.medoid_indices_]
         else:
             ref_dirs = UniformReferenceDirectionFactory(3, n_partitions=30).do()
             pareto_front = problem.pareto_front(ref_dirs)
@@ -134,16 +155,17 @@ def get_reference_point(problem_name: str) -> np.ndarray:
 
 
 def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
-    return int(np.median(pd.read_csv(f"{path}/{problem_name}-DpN-{algorithm_name}-{gen}.csv").Jac_calls))
+    return int(np.median(pd.read_csv(f"{path}/{problem_name}-{newton}-{algorithm_name}-{gen}.csv").Jac_calls))
 
 
-n_iter_newton = 6
+n_iter_newton = 5
 gen = 300
 # NOTE: 1.836 is obtained on ZDTs
 gen_func = lambda n_var, scale: int(1.836 * scale + 3)
 N = 30
 problem_names = sys.argv[1]
-algorithms = ("NSGA-II",)
+algorithms = ("MOEAD",)
+newton = "MMD"
 
 for problem_name in [problem_names]:
     print(problem_name)

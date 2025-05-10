@@ -6,8 +6,7 @@ sys.path.insert(0, "./")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
-# import seaborn as sns
+import seaborn as sns
 from matplotlib import rcParams
 
 from hvd.problems import (
@@ -41,6 +40,7 @@ from hvd.problems import (
     PymooProblemWithAD,
 )
 
+sns.set_theme(rc={"figure.figsize": (12, 6)})
 np.random.seed(42)
 
 plt.style.use("ggplot")
@@ -56,12 +56,12 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-N = 1e5
+N = 1e4
 res = []
 data_FE = []
 set_ = 1
 if set_ == 1:
-    problems_name = ["ZDT1", "ZDT2", "ZDT3", "ZDT4", "ZDT6"] + [f"DTLZ{k}" for k in range(1, 8)]
+    problems_name = ["ZDT1", "ZDT2", "ZDT3", "ZDT4"] + [f"DTLZ{k}" for k in range(1, 8)]
     dict_ = locals()
     problems = [dict_[k]() for k in problems_name]
 else:
@@ -82,6 +82,7 @@ else:
         IDTLZ4(),
     ]
     problems_name = [type(p).__name__ for p in problems]
+
 for problem in problems:
     f = problem if isinstance(problem, MOOAnalytical) else PymooProblemWithAD(problem)
     FE_time = []
@@ -91,14 +92,16 @@ for problem in problems:
         t0 = time.process_time_ns()
         Y = f.objective(x)
         t1 = time.process_time_ns()
-        FE_time.append((t1 - t0) / 1000.0)
+        if i > 0:  # the first iteration contains JIT computation time
+            FE_time.append((t1 - t0) / 1000.0)
+
     data_FE += FE_time
     res.append(
         ["FE", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.quantile(FE_time, 0.9)]
     )
-data_FE = np.vstack([np.repeat(problems_name, N), data_FE]).T
+data_FE = np.vstack([np.repeat(problems_name, N - 1), data_FE]).T
 
-N = 1e5
+N = 1e4
 data_AD = []
 for problem in problems:
     f = problem if isinstance(problem, MOOAnalytical) else PymooProblemWithAD(problem)
@@ -120,28 +123,42 @@ for problem in problems:
         # HdX = h_jac(x)
         # HdX2 = h_hessian(x)
         t1 = time.process_time_ns()
-        FE_time.append((t1 - t0) / 1000.0)
+        if i > 0:
+            FE_time.append((t1 - t0) / 1000.0)
     data_AD += FE_time
     res.append(
         ["AD", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.quantile(FE_time, 0.9)]
     )
 
-data_AD = np.vstack([np.repeat(problems_name, N), data_AD]).T
+data_AD = np.vstack([np.repeat(problems_name, N - 1), data_AD]).T
 data = pd.DataFrame(
-    np.c_[["FE"] * len(data_FE) + ["AD"] * len(data_AD), np.vstack([data_FE, data_AD])],
+    np.c_[
+        ["function evaluation"] * len(data_FE) + ["automatic differentiation"] * len(data_AD),
+        np.vstack([data_FE, data_AD]),
+    ],
     columns=["type", "problem", "time"],
 )
+data.time = pd.to_numeric(data.time)
+ratios = []
+for p in problems_name:
+    res = data[(data.problem == p)].groupby("type")["time"].mean()
+    ratios.append(res["automatic differentiation"] / res["function evaluation"])
+print(rf"CPU time ratio (AD/FE): {np.mean(ratios)}")
 
 df = pd.DataFrame(res, columns=["type", "problem", "mean_CPU", "median_CPU", "upper quantile"])
 df.to_csv("CPU_time.csv", index=False)
 print(df)
 
-# data = data.astype({"time": "float64"})
-# ax = sns.violinplot(
-#     data=data, x="problem", y="time", hue="type", log_scale=True, split=True, gap=0.1, inner="quart"
-# )
-# ax.set_ylim([2e-6, 1e-5])
-# plt.show()
+data = data.astype({"time": "float64"})
+ax = sns.violinplot(
+    data=data, x="problem", y="time", hue="type", log_scale=True, split=True, gap=0.1, inner="quart"
+)
+ax.set_ylabel("CPU time (sec)")
+ax.set_ylim(2, 30)
+ax.get_legend().set_title("")
+plt.tight_layout()
+fig = ax.get_figure()
+fig.savefig("CPU_time.pdf")
 #  type   problem  mean_CPU  median_CPU   std_CPU
 # 0   FE  Eq1DTLZ1  0.000056    0.000054  0.000010
 # 1   FE  Eq1DTLZ2  0.000058    0.000056  0.000010
