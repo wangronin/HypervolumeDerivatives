@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from sklearn.neighbors import LocalOutlierFactor
+from sklearn_extra.cluster import KMedoids
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
@@ -60,8 +61,8 @@ elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
 path = "./MMD_data/"
-# emoa = "NSGA-II"
-emoa = "MOEAD"
+emoa = "NSGA-II"
+# emoa = "MOEAD"
 gen = 200 if emoa == "MOEAD" else 300
 # get hyperparameters
 params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
@@ -77,6 +78,12 @@ def execute(run: int) -> np.ndarray:
     N = len(x0)
     # create the algorithm
     pareto_front = problem.get_pareto_front(1000) if problem.n_obj == 2 else problem.get_pareto_front()
+    # TODO: move this part to the problems
+    if len(pareto_front) > 1000:
+        km = KMedoids(n_clusters=1000, method="alternate", random_state=0, init="k-medoids++").fit(
+            pareto_front
+        )
+        pareto_front = pareto_front[km.medoid_indices_]
     mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=kernel)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
