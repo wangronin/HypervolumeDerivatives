@@ -63,7 +63,7 @@ elif problem_name.startswith("ZDT"):
 path = "./MMD_data/"
 # emoa = "NSGA-II"
 emoa = "MOEAD"
-gen = 300
+gen = 200 if emoa == "MOEAD" else 300
 # get hyperparameters
 params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
 params = params[(params.algorithm == emoa) & (params.problem == problem_name)]
@@ -168,6 +168,9 @@ run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
     for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
+if problem_name == "DTLZ4" and emoa == "MOEAD":
+    run_id = list(set(run_id) - set([3]))
+
 if 11 < 2:
     data = []
     for i in run_id:
