@@ -45,8 +45,8 @@ np.random.seed(66)
 
 path = "./MMD_data/"
 emoa = "MOEAD"
-gen = 300
-kernel = rbf
+gen = 200
+kernel = laplace
 problem_name = sys.argv[1]
 if problem_name.startswith("DTLZ"):
     n_var = 7 if problem_name == "DTLZ1" else 10
@@ -60,7 +60,7 @@ run_id = [
 ]
 
 thetas = np.logspace(-1, 4, 15)
-for run in [27]:
+for run in [9]:
     ref, X0, Y0, Y_index, eta = read_reference_set_data(path, problem_name, emoa, run, gen)
     ref = ReferenceSet(ref=ref, eta=eta, Y_idx=Y_index)
     ref.shift(0.08)  # simulate the initial shift of MMD Newton
