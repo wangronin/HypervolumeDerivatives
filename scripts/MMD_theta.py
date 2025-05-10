@@ -11,7 +11,21 @@ from matplotlib import rcParams
 from scipy.linalg import block_diag, solve
 
 from hvd.mmd import MMD, laplace, rbf
-from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.problems import (
+    DTLZ1,
+    DTLZ2,
+    DTLZ3,
+    DTLZ4,
+    DTLZ5,
+    DTLZ6,
+    DTLZ7,
+    ZDT1,
+    ZDT2,
+    ZDT3,
+    ZDT4,
+    ZDT6,
+    PymooProblemWithAD,
+)
 from hvd.reference_set import ReferenceSet
 from hvd.utils import precondition_hessian
 from scripts.utils import read_reference_set_data
@@ -30,9 +44,9 @@ rcParams["ytick.major.width"] = 1
 np.random.seed(66)
 
 path = "./MMD_data/"
-emoa = "NSGA-II"
+emoa = "MOEAD"
 gen = 300
-kernel = laplace
+kernel = rbf
 problem_name = sys.argv[1]
 if problem_name.startswith("DTLZ"):
     n_var = 7 if problem_name == "DTLZ1" else 10
@@ -46,7 +60,7 @@ run_id = [
 ]
 
 thetas = np.logspace(-1, 4, 15)
-for run in [22]:
+for run in [27]:
     ref, X0, Y0, Y_index, eta = read_reference_set_data(path, problem_name, emoa, run, gen)
     ref = ReferenceSet(ref=ref, eta=eta, Y_idx=Y_index)
     ref.shift(0.08)  # simulate the initial shift of MMD Newton
@@ -78,6 +92,5 @@ for run in [22]:
     # then we select the theta whose eigenspectrum is the "easiest" to pre-condition
     idx = np.nonzero((condition_number > 1) & (condition_number < 1e2))[0]
     # print(thetas[idx][k])
-    plt.semilogx(thetas, condition_number, "k.", ls="--", ms=8)
+    plt.loglog(thetas, condition_number, "k.", ls="--", ms=8)
     plt.show()
-    breakpoint()
