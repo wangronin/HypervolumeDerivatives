@@ -1,5 +1,5 @@
 import numpy as np
-from numba import jit
+from jax import jit
 from pymoo.algorithms.base.genetic import GeneticAlgorithm
 from pymoo.core.population import Population
 from pymoo.core.survival import Survival
@@ -20,7 +20,7 @@ from .exact import ExactHypervolume
 # NOTE: speedup the MC hypervolume contribution with `numba`
 
 
-@jit(nopython=True, error_model="numpy", cache=True)
+@jit
 def alpha(N, k):
     alpha = np.zeros(N + 1)
 
@@ -30,7 +30,7 @@ def alpha(N, k):
     return alpha
 
 
-@jit(nopython=True, error_model="numpy", cache=True)
+@jit
 def hv_monte_carlo(dom, V, n_dom=None):
     N, n_samples = dom.shape
     if n_dom is None:
@@ -41,7 +41,7 @@ def hv_monte_carlo(dom, V, n_dom=None):
     return hv
 
 
-@jit(nopython=True, error_model="numpy", cache=True)
+@jit
 def hvc_monte_carlo(dom, V, n_dom=None, k=1):
     N, n_samples = dom.shape
     if n_dom is None:
