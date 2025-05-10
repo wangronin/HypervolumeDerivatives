@@ -155,8 +155,8 @@ def plot_2d(
     ax0.plot(Y0[:, 0], Y0[:, 1], "k+", ms=9, alpha=1)
     ax0.plot(ref[:, 0], ref[:, 1], "b.", mec="none", ms=5, alpha=0.3)
     ax0.set_title("Objective space (Initialization)")
-    ax0.set_xlabel(r"f_1")
-    ax0.set_ylabel(r"f_2")
+    ax0.set_xlabel("f_1")
+    ax0.set_ylabel("f_2")
     lgnd = ax0.legend(["Pareto front", "Y0", "reference set", "matched points"])
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
@@ -183,14 +183,14 @@ def plot_2d(
     counts = np.unique([len(m) for _, m in history_medoids.items()], return_counts=True)[1]
     lgnd = ax1.legend(
         lines,
-        ["Pareto front"] + [f"{i + 1} shift(s): {k} points" for i, k in enumerate(counts)] + [r"Y final"],
+        ["Pareto front"] + [f"{i + 1} shift(s): {k} points" for i, k in enumerate(counts)] + ["Y final"],
     )
     for handle in lgnd.legend_handles:
         handle.set_markersize(12)
 
     ax1.set_title("Objective space")
-    ax1.set_xlabel(r"f1")
-    ax1.set_ylabel(r"f2")
+    ax1.set_xlabel("f1")
+    ax1.set_ylabel("f2")
 
     # ax22 = ax2.twinx()
     for i, (k, v) in enumerate(history_metric.items()):

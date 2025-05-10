@@ -12,27 +12,15 @@ stats_func = lambda x: [np.median(x), np.quantile(x, 0.9) - np.quantile(x, 0.1)]
 MOEAs = [
     "NSGA-II",
     "NSGA-III",
-    # "SMS-EMOA",
-    # "MOEAD",
+    "MOEAD",
 ]
 method = "MMD"
-# test problem to include
+# test problem
 problems = [
-    # "CF1",
-    # "CF2",
-    # "CF3",
-    # "CF4",
-    # "CF5",
-    # "CF6",
-    # "CF7",
-    # "CF8",
-    # "CF9",
-    # "CF10",
     "ZDT1",
     "ZDT2",
     "ZDT3",
     "ZDT4",
-    # "ZDT6",
     "DTLZ1",
     "DTLZ2",
     "DTLZ3",
@@ -40,11 +28,6 @@ problems = [
     # "DTLZ5",
     # "DTLZ6",
     # "DTLZ7",
-    # "IDTLZ1",
-    # "IDTLZ2",
-    # "IDTLZ3",
-    # "IDTLZ4",
-    # "CONV4_2F",
 ]
 
 for moea in MOEAs:
@@ -55,12 +38,6 @@ for moea in MOEAs:
         except:
             continue
         x, y = np.maximum(data1.GD.values, data1.IGD.values), np.maximum(data2.GD.values, data2.IGD.values)
-        # if moea == "NSGA-III" and problem == "Eq1IDTLZ4":
-        #     x = x[x <= 1.7]
-        # filtering out the outliers in DpN
-        # q = np.quantile(x, q=(0.25, 0.75))
-        # iqr = q[1] - q[0]
-        # x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
         pvalue = mannwhitneyu(x=x, y=y, alternative="two-sided").pvalue
         pvalues.append(pvalue)
         stats.append([stats_func(x), stats_func(y)])
@@ -92,9 +69,9 @@ print(data)
 with open(f"{method}-{gen}.txt", "w") as file:
     print(data, file=file)
 
-caption = f"""Warmstarting the {method} method after 300 iterations of the MOEA, we show the $\Delta_p$ values 
-(median and 10\\% - 90\\% quantile range) of the final Pareto fronts, averaged over
-30 independent runs. The Newton method is executed for five iterations, and the corresponding MOEA terminates
+caption = f"""Warmstarting the {method} method with the final population of MOEA executed for 300 iterations. 
+We show the $\Delta_p$ values (median and 10\\% - 90\\% quantile range) of the final Pareto fronts, averaged 
+over 30 independent runs. The {method} is executed for five iterations, and the corresponding MOEA terminates
 with 4\,870 iterations on ZDTs and 3\,700 on DTLZs. Mann–Whitney U test (with 5\\% significance level) is 
 employed to compare the performance of the Newton method and the MOEA, where Holm-Sidak method is used to 
 adjust the $p$-value for multiple testing. 
