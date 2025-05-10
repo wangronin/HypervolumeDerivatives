@@ -25,7 +25,6 @@ from hvd.problems import (
     ZDT2,
     ZDT3,
     ZDT4,
-    ZDT6,
     PymooProblemWithAD,
 )
 from hvd.reference_set import ReferenceSet
@@ -34,20 +33,6 @@ from scripts.utils import plot_2d, plot_3d, read_reference_set_data
 
 np.random.seed(66)
 
-max_iters = 5
-n_jobs = 30
-problem_name = sys.argv[1]
-print(problem_name)
-
-if problem_name.startswith("DTLZ"):
-    n_var = 7 if problem_name == "DTLZ1" else 10
-    problem = locals()[problem_name](n_var=n_var, boundry_constraints=True)
-elif problem_name.startswith("ZDT"):
-    problem = PymooProblemWithAD(locals()[problem_name]())
-
-path = "./MMD_data/"
-emoa = "NSGA-II"
-gen = 300
 ref_point = dict(
     ZDT1=[11, 11],
     ZDT2=[11, 11],
@@ -63,21 +48,26 @@ ref_point = dict(
     DTLZ7=[2, 2, 10],
 )
 
-# NOTE:
-# - for ZDT1-3, `rbf` kernel and `theta = 4000` gives the best results
-# - for ZDT4 `laplace` kernel and `theta = 1`
-# - for DTLZ1, `laplace` kernel, `theta = 5e2`
-# TODO: this parameter should be set according to the average distance between points
-params = dict(
-    ZDT1=(rbf, 2000),
-    ZDT2=(rbf, 2000),
-    ZDT3=(rbf, 2000),
-    ZDT4=(laplace, 1),
-    DTLZ1=(laplace, 5e2),
-    DTLZ2=(laplace, 5e2),
-    DTLZ3=(laplace, 5e2),
-    DTLZ4=(laplace, 5e2),
-)
+max_iters = 5
+n_jobs = 30
+problem_name = sys.argv[1]
+print(problem_name)
+
+if problem_name.startswith("DTLZ"):
+    n_var = 7 if problem_name == "DTLZ1" else 10
+    problem = locals()[problem_name](n_var=n_var, boundry_constraints=True)
+elif problem_name.startswith("ZDT"):
+    problem = PymooProblemWithAD(locals()[problem_name]())
+
+path = "./MMD_data/"
+# emoa = "NSGA-II"
+emoa = "MOEAD"
+gen = 200 if emoa == "MOEAD" else 300
+# get hyperparameters
+params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
+params = params[(params.algorithm == emoa) & (params.problem == problem_name)]
+kernel_name, theta = params["kernel"].values[0], params["param"].values[0]
+kernel = locals()[kernel_name]
 
 
 def execute(run: int) -> np.ndarray:
@@ -87,7 +77,6 @@ def execute(run: int) -> np.ndarray:
     N = len(x0)
     # create the algorithm
     pareto_front = problem.get_pareto_front(1000) if problem.n_obj == 2 else problem.get_pareto_front()
-    kernel, theta = params[problem_name]
     mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=kernel)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
@@ -127,7 +116,7 @@ def execute(run: int) -> np.ndarray:
         score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
         Y = Y[score != -1]
     # plotting the final approximation set
-    if 11 < 2:
+    if 1 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
         if problem.n_obj == 2:
             plot_2d(
@@ -181,4 +170,4 @@ else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 
 df = pd.DataFrame(np.array(data), columns=["HV", "IGD", "GD", "MMD", "Jac_calls"])
-df.to_csv(f"results/{problem_name}-MMD-{emoa}-{gen}.csv", index=False)
+df.to_csv(f"results/{problem_name}-MMD-{emoa}-300.csv", index=False)
