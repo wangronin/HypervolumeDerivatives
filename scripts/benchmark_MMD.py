@@ -13,7 +13,21 @@ from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.mmd import MMD, laplace, rbf
 from hvd.mmd_newton import MMDNewton
-from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.problems import (
+    DTLZ1,
+    DTLZ2,
+    DTLZ3,
+    DTLZ4,
+    DTLZ5,
+    DTLZ6,
+    DTLZ7,
+    ZDT1,
+    ZDT2,
+    ZDT3,
+    ZDT4,
+    ZDT6,
+    PymooProblemWithAD,
+)
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.utils import plot_2d, plot_3d, read_reference_set_data
@@ -44,12 +58,26 @@ ref_point = dict(
     DTLZ2=[2, 2, 2],
     DTLZ3=[2, 2, 2],
     DTLZ4=[2, 2, 2],
+    DTLZ5=[2, 2, 2],
+    DTLZ6=[2, 2, 2],
+    DTLZ7=[2, 2, 10],
 )
 
 # NOTE:
-# - for ZDT1-3, `rbf` kernel and `theta = 2000` gives the best results
+# - for ZDT1-3, `rbf` kernel and `theta = 4000` gives the best results
 # - for ZDT4 `laplace` kernel and `theta = 1`
-# - for DTLZs, `laplace` kernel, `theta = 5e2`
+# - for DTLZ1, `laplace` kernel, `theta = 5e2`
+# TODO: this parameter should be set according to the average distance between points
+params = dict(
+    ZDT1=(rbf, 2000),
+    ZDT2=(rbf, 2000),
+    ZDT3=(rbf, 2000),
+    ZDT4=(laplace, 1),
+    DTLZ1=(laplace, 5e2),
+    DTLZ2=(laplace, 5e2),
+    DTLZ3=(laplace, 5e2),
+    DTLZ4=(laplace, 5e2),
+)
 
 
 def execute(run: int) -> np.ndarray:
@@ -58,11 +86,8 @@ def execute(run: int) -> np.ndarray:
     ref_list = np.vstack([r for r in ref.values()])
     N = len(x0)
     # create the algorithm
-    pareto_front = problem.get_pareto_front()
-    # `theta` parameter is very important, `1/N` is empirically good
-    # TODO: this parameter should be set according to the average distance between points
-    theta = 5e2
-    kernel = laplace
+    pareto_front = problem.get_pareto_front(1000) if problem.n_obj == 2 else problem.get_pareto_front()
+    kernel, theta = params[problem_name]
     mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=kernel)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
@@ -98,8 +123,9 @@ def execute(run: int) -> np.ndarray:
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
     Y = get_non_dominated(Y)
-    score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
-    Y = Y[score != -1]
+    if problem.n_obj == 3:
+        score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
+        Y = Y[score != -1]
     # plotting the final approximation set
     if 11 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
