@@ -43,7 +43,7 @@ def read_reference_set_data(
     eta = dict()
     # load the reference set
     for i in range(n_cluster):
-        if problem_name in ["DTLZ6", "DTLZ7"]:
+        if 11 < 2 and problem_name in ["DTLZ6", "DTLZ7"]:
             # for DTLZ7 we need to load the dense fillings of the reference set
             r = pd.read_csv(
                 f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None

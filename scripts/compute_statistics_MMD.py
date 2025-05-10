@@ -25,9 +25,9 @@ problems = [
     "DTLZ2",
     "DTLZ3",
     "DTLZ4",
-    # "DTLZ5",
-    # "DTLZ6",
-    # "DTLZ7",
+    "DTLZ5",
+    "DTLZ6",
+    "DTLZ7",
 ]
 
 for moea in MOEAs:
