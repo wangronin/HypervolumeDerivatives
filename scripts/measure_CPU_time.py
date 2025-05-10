@@ -37,6 +37,7 @@ from hvd.problems import (
     ZDT3,
     ZDT4,
     ZDT6,
+    MOOAnalytical,
     PymooProblemWithAD,
 )
 
@@ -58,7 +59,7 @@ rcParams["ytick.major.width"] = 1
 N = 1e5
 res = []
 data_FE = []
-set_ = 2
+set_ = 1
 if set_ == 1:
     problems_name = ["ZDT1", "ZDT2", "ZDT3", "ZDT4", "ZDT6"] + [f"DTLZ{k}" for k in range(1, 8)]
     dict_ = locals()
@@ -82,7 +83,7 @@ else:
     ]
     problems_name = [type(p).__name__ for p in problems]
 for problem in problems:
-    f = PymooProblemWithAD(problem) if set_ == 1 else problem
+    f = problem if isinstance(problem, MOOAnalytical) else PymooProblemWithAD(problem)
     FE_time = []
     for i in range(int(N)):
         r = problem.xu - problem.xl
@@ -100,7 +101,7 @@ data_FE = np.vstack([np.repeat(problems_name, N), data_FE]).T
 N = 1e5
 data_AD = []
 for problem in problems:
-    f = PymooProblemWithAD(problem) if set_ == 1 else problem
+    f = problem if isinstance(problem, MOOAnalytical) else PymooProblemWithAD(problem)
     FE_time = []
     func = f.objective
     jac = f.objective_jacobian
