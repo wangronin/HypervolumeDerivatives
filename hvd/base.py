@@ -194,7 +194,7 @@ class State:
             indices (np.ndarray): indices to select
         """
         obj = deepcopy(self)
-        obj.n_jac_evals = 0
+        obj.n_jac_evals = obj.n_jac_evals
         obj.X = obj.X[indices]
         obj.Y = obj.Y[indices]
         obj.J = obj.J[indices]

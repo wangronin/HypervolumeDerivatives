@@ -23,7 +23,7 @@ NSGA-III,DTLZ6,laplace,500.0
 NSGA-III,DTLZ7,laplace,500.0
 MOEAD,ZDT1,laplace,1
 MOEAD,ZDT2,laplace,1
-MOEAD,ZDT3,laplace,1
+MOEAD,ZDT3,laplace,100
 MOEAD,ZDT4,laplace,1
 MOEAD,DTLZ1,laplace,500.0
 MOEAD,DTLZ2,laplace,500.0

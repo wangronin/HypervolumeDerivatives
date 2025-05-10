@@ -160,8 +160,8 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
 
 n_iter_newton = 5
 gen = 300
-# NOTE: 1.836 is obtained on ZDTs
-gen_func = lambda n_var, scale: int(1.836 * scale + 3)
+# NOTE: 3.215 is obtained on ZDTs and DTLZs
+gen_func = lambda scale: int(3.215 * scale)
 N = 30
 problem_names = sys.argv[1]
 algorithms = ("MOEAD",)
@@ -187,7 +187,7 @@ for problem_name in [problem_names]:
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
-        termination = get_termination("n_gen", gen + n_iter_newton * gen_func(problem.n_var, scale))
+        termination = get_termination("n_gen", gen + n_iter_newton * gen_func(scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
         # minimize(
         #     problem,
