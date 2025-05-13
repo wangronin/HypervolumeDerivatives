@@ -6,8 +6,6 @@ from jax import jacfwd, jacrev, jit
 
 from ..utils import timeit
 
-__author__ = ["Hao Wang"]
-
 
 def hessian(fun):
     return jit(jacfwd(jacrev(fun)))

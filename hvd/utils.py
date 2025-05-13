@@ -13,8 +13,6 @@ from matplotlib import rcParams
 from scipy.linalg import cholesky, qr
 from sklearn.neighbors import LocalOutlierFactor
 
-__authors__ = ["Hao Wang"]
-
 plt.style.use("ggplot")
 rcParams["font.size"] = 15
 rcParams["xtick.direction"] = "out"

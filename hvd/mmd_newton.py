@@ -13,8 +13,6 @@ from .mmd import MMD, MMDMatching
 from .reference_set import ReferenceSet
 from .utils import get_logger, precondition_hessian, set_bounds
 
-__authors__ = ["Hao Wang"]
-
 
 def Nd_vector_to_matrix(
     x: np.ndarray, N: int, dim: int, dim_primal: int, active_indices: np.ndarray

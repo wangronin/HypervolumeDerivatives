@@ -5,8 +5,6 @@ from scipy.spatial.distance import cdist
 
 from .reference_set import ReferenceSet
 
-__authors__ = ["Hao Wang"]
-
 
 class GenerationalDistance:
     def __init__(

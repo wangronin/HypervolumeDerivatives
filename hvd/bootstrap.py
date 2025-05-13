@@ -26,9 +26,6 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 
-__authors__ = ["Hao Wang"]
-
-
 def plot_bootstrap(
     ref0: np.ndarray, ref: np.ndarray, Y0: np.ndarray, Y: np.ndarray, pareto_front: np.ndarray, name: str
 ):

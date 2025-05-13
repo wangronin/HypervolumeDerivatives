@@ -9,8 +9,6 @@ from scipy.linalg import block_diag
 from .hypervolume import hypervolume
 from .utils import non_domin_sort
 
-__authors__ = ["Hao Wang"]
-
 
 def HVY(n_objective: int, ref: np.ndarray) -> callable:
     def _HVY(Y: np.ndarray) -> float:

@@ -38,9 +38,6 @@ for moea in MOEAs:
         except:
             continue
         x, y = np.maximum(data1.GD.values, data1.IGD.values), np.maximum(data2.GD.values, data2.IGD.values)
-        q = np.quantile(x, q=(0.25, 0.75))
-        iqr = q[1] - q[0]
-        x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
         pvalue = mannwhitneyu(x=x, y=y, alternative="two-sided").pvalue
         pvalues.append(pvalue)
         stats.append([stats_func(x), stats_func(y)])

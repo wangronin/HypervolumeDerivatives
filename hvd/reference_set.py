@@ -7,8 +7,6 @@ from sklearn_extra.cluster import KMedoids
 
 from .utils import compute_chim, plot_reference_set_matching
 
-__authors__ = ["Hao Wang"]
-
 
 class ReferenceSet:
     def __init__(

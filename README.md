@@ -1,34 +1,73 @@
-# Hypervolume Indicator Derivatives
+# Multi-objective Newton Methods
+
+This package contains three set-oriented Newton methods for solving _constrainted continuous multiobjective optimization problems_:
 
 * **What for?**
-  * a **Hypervolume Newton Method** for solving _continuous multiobjective optimization problems_ (MOPs),
-  * enabled by the analytically computation of **Hypervolume Hessian Matrix**.
+  * a **MMD-based Newton Method** (MMDN), which is submitted to _NeurIPS 2025 conference_.
+  * a **$\Delta_p$ Newton Method** (DpN), which minimizes average Hausdorff distance, accepted in IEEE TEVC [WRU+24].
+  * a **Hypervolume Newton Method** (HVN), which maximizes the Hypervolume indicator, accepted in IEEE TCYB and other venues [DEW22,SSW+22].
 * **Why?**
   * the Newton method has a local **quadratic convergence** under some mild condition of objective functions.
   * Perhaps, you'd like to refine the final outcome of some direct optimizers with the Hypervolume Newton method..
 * **When to use it?** the objective function is at least *twice continuously differentiable*.
 
-![](assets/demo.png)
-
 Specifically, you will find the following major functionalities:
 
-1. `hvd.HypervolumeDerivatives`: the analytical computation of the HV Hessian and specifically, Alg. 2 described in [[DEW22]](https://arxiv.org/abs/2211.04171).
-2. `hvd.HVN`: Hypervolume Newton Method for (Constrained) Multi-objective Optimization Problems in [[WED+22]](https://www.preprints.org/manuscript/202211.0103/v1).
+1. `hvd.mmd_newton.MMDNewton`: the MMD-based Newton method, submitted to NeurIPS 2025.
+2. `hvd.DpN`: $\Delta_p$ Newton Method for (constrained) Multi-objective Optimization Problems in [[WRU+24]](https://arxiv.org/pdf/2405.05721).
+3. `hvd.HypervolumeDerivatives`: the analytical computation of the HV Hessian and specifically, Alg. 2 described in [[DEW22]](https://arxiv.org/abs/2211.04171).
+4. `hvd.HVN`: Hypervolume Newton Method for (constrained) Multi-objective Optimization Problems in [[WED+22]](https://www.preprints.org/manuscript/202211.0103/v1).
+
+## References
+
+* [[DEW22]](https://arxiv.org/abs/2211.04171) Deutz, A.; Emmerich, Michael T. M.; Wang, H. The Hypervolume Indicator Hessian Matrix: Analytical Expression, Computational Time Complexity, and Sparsity, _arXiv_, 2022.
+
+* [[WRU+24]](https://arxiv.org/pdf/2405.05721) Wang, Hao, Angel E. Rodriguez-Fernandez, Lourdes Uribe, André Deutz, Oziel Cortés-Piña, and Oliver Schütze. "A Newton method for hausdorff approximations of the Pareto front within multi-objective evolutionary algorithms." IEEE Transactions on Evolutionary Computation (2024).
+
+* [[SSW+22]](https://ieeexplore.ieee.org/document/8588401) Víctor Adrián Sosa-Hernández, Oliver Schütze, Hao Wang, André H. Deutz, Michael Emmerich. "The Set-Based Hypervolume Newton Method for Bi-Objective Optimization." IEEE Trans. Cybern. 50(5): 2186-2196 (2020)
 
 ## Installation
 
-<!-- You could either install the stable version on `pypi`: -->
-A `pypi` package will be available soon:
-<!-- ```shell
-pip install hvd
-``` -->
-
-For now, please take the lastest version from the master branch:
+For now, please take the lastest version from the `neurips2025` branch:
 
 ```shell
 git clone https://github.com/wangronin/HypervolumeDerivatives.git
-cd HypervolumeDerivatives && python setup.py install --user
+cd HypervolumeDerivatives && pip install -f requirements.txt
 ```
+
+You can decide to use a Python virtual environment to install the dependencies.
+
+## Reproducing NeurIPS 2025's results
+
+The experimental data needed for running MMD-based Newton (MMDN) are saved in `MMD_data.zip`. Please unzip it before reproducing the experiments. After unzipping, you should have a `./MMD_data` folder containing CSV files of initial points and reference sets generated from multi-objective optimization evolutionary algorithms (MOEAs). See our experimental procedure in the submitted paper for details.
+
+In the `/scripts` folder, you can find the experimental scripts for our NeurIPS 2025 submission: `/scripts/benchmark_MMD.py` performs the experiments in Sec. 6 of the paper. Calling signature is:
+
+```shell
+python ./scripts/benchmark_MMD.py ZDT1
+```
+
+`ZDT1` is one of the test problem we had in the experiments among `ZDT1, ZDT2, ZDT3, ZDT4, DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ1, DTLZ6, DTLZ7`. This script will run in parallel by default and save a CSV and LaTeX table for the results in the `./result` folder.
+
+The baseline MOEAs should be executed with the folllowing command:
+
+```shell
+python ./scripts/benchmark_EA.py ZDT1
+```
+
+This script will run in parallel by default and save a CSV and LaTeX table for the results in the `./result` folder. After benchmarking both MMDN and MOEAs on each test problems. The statistical summary/hypothesis testing is performed by running
+
+```shell
+python ./scripts/compute_statistics_MMD.py
+```
+
+which take the raw data stored in `./.results` and perform Mann-Whitney U test with multiple testing corrections. The test results are save in files named `MMD-300.txt` and `MMD-300.tex`.
+
+
+## Example run of the HVN method on the simple MOP1 problem
+
+![](assets/demo.png)
+
 
 ## Hypervolume Hessian Matrix
 
@@ -128,9 +167,3 @@ In this chart, we have three objective function to minimize, where we depicts th
 ## Symbolic computation of the Hessian in Mathematica
 
 Also, we include, in folder `mathematica/`, several cases of the hypervolume indicator Hessian computed symoblically using `Mathematica`.
-
-## References
-
-* [[WED+22]](https://www.preprints.org/manuscript/202211.0103/v1) Wang, H.; Emmerich, Michael T. M.; Deutz, A.; Hernández, V.A.S.; Schütze, O. The Hypervolume Newton Method for Constrained Multi-objective Optimization Problems. _Preprints_ **2022**, 2022110103.
-
-* [[DEW22]](https://arxiv.org/abs/2211.04171) Deutz, A.; Emmerich, Michael T. M.; Wang, H. The Hypervolume Indicator Hessian Matrix: Analytical Expression, Computational Time Complexity, and Sparsity, _arXiv_, 2022.

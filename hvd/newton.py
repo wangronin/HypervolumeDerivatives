@@ -14,9 +14,8 @@ from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .reference_set import ReferenceSet
-from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
-
-__authors__ = ["Hao Wang"]
+from .utils import (compute_chim, get_logger, non_domin_sort,
+                    precondition_hessian, set_bounds)
 
 np.seterr(divide="ignore", invalid="ignore")
 

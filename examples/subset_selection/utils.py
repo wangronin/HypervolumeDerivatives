@@ -4,8 +4,6 @@ import numpy as np
 from scipy.interpolate import BSpline
 from scipy.optimize import minimize_scalar
 
-__authors__ = ["Hao Wang"]
-
 
 def read_bspline_csv(filepath: str) -> Tuple[np.ndarray, np.ndarray, int]:
     points = []
