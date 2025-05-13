@@ -39,7 +39,7 @@ You can decide to use a Python virtual environment to install the dependencies.
 
 ## Reproducing NeurIPS 2025's results
 
-The experimental data needed for running MMD-based Newton (MMDN) are saved in `MMD_data.zip`. Please unzip it before reproducing the experiments. After unzipping, you should have a `./MMD_data` folder containing CSV files of initial points and reference sets generated from multi-objective optimization evolutionary algorithms (MOEAs). See our experimental procedure in the submitted paper for details.
+The experimental data needed for running MMD-based Newton (MMDN) can be accessed via [`MMD_data.zip`](https://drive.google.com/file/d/1OwDs89y1ccGbBSxG-4qpbLxtgE7e9x5U/view?usp=sharing). Please download and unzip it before reproducing the experiments. After unzipping, you should have a `./MMD_data` folder containing CSV files of initial points and reference sets generated from multi-objective optimization evolutionary algorithms (MOEAs). See our experimental procedure in the submitted paper for details.
 
 In the `/scripts` folder, you can find the experimental scripts for our NeurIPS 2025 submission: `/scripts/benchmark_MMD.py` performs the experiments in Sec. 6 of the paper. Calling signature is:
 
