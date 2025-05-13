@@ -60,7 +60,7 @@ for k, (n, m) in enumerate(stats):
     else:
         tie += 1
         s = "$\\leftrightarrow$"
-    stats[k] = [f"{n[0]:.4f}({n[1]:.4e}){s}", f"{m[0]:.4f}({m[1]:.4e})"]
+    stats[k] = [f"{n[0]:.4f}({n[1]:.2e}){s}", f"{m[0]:.4f}({m[1]:.2e})"]
 
 summary = ["+/$\\approx$/-", "", f"{win}/{tie}/{loose}", ""]
 data = pd.DataFrame(
