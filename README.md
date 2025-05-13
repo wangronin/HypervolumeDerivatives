@@ -9,29 +9,33 @@ This package contains three set-oriented Newton methods for solving _constrainte
 * **Why?**
   * the Newton method has a local **quadratic convergence** under some mild condition of objective functions.
   * Perhaps, you'd like to refine the final outcome of some direct optimizers with the Hypervolume Newton method..
-* **When to use it?** the objective function is at least *twice continuously differentiable*.
+* **When to use it?** the objective function is at least _twice continuously differentiable_.
 
 Specifically, you will find the following major functionalities:
 
 1. `hvd.mmd_newton.MMDNewton`: the MMD-based Newton method, submitted to NeurIPS 2025.
-2. `hvd.DpN`: $\Delta_p$ Newton Method for (constrained) Multi-objective Optimization Problems in [[WRU+24]](https://arxiv.org/pdf/2405.05721).
-3. `hvd.HypervolumeDerivatives`: the analytical computation of the HV Hessian and specifically, Alg. 2 described in [[DEW22]](https://arxiv.org/abs/2211.04171).
-4. `hvd.HVN`: Hypervolume Newton Method for (constrained) Multi-objective Optimization Problems in [[WED+22]](https://www.preprints.org/manuscript/202211.0103/v1).
+2. `hvd.DpN`: $\Delta_p$ Newton Method for (constrained) Multi-objective Optimization Problems.
+<!-- 3. in [[WRU+24]](https://arxiv.org/pdf/2405.05721). -->
+4. `hvd.HypervolumeDerivatives`: the analytical computation of the HV Hessian and specifically.
+<!-- 5.  Alg. 2 described in [[DEW22]](https://arxiv.org/abs/2211.04171). -->
+6. `hvd.HVN`: Hypervolume Newton Method for (constrained) Multi-objective Optimization Problems 
+<!-- 7. in [[WED+22]](https://www.preprints.org/manuscript/202211.0103/v1). -->
 
 ## References
 
+Will show up after double-blind reviewing.
+<!-- 
 * [[DEW22]](https://arxiv.org/abs/2211.04171) Deutz, A.; Emmerich, Michael T. M.; Wang, H. The Hypervolume Indicator Hessian Matrix: Analytical Expression, Computational Time Complexity, and Sparsity, _arXiv_, 2022.
 
 * [[WRU+24]](https://arxiv.org/pdf/2405.05721) Wang, Hao, Angel E. Rodriguez-Fernandez, Lourdes Uribe, André Deutz, Oziel Cortés-Piña, and Oliver Schütze. "A Newton method for hausdorff approximations of the Pareto front within multi-objective evolutionary algorithms." IEEE Transactions on Evolutionary Computation (2024).
 
-* [[SSW+22]](https://ieeexplore.ieee.org/document/8588401) Víctor Adrián Sosa-Hernández, Oliver Schütze, Hao Wang, André H. Deutz, Michael Emmerich. "The Set-Based Hypervolume Newton Method for Bi-Objective Optimization." IEEE Trans. Cybern. 50(5): 2186-2196 (2020)
+* [[SSW+22]](https://ieeexplore.ieee.org/document/8588401) Víctor Adrián Sosa-Hernández, Oliver Schütze, Hao Wang, André H. Deutz, Michael Emmerich. "The Set-Based Hypervolume Newton Method for Bi-Objective Optimization." IEEE Trans. Cybern. 50(5): 2186-2196 (2020) -->
 
 ## Installation
 
 For now, please take the lastest version from the `neurips2025` branch:
 
 ```shell
-git clone https://github.com/wangronin/HypervolumeDerivatives.git
 cd HypervolumeDerivatives && pip install -f requirements.txt
 ```
 
@@ -67,7 +71,6 @@ which take the raw data stored in `./.results` and perform Mann-Whitney U test w
 ## Example run of the HVN method on the simple MOP1 problem
 
 ![](assets/demo.png)
-
 
 ## Hypervolume Hessian Matrix
 
@@ -154,7 +157,7 @@ opt = HVN(
 X, Y, stop = opt.run()
 ```
 
-## Brief Explanation of the Analytical Computation
+<!-- ## Brief Explanation of the Analytical Computation
 
 The **hypervolume indicator** (HV) of a set of points is the m-dimensional Lebesgue measure of the space that is jointly dominated by a set of objective function vectors in $\mathbb{R}^m$ and bound from above by a reference point. HV is widely investigated in solving _multi-objective optimization problems_ (MOPs), where it is often used as a performance indicator for assessing the quality of _Evolutionay Multi-objective Optimization Algorithms_ (EMOAs), or employed to solve MOPs directly, e.g., [Hypervolume Indicator Gradient Algorithm](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Pz9c6XwAAAAJ&citation_for_view=Pz9c6XwAAAAJ:5nxA0vEk-isC) and [Hypervolume Indicator Netwon Method](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Pz9c6XwAAAAJ&citation_for_view=Pz9c6XwAAAAJ:QIV2ME_5wuYC).
 
@@ -166,4 +169,4 @@ In this chart, we have three objective function to minimize, where we depicts th
 
 ## Symbolic computation of the Hessian in Mathematica
 
-Also, we include, in folder `mathematica/`, several cases of the hypervolume indicator Hessian computed symoblically using `Mathematica`.
+Also, we include, in folder `mathematica/`, several cases of the hypervolume indicator Hessian computed symoblically using `Mathematica`. -->
