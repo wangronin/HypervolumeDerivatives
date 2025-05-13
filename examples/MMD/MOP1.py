@@ -63,7 +63,7 @@ X = np.c_[p, p]
 Y = np.array([MOP1(_) for _ in X])
 dim = Y.shape[1]
 # theta = 1 / (10 * N)
-theta = 0.01
+theta = 0.005
 
 # generate a fine grained Pareto front for measuring the final metrics
 p = np.linspace(-1, 1, 500)
@@ -92,6 +92,7 @@ opt = MMDNewton(
     verbose=True,
     metrics=metrics,
     preconditioning=False,
+    matching=False,
     theta=theta,
 )
 X_opt, Y_opt, _ = opt.run()
@@ -121,11 +122,11 @@ pd.DataFrame(Y_opt).to_csv(f"MMD_MOP1_Y_MMD_theta{theta}.csv", index=False)
 pd.DataFrame(Y_DpN).to_csv(f"MMD_MOP1_Y_DpN.csv", index=False)
 
 slope_func = lambda f1: -1 / (((f1 / 2) ** 0.5 - 2) * (f1 / 2) ** (-0.5))
-c1 = 0.5
+c1 = 0.35
 slope = slope_func(Y_opt[0, 0])
 k1 = Y_opt[0] + np.array([c1, slope * c1])
 k2 = Y_opt[0] - np.array([c1, slope * c1])
-c2 = 1.5
+c2 = 1.2
 k3 = Y_opt[0] + np.array([c2, -c2 / slope])
 k4 = Y_opt[0] - np.array([c2, -c2 / slope])
 d = (np.sum(ref - Y_opt, axis=0) + Y_opt)[0]
@@ -163,21 +164,24 @@ CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
 CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
 
 ax1_handles = []
-ax1_handles += ax1.plot(ref[:, 0], ref[:, 1], "k.", ms=5)
+ax1_handles += ax1.plot(ref[:, 0], ref[:, 1], "k.", ms=9)
 ax1_handles += ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "m-", alpha=0.5)
-ax1_handles += ax1.plot(Y[:, 0], Y[:, 1], "g.", ms=5)
-ax1_handles += ax1.plot(Y_opt[:, 0], Y_opt[:, 1], "kx", ms=5)
-ax1_handles += ax1.plot(Y_DpN[:, 0], Y_DpN[:, 1], "r+", ms=5)
+ax1_handles += ax1.plot(Y[:, 0], Y[:, 1], "k+", mfc="none", ms=9)
+ax1_handles += ax1.plot(Y_opt[:, 0], Y_opt[:, 1], "k*", mfc="none", ms=9)
+# ax1_handles += ax1.plot(Y_DpN[:, 0], Y_DpN[:, 1], "r+", ms=5)
 ax1_handles += ax1.plot((k1[0], k2[0]), (k1[1], k2[1]), "g--", lw=1.3)
 ax1_handles += ax1.plot((k3[0], k4[0]), (k3[1], k4[1]), "k--", lw=1.3)
 ax1_handles += ax1.plot((Y_opt[0, 0], d[0]), (Y_opt[0, 1], d[1]), "r--", lw=1.3)
 
+ax1.set_ylim(-1, 5)
+ax1.set_xlim(1, 8)
 ax1.set_aspect("equal")
 ax1.set_title(rf"$\theta={theta}$")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
-ax0.legend(ax0_handles, ["efficient set", r"$X_0$", r"$X_{\text{MMD}}$", r"$X_{\text{DpN}}$"])
+ax0.legend(ax0_handles, ["efficient set", r"$X_0$", r"$X_{\text{MMD}}$"])
+#  r"$X_{\text{DpN}}$"])
 ax1.legend(
     ax1_handles,
     [
@@ -185,12 +189,13 @@ ax1.legend(
         "Pareto front",
         r"$Y_0$",
         r"$Y_{\text{MMD}}$",
-        r"$Y_{\text{DpN}}$",
+        # r"$Y_{\text{DpN}}$",
         "Normal space",
         "Tangent space",
         r"$\sum_i \vec{r}^{\,i} - \vec{y}$",
     ],
     fontsize=12,
+    loc=1,
 )
 
 plt.tight_layout()

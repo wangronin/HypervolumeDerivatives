@@ -44,8 +44,8 @@ rcParams["ytick.major.width"] = 1
 np.random.seed(66)
 
 path = "./MMD_data/"
-emoa = "MOEAD"
-gen = 200
+emoa = "NSGA-III"
+gen = 300
 kernel = laplace
 problem_name = sys.argv[1]
 if problem_name.startswith("DTLZ"):
@@ -60,7 +60,7 @@ run_id = [
 ]
 
 thetas = np.logspace(-1, 4, 15)
-for run in [9]:
+for run in [26]:
     ref, X0, Y0, Y_index, eta = read_reference_set_data(path, problem_name, emoa, run, gen)
     ref = ReferenceSet(ref=ref, eta=eta, Y_idx=Y_index)
     ref.shift(0.08)  # simulate the initial shift of MMD Newton

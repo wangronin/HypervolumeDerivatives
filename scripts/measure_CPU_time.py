@@ -56,7 +56,7 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-N = 1e4
+N = 1e5
 res = []
 data_FE = []
 set_ = 1
@@ -101,7 +101,7 @@ for problem in problems:
     )
 data_FE = np.vstack([np.repeat(problems_name, N - 1), data_FE]).T
 
-N = 1e4
+N = 1e5
 data_AD = []
 for problem in problems:
     f = problem if isinstance(problem, MOOAnalytical) else PymooProblemWithAD(problem)
@@ -117,7 +117,7 @@ for problem in problems:
         # Y = func(x)  # `(N, dim_m)`
         # H = h(x)
         # Jacobians
-        YdX = jac(x)  # `(N, dim_m, dim_d)`
+        # YdX = jac(x)  # `(N, dim_m, dim_d)`
         # Hessians
         YdX2 = hessian(x)  # `(N, dim_m, dim_d, dim_d)`
         # HdX = h_jac(x)
@@ -158,7 +158,7 @@ ax = sns.violinplot(
 ax.set_ylabel("CPU time (sec)")
 ax.yaxis.set_major_locator(LogLocator(base=10.0, numticks=10))
 ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=10))
-# ax.set_ylim(2, 30)
+ax.set_ylim(2, 20)
 ax.get_legend().set_title("")
 plt.tight_layout()
 fig = ax.get_figure()
