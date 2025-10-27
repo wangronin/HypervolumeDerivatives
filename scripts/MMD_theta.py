@@ -59,7 +59,7 @@ run_id = [
     for s in glob.glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
 ]
 
-thetas = np.logspace(-1, 4, 15)
+thetas = np.logspace(-1, 4, 5)
 for run in [26]:
     ref, X0, Y0, Y_index, eta = read_reference_set_data(path, problem_name, emoa, run, gen)
     ref = ReferenceSet(ref=ref, eta=eta, Y_idx=Y_index)
@@ -94,3 +94,4 @@ for run in [26]:
     # print(thetas[idx][k])
     plt.loglog(thetas, condition_number, "k.", ls="--", ms=8)
     plt.show()
+    breakpoint()

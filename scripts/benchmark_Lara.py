@@ -77,25 +77,28 @@ def execute(emoa: str, run: int) -> np.ndarray:
     igd_value0 = metrics["IGD"].compute(Y=y0)
     print(f"initial GD: {gd_value0}")
     print(f"initial IGD: {igd_value0}")
-    # create the algorithm
-    opt = Lara(
-        n_var=problem.n_var,
-        n_obj=problem.n_obj,
-        func=problem.objective,
-        jac=problem.objective_jacobian,
-        N=N,
-        X0=x0,
-        xl=problem.xl,
-        xu=problem.xu,
-        max_iters=max_iters,
-        verbose=False,
-        metrics=metrics,
-    )
-    Y = opt.run()[1]
-    Y = get_non_dominated(Y)
-    # plotting the final approximation set
-    gd_value = metrics["GD"].compute(Y=Y)
-    igd_value = metrics["IGD"].compute(Y=Y)
+    try:
+        # create the algorithm
+        opt = Lara(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            func=problem.objective,
+            jac=problem.objective_jacobian,
+            N=N,
+            X0=x0,
+            xl=problem.xl,
+            xu=problem.xu,
+            max_iters=max_iters,
+            verbose=False,
+            metrics=metrics,
+        )
+        Y = opt.run()[1]
+        Y = get_non_dominated(Y)
+        # plotting the final approximation set
+        gd_value = metrics["GD"].compute(Y=Y)
+        igd_value = metrics["IGD"].compute(Y=Y)
+    except Exception:
+        return np.array([0, 0, 0])
     # remove the dominated ones in the final solutions
     return np.array([igd_value, gd_value, opt.state.n_jac_evals])
 
