@@ -62,8 +62,8 @@ elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
 path = "./MMD_data/"
-# emoa = "NSGA-III"
-emoa = "MOEAD"
+emoa = "NSGA-II"
+# emoa = "MOEAD"
 gen = 200 if emoa == "MOEAD" else 300
 # get hyperparameters
 params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
@@ -121,6 +121,7 @@ def execute(run: int) -> np.ndarray:
     wall_clock_time = time.process_time_ns() - t0
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
+    print(opt.history_R_norm)
     Y = get_non_dominated(Y)
     # if problem.n_obj == 3:
     # score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
@@ -176,11 +177,12 @@ run_id = [
 if problem_name == "DTLZ4" and emoa == "MOEAD":
     run_id = list(set(run_id) - set([3]))
 
-if 11 < 2:
+if 1 < 2:
     data = []
     for i in run_id:
         print(i)
         data.append(execute(i))
+        breakpoint()
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 

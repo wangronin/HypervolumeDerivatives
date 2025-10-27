@@ -93,6 +93,7 @@ def execute(emoa: str, run: int) -> np.ndarray:
             metrics=metrics,
         )
         Y = opt.run()[1]
+        print(opt.history_R_norm)
         Y = get_non_dominated(Y)
         # plotting the final approximation set
         gd_value = metrics["GD"].compute(Y=Y)
@@ -111,7 +112,7 @@ for emoa in ["NSGA-II", "NSGA-III", "MOEAD"]:
         int(re.findall(r"run_(\d+)_", s)[0])
         for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
     ]
-    if 11 < 2:
+    if 1 < 2:
         data = []
         for i in run_id:
             print(i)
