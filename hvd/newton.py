@@ -14,8 +14,7 @@ from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume_derivatives import HypervolumeDerivatives
 from .reference_set import ReferenceSet
-from .utils import (compute_chim, get_logger, non_domin_sort,
-                    precondition_hessian, set_bounds)
+from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -315,6 +314,49 @@ class HVN:
         else:
             self.logger.warn("backtracking line search failed")
         step_size = s[-1]
+        return step_size
+
+    def _backtracking_line_search_individual(
+        self, state: State, step: np.ndarray, R: np.ndarray, max_step_size: float = 1
+    ) -> float:
+        """backtracking line search with Armijo's condition"""
+        c1 = 1e-5
+        if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
+            return max_step_size
+
+        def phi_func(alpha: float, k: int) -> float:
+            state = deepcopy(self.state)
+            x = state.X[k].copy()
+            x += alpha * step[k]
+            state.update_one(x, k)
+            R_ = self._compute_R(state)[0][k]
+            self.state.n_jac_evals = state.n_jac_evals
+            return np.linalg.norm(R_)
+
+        step_size = np.ones(state.N)
+        for i in range(state.N):
+            phi = [np.linalg.norm(R[i])]
+            s = [0, step_size[i]]
+            for _ in range(6):
+                phi.append(phi_func(s[-1], i))
+                # Armijo–Goldstein condition
+                # when R norm is close to machine precision, it makes no sense to perform the line search
+                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+                if success:
+                    break
+                else:
+                    if 1 < 2:
+                        # cubic interpolation to compute the next step length
+                        d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
+                        d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
+                        s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
+                        s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
+                        s.append(s_)
+                    else:
+                        s.append(s[-1] * 0.5)
+            else:
+                pass
+            step_size[i] = s[-1]
         return step_size
 
     def _handle_box_constraint(self, step: np.ndarray, state: State) -> Tuple[np.ndarray, np.ndarray]:
