@@ -63,7 +63,7 @@ elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
 path = "./MMD_data/"
-emoa = "NSGA-II"
+emoa = "NSGA-II"  # NOTE: also use NSGA-III, SMS-MOEA as baseline algorithms
 # emoa = "MOEAD"
 gen = 200 if emoa == "MOEAD" else 300
 # get hyperparameters
@@ -119,7 +119,10 @@ def execute(run: int) -> np.ndarray:
         theta=theta,
         kernel=kernel,
     )
+    # NOTE: you might need to use a smaller beta value if you see
+    # the final Pareto front contains any outliers
     opt.indicator.beta = 0.3  # start with a large spreading effect
+    # NOTE: `interval`` parameter should be adjusted together with `beta`
     X, Y, _, __ = bootstrap_reference_set(opt, problem, interval=3, plot=False)
     ref_new = opt.ref.reference_set - 0.05 * opt.ref.eta[0]
     wall_clock_time = time.process_time_ns() - t0
@@ -129,8 +132,9 @@ def execute(run: int) -> np.ndarray:
     # if problem.n_obj == 3:
     # score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
     # Y = Y[score != -1]
-    # plotting the final approximation set
-    if 11 < 2:
+
+    # NOTE: please plot the final approximation set and inspect it visually
+    if 1 < 2:
         fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
         if problem.n_obj == 2:
             plot_2d(
@@ -185,7 +189,6 @@ if 1 < 2:
     for i in run_id:
         print(i)
         data.append(execute(i))
-        breakpoint()
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 
