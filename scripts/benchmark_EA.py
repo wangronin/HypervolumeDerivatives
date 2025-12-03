@@ -161,13 +161,13 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
     return int(np.median(pd.read_csv(f"{path}/{problem_name}-{newton}-{algorithm_name}-{gen}.csv").Jac_calls))
 
 
-n_iter_newton = 5
+n_iter_newton = 9
 gen = 300
 # NOTE: 3.215 is obtained on ZDTs and DTLZs
 gen_func = lambda scale: int(3.215 * scale)
 N = 30
 problem_names = sys.argv[1]
-algorithms = ("MOEAD",)
+algorithms = ("NSGA-II", "NSGA-III")
 newton = "MMD"
 
 for problem_name in [problem_names]:
