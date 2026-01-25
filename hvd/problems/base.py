@@ -35,11 +35,11 @@ class MOOAnalytical:
 
     @timeit
     def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective_jacobian(x))
+        return np.array(self._objective_jacobian(x)).reshape(self.n_obj, self.n_var)
 
     @timeit
     def objective_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective_hessian(x))
+        return np.array(self._objective_hessian(x)).reshape(self.n_obj, self.n_var, self.n_var)
 
 
 class ConstrainedMOOAnalytical(MOOAnalytical):

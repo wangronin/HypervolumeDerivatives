@@ -6,10 +6,10 @@ from scipy.optimize import minimize_scalar
 
 
 def read_bspline_csv(filepath: str) -> Tuple[np.ndarray, np.ndarray, int]:
-    points = []
-    knots = []
-    degree = None
-    mode = "points"
+    points: List[float] = []
+    knots: List[float] = []
+    degree: int = None
+    mode: str = "points"
 
     with open(filepath, "r") as file:
         for line_num, line in enumerate(file):
@@ -65,9 +65,17 @@ class PiecewiseBS:
         return splines[indices]
 
     def get_index(self, t: float) -> int:
+        """get the index of the B-spline to which the input parameter `t` belongs
+
+        Args:
+            t (float): the parameter value
+
+        Returns:
+            int: the index of the B-spline that `t` belongs to
+        """
         k = np.floor(t / (self.size))
-        if np.isclose(t, k * self.size) and t != 0:
-            k -= 1
+        if t == 1.0:
+            k = self.N - 1
         return int(k)
 
     def __func__(self, t: Union[np.ndarray, float], type: str):

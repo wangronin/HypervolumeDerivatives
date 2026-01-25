@@ -3,11 +3,11 @@ from typing import Tuple
 import numpy as np
 import pandas as pd
 
-coefs1 = pd.read_csv("examples/subset_selection/TwoOnOne/coeff_1.csv", header=None).values
-breaks1 = pd.read_csv("examples/subset_selection/TwoOnOne/knots_1.csv", header=None).values.ravel()
+coefs1 = pd.read_csv("examples/HVSS/TwoOnOne/coeff_1.csv", header=None).values
+breaks1 = pd.read_csv("examples/HVSS/TwoOnOne/knots_1.csv", header=None).values.ravel()
 
-coefs2 = pd.read_csv("examples/subset_selection/TwoOnOne/coeff_2.csv", header=None).values
-breaks2 = pd.read_csv("examples/subset_selection/TwoOnOne/knots_2.csv", header=None).values.ravel()
+coefs2 = pd.read_csv("examples/HVSS/TwoOnOne/coeff_2.csv", header=None).values
+breaks2 = pd.read_csv("examples/HVSS/TwoOnOne/knots_2.csv", header=None).values.ravel()
 
 
 def pareto_front_approx(x: float) -> Tuple[float, float, float]:
