@@ -75,8 +75,8 @@ point_set -= center
 pareto_set = point_set / np.linalg.norm(point_set, axis=1).reshape(-1, 1) + center
 pareto_front = np.array([MOP1(x) for x in pareto_set])
 
-max_iters = 30
-mu = 40
+max_iters = 15
+mu = 50
 ref = np.array([20, 20, 20])
 w = np.abs(np.random.rand(mu, 3))
 w /= np.sum(w, axis=1).reshape(-1, 1)
@@ -88,7 +88,7 @@ y0 = np.array([MOP1(_) for _ in x0])
 if mu == 20:
     ref = np.array([20, 20, 20])
 elif mu == 40:
-    ref = np.array([38, 38, 38])
+    ref = np.array([5, 5, 5])
 elif mu == 60:
     ref = np.array([100, 100, 100])
 
@@ -108,7 +108,7 @@ opt = HVN(
     xu=2,
     max_iters=max_iters,
     verbose=True,
-    preconditioning=False,
+    preconditioning=True,
 )
 X, Y, stop = opt.run()
 
@@ -207,7 +207,7 @@ ax.set_xlabel("iteration")
 
 plt.tight_layout()
 plt.subplots_adjust(wspace=0.1)
-# plt.show()
+plt.show()
 plt.savefig(f"3D-example1-{mu}.pdf", dpi=100)
 
 # df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))

@@ -69,7 +69,7 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
         return np.array([self._eq(x)])
 
     def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq(x))
+        return np.array([self._ieq(x)])
 
     @timeit
     def eq_jacobian(self, x: np.ndarray) -> np.ndarray:

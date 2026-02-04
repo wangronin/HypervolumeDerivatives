@@ -130,6 +130,7 @@ class Lara:
         R = np.zeros((state.N, state.n_var))
         for i in range(state.N):
             v = state.J[i]
+            # TODO: FIXIT!!
             R[i] = -1 * np.sum([v[k] / np.linalg.norm(v[k]) for k in range(self.n_obj)], axis=0)
         return R
 
