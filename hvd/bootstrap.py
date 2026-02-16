@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple
 
-import matlab.engine
+# import matlab.engine
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -10,6 +10,7 @@ from sklearn_extra.cluster import KMedoids
 
 from .problems import MOOAnalytical
 from .reference_set import ReferenceSet
+from .rsg import RSG
 from .utils import compute_chim, get_non_dominated
 
 plt.style.use("ggplot")
@@ -24,9 +25,6 @@ rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
-
-
-__authors__ = ["Hao Wang"]
 
 
 def plot_bootstrap(
@@ -121,9 +119,9 @@ def bootstrap_reference_set(
     pareto_front: np.ndarray = problem.get_pareto_front()
     problem_name: str = problem.__class__.__name__
 
-    if with_rsg:  # initialize the matlab backend
-        eng = matlab.engine.start_matlab()
-        eng.cd(r"./RSG/", nargout=0)
+    # if with_rsg:  # initialize the matlab backend
+    # eng = matlab.engine.start_matlab()
+    # eng.cd(r"./RSG/", nargout=0)
 
     for i in range(optimizer.max_iters):
         X_list.append(optimizer.state.X.copy()[:, :dim])  # only keep the primal variables
@@ -149,14 +147,15 @@ def bootstrap_reference_set(
             idx = get_non_dominated(Y, return_index=True)
             Y = Y[idx]
             # take out the outliers
-            # TODO: FIXIT!
-            idx = np.isclose(Y.sum(axis=1), 0.5, atol=1e-1)
-            Y = Y[idx]
-            # indices = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
-            # Y = Y[indices == 1]
+            # TODO: not robust FIXIT!
+            # idx = np.isclose(Y.sum(axis=1), 0.5, atol=1e-1)
+            # Y = Y[idx]
+            indices = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
+            Y = Y[indices == 1]
             if with_rsg:  # call the RSG method written in Matlab to fill the reference set
-                pd.DataFrame(Y).to_csv("./RSG/MMD_boostrap.csv", index=False, header=False)
-                ref = np.array(eng.RSG())
+                ref = RSG(Py=Y, Nf=N)
+                # pd.DataFrame(Y).to_csv("./RSG/MMD_boostrap.csv", index=False, header=False)
+                # ref = np.array(eng.RSG())
             else:
                 ref = Y.copy()
             # keep track of the new reference set
@@ -174,14 +173,13 @@ def bootstrap_reference_set(
                 pd.DataFrame(ref).to_csv(f"ref_{opt_name}-iteration{i}.csv", index=False, header=False)
 
             # TODO: computing shift direction seems to be problematic. FIXIT
-            # eta = compute_chim(ref)
-            eta = -1 * np.array([1 / np.sqrt(3)] * 3)
+            eta = compute_chim(ref)
             ref += 0.05 * eta
             ref = ReferenceSet(ref=ref, eta={0: eta}, Y_idx=None)
             optimizer.indicator.ref = optimizer.ref = ref
             optimizer.indicator.compute(Y=optimizer.state.Y)
             # discount the weight of the spread term to reduce spread effect in the following iterations
-            optimizer.indicator.beta = optimizer.indicator.beta * 1
+            optimizer.indicator.beta = optimizer.indicator.beta * 0.8
 
         # the next iteration
         optimizer.newton_iteration()

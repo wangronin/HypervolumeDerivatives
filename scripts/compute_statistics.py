@@ -15,7 +15,7 @@ MOEAs = [
     # "SMS-EMOA",
     # "MOEAD",
 ]
-method = "MMD"
+method = "MMDboot"
 # test problem to include
 problems = [
     # "CF1",
@@ -33,10 +33,10 @@ problems = [
     "ZDT3",
     "ZDT4",
     # "ZDT6",
-    "DTLZ1",
-    "DTLZ2",
-    "DTLZ3",
-    "DTLZ4",
+    # "DTLZ1",
+    # "DTLZ2",
+    # "DTLZ3",
+    # "DTLZ4",
     # "DTLZ5",
     # "DTLZ6",
     # "DTLZ7",
@@ -51,6 +51,7 @@ for moea in MOEAs:
     for problem in problems:
         try:
             data1 = pd.read_csv(f"./results/{problem}-{method}-{moea}-{gen}.csv")
+            # data2 = pd.read_csv(f"./results/{problem}-MMD-{moea}-{gen}.csv")
             data2 = pd.read_csv(f"./results/{problem}-{moea}-{gen}.csv")
         except:
             continue
@@ -85,7 +86,8 @@ for k, (n, m) in enumerate(stats):
 summary = ["+/$\\approx$/-", "", f"{win}/{tie}/{loose}", ""]
 data = pd.DataFrame(
     np.vstack([np.hstack([index, stats]), summary]),
-    columns=["Method", "Problem", "Newton (iter = 5)", "MOEA (iter = 300 + 5 \\times (4 + 10n)"],
+    # columns=["Method", "Problem", "Newton (iter = 5)", "MOEA (iter = 300 + 5 \\times (4 + 10n)"],
+    columns=["Method", "Problem", "MMD w/ bootstrapping", "MMD"],
 )
 pd.set_option("display.max_rows", None)
 print(data)

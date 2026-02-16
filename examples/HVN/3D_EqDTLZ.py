@@ -1,6 +1,10 @@
+import sys
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import rcParams
+
+sys.path.insert(0, "./")
 
 from hvd.newton import HVN
 from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4, Eq1IDTLZ1, Eq1IDTLZ2, Eq1IDTLZ3, Eq1IDTLZ4
@@ -47,7 +51,7 @@ refs = {
 # NOTE: on Eq1DTLZ4 and Eq1IDTLZ4 problems, we face a numerical issue as the Newton step is
 # very tiny when the decision points are on the Pareto front, which is even below the numerical precision
 # of Python :) -> Maybe utilize numerical libraries that allows for arbitrary precisions
-f = Eq1DTLZ3()
+f = Eq1DTLZ1()
 dim = 11
 max_iters = 15
 ref = refs[type(f).__name__]
@@ -55,9 +59,9 @@ seed = seeds[type(f).__name__]
 
 np.random.seed(seed)
 pareto_set = f.get_pareto_set(500)
-pareto_front = f.get_pareto_front(500)
+pareto_front = f.get_pareto_front()
 
-x0 = f.get_pareto_set(200, kind="uniform")
+x0 = f.get_pareto_set(200)
 x0[:, 0:2] += 0.02 * np.random.rand(len(x0), 2)  # perturb the initial solution a bit
 y0 = np.array([f.objective(x) for x in x0])
 mu = len(x0)

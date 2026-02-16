@@ -2,6 +2,7 @@ import sys
 
 sys.path.insert(0, "./")
 import re
+import time
 from glob import glob
 
 import numpy as np
@@ -61,9 +62,9 @@ elif problem_name.startswith("ZDT"):
     problem = PymooProblemWithAD(locals()[problem_name]())
 
 path = "./MMD_data/"
-# emoa = "NSGA-III"
-emoa = "MOEAD"
-# gen = 200 if emoa == "MOEAD" else 300
+emoa = "NSGA-II"
+# emoa = "MOEAD"
+gen = 200 if emoa == "MOEAD" else 300
 # get hyperparameters
 params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
 params = params[(params.algorithm == emoa) & (params.problem == problem_name)]
@@ -95,6 +96,7 @@ def execute(run: int) -> np.ndarray:
     print(f"initial GD: {gd_value0}")
     print(f"initial IGD: {igd_value0}")
     print(f"initial MMD: {mmd_value0}")
+    t0 = time.process_time_ns()
     opt = MMDNewton(
         n_var=problem.n_var,
         n_obj=problem.n_obj,
@@ -116,8 +118,10 @@ def execute(run: int) -> np.ndarray:
         theta=theta,
         kernel=kernel,
     )
+    wall_clock_time = time.process_time_ns() - t0
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]
+    print(opt.history_R_norm)
     Y = get_non_dominated(Y)
     # if problem.n_obj == 3:
     # score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
@@ -160,7 +164,9 @@ def execute(run: int) -> np.ndarray:
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
     mmd_value = mmd.compute(Y=Y)
-    return np.array([hv_value, igd_value, gd_value, mmd_value, opt.state.n_jac_evals])
+    return np.array(
+        [hv_value, igd_value, gd_value, mmd_value, opt.state.n_jac_evals, wall_clock_time / 1000.0]
+    )
 
 
 # get all run IDs
@@ -171,13 +177,14 @@ run_id = [
 if problem_name == "DTLZ4" and emoa == "MOEAD":
     run_id = list(set(run_id) - set([3]))
 
-if 11 < 2:
+if 1 < 2:
     data = []
     for i in run_id:
         print(i)
         data.append(execute(i))
+        breakpoint()
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 
-df = pd.DataFrame(np.array(data), columns=["HV", "IGD", "GD", "MMD", "Jac_calls"])
+df = pd.DataFrame(np.array(data), columns=["HV", "IGD", "GD", "MMD", "Jac_calls", "wall_clock_time"])
 df.to_csv(f"results/{problem_name}-MMD-{emoa}-300.csv", index=False)

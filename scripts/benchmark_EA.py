@@ -4,6 +4,7 @@ import sys
 sys.path.insert(0, "./")
 
 import random
+import time
 
 import numpy as np
 import pandas as pd
@@ -73,6 +74,7 @@ def minimize(
     reference_point=None,
     **kwargs,
 ):
+    t0 = time.process_time_ns()
     # create a copy of the algorithm object to ensure no side-effects
     if copy_algorithm:
         algorithm = copy.deepcopy(algorithm)
@@ -114,7 +116,8 @@ def minimize(
         gd_value = GenerationalDistance(pareto_front).compute(Y=res.F)
         igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=res.F)
         hv_value = hypervolume(res.F, reference_point)
-    return np.array([igd_value, gd_value, hv_value])
+    wall_clock_time = time.process_time_ns() - t0
+    return np.array([igd_value, gd_value, hv_value, wall_clock_time / 1000.0])
 
 
 def get_algorithm(
@@ -158,13 +161,13 @@ def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
     return int(np.median(pd.read_csv(f"{path}/{problem_name}-{newton}-{algorithm_name}-{gen}.csv").Jac_calls))
 
 
-n_iter_newton = 5
+n_iter_newton = 9
 gen = 300
 # NOTE: 3.215 is obtained on ZDTs and DTLZs
 gen_func = lambda scale: int(3.215 * scale)
 N = 30
 problem_names = sys.argv[1]
-algorithms = ("MOEAD",)
+algorithms = ("NSGA-II", "NSGA-III")
 newton = "MMD"
 
 for problem_name in [problem_names]:
@@ -187,7 +190,7 @@ for problem_name in [problem_names]:
         scale = int(
             get_Jacobian_calls("./results", problem_name, algorithm_name, gen) / pop_size / n_iter_newton
         )
-        termination = get_termination("n_gen", gen + n_iter_newton * gen_func(scale))
+        termination = get_termination("n_gen", n_iter_newton * gen_func(scale))
         algorithm = get_algorithm(problem.n_obj, algorithm_name, pop_size, constrained)
         # minimize(
         #     problem,
@@ -214,7 +217,7 @@ for problem_name in [problem_names]:
         )
         data = np.array(data)
         data = data[~np.any(np.isnan(data), axis=1)]
-        df = pd.DataFrame(data, columns=["IGD", "GD", "HV"])
+        df = pd.DataFrame(data, columns=["IGD", "GD", "HV", "wall_clock_time"])
         df.to_csv(f"results/{problem_name}-{algorithm_name}-{gen}.csv", index=False)
         # data = pd.concat(data, axis=0)
         # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)

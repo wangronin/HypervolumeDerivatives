@@ -13,8 +13,6 @@ from .reference_set import ReferenceSet
 # enable double-precision of JAX
 os.environ["JAX_ENABLE_X64"] = "True"
 
-__authors__ = ["Hao Wang"]
-
 
 @jit
 def rational_quadratic(x: np.ndarray, y: np.ndarray, theta: float = 1.0, alpha: float = 1.0) -> float:

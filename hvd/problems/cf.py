@@ -7,8 +7,6 @@ from ..utils import timeit
 from .base import ConstrainedMOOAnalytical
 from .misc import UF8
 
-__authors__ = ["Hao Wang"]
-
 
 class CF1(ConstrainedMOOAnalytical):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:

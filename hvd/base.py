@@ -4,8 +4,6 @@ from typing import Callable, Self, Tuple
 
 import numpy as np
 
-__authors__ = ["Hao Wang"]
-
 
 class State:
     def __init__(

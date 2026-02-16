@@ -6,8 +6,6 @@ from jax import jacfwd, jacrev, jit
 
 from ..utils import timeit
 
-__author__ = ["Hao Wang"]
-
 
 def hessian(fun):
     return jit(jacfwd(jacrev(fun)))
@@ -37,11 +35,11 @@ class MOOAnalytical:
 
     @timeit
     def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective_jacobian(x))
+        return np.array(self._objective_jacobian(x)).reshape(self.n_obj, self.n_var)
 
     @timeit
     def objective_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective_hessian(x))
+        return np.array(self._objective_hessian(x)).reshape(self.n_obj, self.n_var, self.n_var)
 
 
 class ConstrainedMOOAnalytical(MOOAnalytical):
@@ -68,7 +66,7 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
             self._ieq_hessian = hessian(self._ieq)
 
     def eq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array([self._eq(x)])
+        return np.array(self._eq(x))
 
     def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._ieq(x))

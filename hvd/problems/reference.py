@@ -1,8 +1,6 @@
 import numpy as np
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
-__authors__ = ["Hao Wang"]
-
 # TODO: get rid of pymoo dependency
 
 

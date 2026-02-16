@@ -49,7 +49,7 @@ opt = HVN(
     xu=2,
     max_iters=max_iters,
     verbose=True,
-    preconditioning=False,
+    preconditioning=True,
 )
 X, Y, stop = opt.run()
 
