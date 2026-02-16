@@ -26,6 +26,7 @@ class PymooProblemWithAD:
         self._objective_jacobian = jit(jacrev(self._obj_func))
         self._objective_hessian = jit(hessian(self._obj_func))
         self._ieq_jacobian = jit(jacfwd(ieq_func))
+        self._ieq_hessian = jit(hessian(ieq_func))
         self.CPU_time: int = 0  # measured in nanoseconds
 
     def objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -46,6 +47,10 @@ class PymooProblemWithAD:
     @timeit
     def ieq_jacobian(self, x: jnp.ndarray) -> jnp.ndarray:
         return self._ieq_jacobian(x)
+
+    @timeit
+    def ieq_hessian(self, x: jnp.ndarray) -> jnp.ndarray:
+        return self._ieq_hessian(x)
 
     def get_pareto_set(self, *args, **kwargs) -> np.ndarray:
         return self._problem._calc_pareto_set(*args, **kwargs)

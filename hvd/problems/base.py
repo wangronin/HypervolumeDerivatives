@@ -66,10 +66,10 @@ class ConstrainedMOOAnalytical(MOOAnalytical):
             self._ieq_hessian = hessian(self._ieq)
 
     def eq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array([self._eq(x)])
+        return np.array(self._eq(x))
 
     def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array([self._ieq(x)])
+        return np.array(self._ieq(x))
 
     @timeit
     def eq_jacobian(self, x: np.ndarray) -> np.ndarray:

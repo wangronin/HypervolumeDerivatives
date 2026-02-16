@@ -1,5 +1,6 @@
 from typing import Tuple
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 from pymoo.util.remote import Remote
@@ -8,6 +9,7 @@ from ..utils import timeit
 from .base import ConstrainedMOOAnalytical
 from .reference import generic_sphere, get_ref_dirs
 
+jax.config.update("jax_enable_x64", True)
 # NOTE: `eps` is to cap the decision variables below for DTLZ6 since it is not differentiable at x = 0
 eps = 1e-30
 

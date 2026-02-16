@@ -1,7 +1,8 @@
 import math
+from functools import partial
 from itertools import combinations, combinations_with_replacement
 
-import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.art3d as art3d
 import numpy as np
@@ -9,12 +10,17 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from box_domain import union_box_constraint
+from jax import jacfwd, jacrev, jit
 from matplotlib.patches import Rectangle
 from torch.autograd.functional import hessian, jacobian
 
 __author__ = "Hao Wang"
 
 torch.manual_seed(0)
+
+
+def my_hessian(fun):
+    return jit(jacfwd(jacrev(fun)))
 
 
 def poly_features(t: torch.Tensor, degree: int = 2, interaction_only: bool = False) -> torch.Tensor:
@@ -140,15 +146,20 @@ def train_poly_regressor(data: np.ndarray, degree: int = 2):
 class ParetoApproximator:
     def __init__(self, data: np.ndarray, box_centers: np.ndarray, radii: np.ndarray) -> None:
         self.dim: int = data.shape[1]
-        self.xl: np.ndarray = np.min(data, axis=0)
-        self.xu: np.ndarray = np.max(data, axis=0)
+        # self.xl: np.ndarray = np.min(data, axis=0)
+        # self.xu: np.ndarray = np.max(data, axis=0)
+        self.xl: np.ndarray = np.array([-1] * self.dim)
+        self.xu: np.ndarray = np.array([0] * self.dim)
         self._centers: np.ndarray = box_centers
         self._radius: np.ndarray = radii
         self.n_eq_constr: int = 1
-        self.n_ieq_constr: int = self.dim - 1
+        self.n_ieq_constr: int = self.dim * 2 + 1
         self._fit_pareto_front_approximator(data)
-        self._ieq_jacobian: callable = jax.jacobian(union_box_constraint, argnums=0)
-        self._ieq_hessian: callable = jax.hessian(union_box_constraint, argnums=0)
+        self._ieq: callable = jit(partial(self.__class__._ieq_constraint, self))
+        self._ieq_jacobian: callable = jit(jacrev(self._ieq))
+        self._ieq_hessian: callable = my_hessian(self._ieq)
+        # self._ieq_jacobian: callable = jax.jacobian(union_box_constraint, argnums=0)
+        # self._ieq_hessian: callable = jax.hessian(union_box_constraint, argnums=0)
 
     def _fit_pareto_front_approximator(self, data: np.ndarray) -> None:
         """interpolate the Pareto front
@@ -183,18 +194,28 @@ class ParetoApproximator:
         H[0:-1, 0:-1] = hessian(self._pareto_approximator, x_).detach().cpu().numpy()
         return H
 
-    def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array(union_box_constraint(x[0:-1], self._centers, self._radius))
-
     def ieq_jacobian(self, x: np.ndarray) -> np.ndarray:
-        J = np.array(self._ieq_jacobian(x[0:-1], self._centers, self._radius))
-        return np.c_[J, np.zeros((self.n_ieq_constr, 1))]
+        return np.array(self._ieq_jacobian(x))
 
     def ieq_hessian(self, x: np.ndarray) -> np.ndarray:
-        H = np.zeros((self.n_ieq_constr, self.dim, self.dim))
-        H_ = self._ieq_hessian(x[0:-1], self._centers, self._radius)
-        H[:, 0 : self.n_ieq_constr, 0 : self.n_ieq_constr] = H_
-        return H
+        return np.array(self._ieq_hessian(x))
+
+    def _ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
+        return jnp.array(jnp.r_[jnp.sum(x[0:2] ** 2) - 1, self.xl - x, x - self.xu])
+        # return np.array(union_box_constraint(x[0:-1], self._centers, self._radius))
+
+    def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._ieq_constraint(x))
+
+    # def ieq_jacobian(self, x: np.ndarray) -> np.ndarray:
+    #     J = np.array(self._ieq_jacobian(x[0:-1], self._centers, self._radius))
+    #     return np.c_[J, np.zeros((self.n_ieq_constr, 1))]
+
+    # def ieq_hessian(self, x: np.ndarray) -> np.ndarray:
+    #     H = np.zeros((self.n_ieq_constr, self.dim, self.dim))
+    #     H_ = self._ieq_hessian(x[0:-1], self._centers, self._radius)
+    #     H[:, 0 : self.n_ieq_constr, 0 : self.n_ieq_constr] = H_
+    #     return H
 
     def sample_from_domain(n: int = 100) -> np.ndarray:
         pass

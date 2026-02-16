@@ -120,10 +120,9 @@ class HVN:
             assert all(~np.isinf(self.xl)) & all(~np.isinf(self.xu))
             X0 = np.random.rand(self.N, self.dim_p) * (self.xu - self.xl) + self.xl  # (mu, dim_primal)
         # initialize the state variables
-        # TODO: maybe try initializing the multipliers to positive values for
-        self.state.update(np.c_[X0, np.zeros((self.N, self.dim_d))])  # (mu, dim)
+        self.state.update(np.c_[X0, np.ones((self.N, self.dim_d)) / self.N])  # (mu, dim)
         self.iter_count: int = 0
-        self._max_HV = np.product(self.ref)  # TODO: this should be moved to the `HV` class
+        self._max_HV = np.product(self.ref)  # TODO: this should be moved to `HV` class
 
     def _set_logging(self, verbose: bool):
         """parameters for logging the history"""
@@ -172,7 +171,7 @@ class HVN:
             behavior of the infeasible ones falls back to case (1)
         """
         # check for anomalies in `X` and `Y`
-        self._check_points_uniqueness()
+        self._check_population()
         # first compute the current indicator value
         self._compute_indicator_value()
         # partition the approximation set to by feasibility
@@ -191,15 +190,12 @@ class HVN:
         self.R = np.zeros((self.N, self.dim))
         for idx in partitions.values():
             # compute Newton step
-            newton_step, R = self._compute_netwon_step(self.state[idx])
-            # constrain the search steps within the search box
-            newton_step, max_step_size = self._handle_box_constraint(newton_step, self.state[idx])
-            self.step[idx, :] = newton_step
+            step, R = self._compute_netwon_step(self.state[idx])
+            self.step[idx, :] = step
             self.R[idx, :] = R
             # backtracking line search with Armijo's condition for each layer
-            self.step_size[idx] = self._backtracking_line_search(
-                self.state[idx], newton_step, R, max_step_size
-            )
+            max_step_size = self._compute_max_step_size(self.state[idx].primal, self.step[idx, : self.dim_p])
+            self.step_size[idx] = self._backtracking_line_search(self.state[idx], step, R, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))
 
@@ -277,15 +273,27 @@ class HVN:
     def _compute_indicator_value(self):
         self.curr_indicator_value = self.indicator.compute(Y=self.state.Y)
 
+    def _compute_max_step_size(self, X: np.ndarray, step: np.ndarray) -> float:
+        N, dim = X.shape
+        # normal vector to each decision boundary
+        normal_vectors = np.c_[np.eye(dim * N), -1 * np.eye(dim * N)]
+        dist = np.r_[np.abs(X.ravel() - np.tile(self.xl, N)), np.abs(np.tile(self.xu, N) - X.ravel())]
+        v = step.ravel() @ normal_vectors
+        return min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
+
     def _backtracking_line_search(
         self, state: State, step: np.ndarray, R: np.ndarray, max_step_size: float = 1
     ) -> float:
         """backtracking line search with Armijo's condition"""
+        # TODO: make this a standard procedure for all optimizers
+        # TODO: implement curvature condition or use scipy's line search function
         c1 = 1e-5
-        if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
-            return max_step_size
+        # TODO: check if this is needed
+        # if step sizes are near zero, then no need to do the line search
+        # if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
+        # return 1
 
-        def phi_func(alpha: float) -> float:
+        def phi_func(alpha):
             state_ = deepcopy(state)
             state_.update(state.X + alpha * step)
             R = self._compute_R(state_)[0]
@@ -296,7 +304,6 @@ class HVN:
         s = [0, step_size]
         for _ in range(6):
             phi.append(phi_func(s[-1]))
-            # Armijo–Goldstein condition
             # when R norm is close to machine precision, it makes no sense to perform the line search
             success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
             if success:
@@ -316,69 +323,8 @@ class HVN:
         step_size = s[-1]
         return step_size
 
-    def _backtracking_line_search_individual(
-        self, state: State, step: np.ndarray, R: np.ndarray, max_step_size: float = 1
-    ) -> float:
-        """backtracking line search with Armijo's condition"""
-        c1 = 1e-5
-        if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
-            return max_step_size
-
-        def phi_func(alpha: float, k: int) -> float:
-            state = deepcopy(self.state)
-            x = state.X[k].copy()
-            x += alpha * step[k]
-            state.update_one(x, k)
-            R_ = self._compute_R(state)[0][k]
-            self.state.n_jac_evals = state.n_jac_evals
-            return np.linalg.norm(R_)
-
-        step_size = np.ones(state.N)
-        for i in range(state.N):
-            phi = [np.linalg.norm(R[i])]
-            s = [0, step_size[i]]
-            for _ in range(6):
-                phi.append(phi_func(s[-1], i))
-                # Armijo–Goldstein condition
-                # when R norm is close to machine precision, it makes no sense to perform the line search
-                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
-                if success:
-                    break
-                else:
-                    if 1 < 2:
-                        # cubic interpolation to compute the next step length
-                        d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
-                        d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
-                        s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
-                        s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
-                        s.append(s_)
-                    else:
-                        s.append(s[-1] * 0.5)
-            else:
-                pass
-            step_size[i] = s[-1]
-        return step_size
-
-    def _handle_box_constraint(self, step: np.ndarray, state: State) -> Tuple[np.ndarray, np.ndarray]:
-        primal_vars, step_primal = state.primal, step[:, : self.dim_p]
-        # distance to the lower and upper boundary per dimension
-        dist_xl, dist_xu = np.abs(primal_vars - self.xl), np.abs(self.xu - primal_vars)
-        # if a point on a lower boundary and its has a negative step on this dimension
-        r, c = np.nonzero(np.isclose(dist_xl, 0, atol=1e-10, rtol=1e-10) & (step_primal < 0))
-        step_primal[r, c] = 0
-        # if a point on an upuper boundary and its has a positive step on this dimension
-        r, c = np.nonzero(np.isclose(dist_xu, 0, atol=1e-10, rtol=1e-10) & (step_primal > 0))
-        step_primal[r, c] = 0
-        s = np.c_[dist_xl / step_primal, -dist_xu / step_primal]
-        s[s >= 0] = np.inf
-        s = np.minimum(1, np.nanmin(np.abs(s), axis=1))
-        step[:, : self.dim_p] = step_primal
-        return step, min(s)
-
-    def _check_points_uniqueness(self):
-        """check uniqueness of decision and objective points.
-        if two points are identical up to a high precision, then we remove one of them.
-        """
+    def _check_population(self):
+        # get unique points: if some points converge to the same location
         primal_vars = self.state.primal
         D = cdist(primal_vars, primal_vars)
         drop_idx_X = set([])
@@ -394,6 +340,23 @@ class HVN:
         idx = list(set(range(self.N)) - drop_idx)
         self.state = self.state[idx]
         self.N = self.state.N
+
+    def _handle_box_constraint(self, step: np.ndarray, state: State) -> Tuple[np.ndarray, np.ndarray]:
+        # TODO: determine when this function is useful/safe to use
+        primal_vars, step_primal = state.primal, step[:, : self.dim_p]
+        # distance to the lower and upper boundary per dimension
+        dist_xl, dist_xu = np.abs(primal_vars - self.xl), np.abs(self.xu - primal_vars)
+        # if a point on a lower boundary and its has a negative step on this dimension
+        r, c = np.nonzero(np.isclose(dist_xl, 0, atol=1e-10, rtol=1e-10) & (step_primal < 0))
+        step_primal[r, c] = 0
+        # if a point on an upuper boundary and its has a positive step on this dimension
+        r, c = np.nonzero(np.isclose(dist_xu, 0, atol=1e-10, rtol=1e-10) & (step_primal > 0))
+        step_primal[r, c] = 0
+        s = np.c_[dist_xl / step_primal, -dist_xu / step_primal]
+        s[s >= 0] = np.inf
+        s = np.minimum(1, np.nanmin(np.abs(s), axis=1))
+        step[:, : self.dim_p] = step_primal
+        return step, min(s)
 
 
 class DpN:
