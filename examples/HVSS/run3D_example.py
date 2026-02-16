@@ -214,4 +214,4 @@ params = [
     dict(problem="linear", N=100, ref_point=[1, 1, 1], max_iters=20),
     dict(problem="concave", N=100, ref_point=[1, 1, 1], max_iters=30),
 ]
-HV_subset_selection(**params[5])
+HV_subset_selection(**params[1])

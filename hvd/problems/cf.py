@@ -1,3 +1,13 @@
+"""
+CF test problems.
+Mathematical formulation are given in
+
+Zhang, Qingfu, Aimin Zhou, Shizheng Zhao, Ponnuthurai Nagaratnam Suganthan, Wudong Liu, and Santosh Tiwari.
+"Multiobjective optimization test instances for the CEC 2009 special session and competition."
+University of Essex, Colchester, UK and Nanyang technological University, Singapore, special session
+on performance assessment of multi-objective optimization algorithms, technical report 264 (2008): 1-30.
+"""
+
 import jax
 import jax.numpy as jnp
 import numpy as np

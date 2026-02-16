@@ -27,6 +27,26 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 
+def matrix_to_Nd_vector(X: np.ndarray, dim_primal: int, active_indices: np.ndarray) -> np.ndarray:
+    return np.r_[X[:, :dim_primal].reshape(-1, 1), X[:, dim_primal:][active_indices].reshape(-1, 1)]
+
+
+def Nd_vector_to_matrix(
+    x: np.ndarray, N: int, dim: int, dim_primal: int, active_indices: np.ndarray
+) -> np.ndarray:
+    if dim == dim_primal:  # the unconstrained case
+        return x.reshape(N, -1)
+    active_indices = np.c_[np.array([[True] * dim_primal] * N), active_indices]
+    X = np.zeros((N, dim))  # Netwon steps
+    D = int(N * dim_primal)
+    a, b = x[:D].reshape(N, -1), x[D:]
+    idx = np.r_[0, np.cumsum([sum(k) - dim_primal for k in active_indices])]
+    b = [b[idx[i] : idx[i + 1]] for i in range(len(idx) - 1)]
+    for i, idx in enumerate(active_indices):
+        X[i, idx] = np.r_[a[i], b[i]]
+    return X
+
+
 def plot_reference_set_matching(matched_medoids: np.ndarray, Y: np.ndarray) -> None:
     colors = plt.get_cmap("tab20").colors
     colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]

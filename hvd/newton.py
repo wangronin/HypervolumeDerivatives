@@ -13,30 +13,18 @@ from scipy.spatial.distance import cdist
 from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume_derivatives import HypervolumeDerivatives
+from .line_search import backtracking_line_search
 from .reference_set import ReferenceSet
-from .utils import compute_chim, get_logger, non_domin_sort, precondition_hessian, set_bounds
+from .utils import (
+    Nd_vector_to_matrix,
+    get_logger,
+    matrix_to_Nd_vector,
+    non_domin_sort,
+    precondition_hessian,
+    set_bounds,
+)
 
 np.seterr(divide="ignore", invalid="ignore")
-
-
-def matrix_to_Nd_vector(X: np.ndarray, dim_primal: int, active_indices: np.ndarray) -> np.ndarray:
-    return np.r_[X[:, :dim_primal].reshape(-1, 1), X[:, dim_primal:][active_indices].reshape(-1, 1)]
-
-
-def Nd_vector_to_matrix(
-    x: np.ndarray, N: int, dim: int, dim_primal: int, active_indices: np.ndarray
-) -> np.ndarray:
-    if dim == dim_primal:  # the unconstrained case
-        return x.reshape(N, -1)
-    active_indices = np.c_[np.array([[True] * dim_primal] * N), active_indices]
-    X = np.zeros((N, dim))  # Netwon steps
-    D = int(N * dim_primal)
-    a, b = x[:D].reshape(N, -1), x[D:]
-    idx = np.r_[0, np.cumsum([sum(k) - dim_primal for k in active_indices])]
-    b = [b[idx[i] : idx[i + 1]] for i in range(len(idx) - 1)]
-    for i, idx in enumerate(active_indices):
-        X[i, idx] = np.r_[a[i], b[i]]
-    return X
 
 
 class HVN:
@@ -154,11 +142,11 @@ class HVN:
 
     def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
         while not self.terminate():
-            self.newton_iteration()
+            self.iterate()
             self.log()
         return self.state.primal, self.state.Y, self.stop_dict
 
-    def newton_iteration(self):
+    def iterate(self):
         """Notes on the implementation:
         case (1): All points are infeasible, then non-dominated ones maximize HV under constraints;
             the dominated ones only optimize feasibility as proven in
@@ -193,9 +181,11 @@ class HVN:
             step, R = self._compute_netwon_step(self.state[idx])
             self.step[idx, :] = step
             self.R[idx, :] = R
-            # backtracking line search with Armijo's condition for each layer
+            # compute the maximal step-size w.r.t. the box constraint
             max_step_size = self._compute_max_step_size(self.state[idx].primal, self.step[idx, : self.dim_p])
-            self.step_size[idx] = self._backtracking_line_search(self.state[idx], step, R, max_step_size)
+            # backtracking line search with Armijo's condition for each layer
+            phi_func = self._get_phi_func(self.state[idx], step)
+            self.step_size[idx] = backtracking_line_search(R, phi_func, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))
 
@@ -281,47 +271,14 @@ class HVN:
         v = step.ravel() @ normal_vectors
         return min(1, 0.25 * np.min(dist[v < 0] / np.abs(v[v < 0])))
 
-    def _backtracking_line_search(
-        self, state: State, step: np.ndarray, R: np.ndarray, max_step_size: float = 1
-    ) -> float:
-        """backtracking line search with Armijo's condition"""
-        # TODO: make this a standard procedure for all optimizers
-        # TODO: implement curvature condition or use scipy's line search function
-        c1 = 1e-5
-        # TODO: check if this is needed
-        # if step sizes are near zero, then no need to do the line search
-        # if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
-        # return 1
-
-        def phi_func(alpha):
+    def _get_phi_func(self, state: State, step: np.ndarray) -> callable:
+        def phi_func(alpha: float) -> float:
             state_ = deepcopy(state)
             state_.update(state.X + alpha * step)
             R = self._compute_R(state_)[0]
             return np.linalg.norm(R)
 
-        step_size = max_step_size
-        phi = [np.linalg.norm(R)]
-        s = [0, step_size]
-        for _ in range(6):
-            phi.append(phi_func(s[-1]))
-            # when R norm is close to machine precision, it makes no sense to perform the line search
-            success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
-            if success:
-                break
-            else:
-                if 11 < 2:
-                    # cubic interpolation to compute the next step length
-                    d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
-                    d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
-                    s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
-                    s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
-                    s.append(s_)
-                else:
-                    s.append(s[-1] * 0.5)
-        else:
-            self.logger.warn("backtracking line search failed")
-        step_size = s[-1]
-        return step_size
+        return phi_func
 
     def _check_population(self):
         # get unique points: if some points converge to the same location
