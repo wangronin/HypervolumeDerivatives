@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
+from matplotlib.ticker import StrMethodFormatter
 from sklearn.cluster import KMeans
 
 from hvd.newton import HVN
@@ -23,13 +24,13 @@ np.random.seed(42)
 
 plt.style.use("ggplot")
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
-rcParams["font.size"] = 15
+rcParams["font.size"] = 20
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
 rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 11
-rcParams["ytick.labelsize"] = 11
+rcParams["xtick.labelsize"] = 20
+rcParams["ytick.labelsize"] = 20
 rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
@@ -160,16 +161,15 @@ def HV_subset_selection(
     )
     Y = opt.run()[1]
     best_so_far_HV = np.maximum.accumulate(np.array(opt.history_indicator_value))
-    # best_so_far_R_norm = np.minimum.accumulate(np.array(opt.history_R_norm))
     HV0, HV1 = best_so_far_HV[0], best_so_far_HV[-1]
     wall_clock_time = time.time() - t0
     print(f"wall clock time: {wall_clock_time}")
-    print(f"initial HV: {HV0}")
-    print(f"final HV: {HV1}")
+    print(f"initial HV: {HV0:.5f}")
+    print(f"final HV: {HV1:.5f}")
     print(f"{len(Y)} final points")
 
-    fig = plt.figure(figsize=(20, 8))
-    plt.subplots_adjust(bottom=0.08, top=0.9, right=0.93, left=0.05)
+    fig = plt.figure(figsize=(22, 8))
+    plt.subplots_adjust(bottom=0.01, top=0.99, right=0.99, left=0.01, wspace=0)
     ax0 = fig.add_subplot(1, 3, 1, projection="3d")
     ax0.set_box_aspect((1, 1, 1))
     ax0.view_init(45, 45)
@@ -178,7 +178,7 @@ def HV_subset_selection(
     ax0.set_xlabel(r"$f_1$")
     ax0.set_ylabel(r"$f_2$")
     ax0.set_zlabel(r"$f_3$")
-    ax0.set_title(f"initial HV: {HV0}")
+    ax0.set_title(f"initial HV: {HV0:.5f}")
 
     if problem == "convex":
         Y = -1.0 * Y  # remember to invert the Y values
@@ -190,7 +190,7 @@ def HV_subset_selection(
     ax1.set_xlabel(r"$f_1$")
     ax1.set_ylabel(r"$f_2$")
     ax1.set_zlabel(r"$f_3$")
-    ax1.set_title(f"final HV: {HV1}")
+    ax1.set_title(f"final HV: {HV1:.5f}")
 
     ax2 = fig.add_subplot(1, 3, 3)
     ax22 = ax2.twinx()
@@ -198,8 +198,11 @@ def HV_subset_selection(
     ax22.set_box_aspect(1)
     ax2.plot(range(1, len(best_so_far_HV) + 1), best_so_far_HV, "b-")
     ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
-    ax2.set_ylabel("HV", color="b")
-    ax22.set_ylabel(r"$\lVert R(\mathbf{X}) \rVert$", color="g")
+    ax2.yaxis.set_major_formatter(StrMethodFormatter("{x:.3f}"))
+    ax2.set_ylabel("HV", color="b", rotation=0)
+    ax22.set_ylabel(r"$\lVert R(\mathbf{X}) \rVert$", color="g", rotation=0)
+    ax2.yaxis.set_label_coords(-0.08, 1.02)
+    ax22.yaxis.set_label_coords(1.11, 1.05)
     ax2.set_title("Performance")
     ax2.set_xlabel("iteration")
     plt.tight_layout()
@@ -214,4 +217,4 @@ params = [
     dict(problem="linear", N=100, ref_point=[1, 1, 1], max_iters=20),
     dict(problem="concave", N=100, ref_point=[1, 1, 1], max_iters=30),
 ]
-HV_subset_selection(**params[1])
+HV_subset_selection(**params[5])
