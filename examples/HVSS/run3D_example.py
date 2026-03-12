@@ -168,6 +168,10 @@ def HV_subset_selection(
     print(f"final HV: {HV1:.5f}")
     print(f"{len(Y)} final points")
 
+    if problem == "convex":
+        Y0 *= -1.0
+        pareto_front *= -1.0
+
     fig = plt.figure(figsize=(22, 8))
     plt.subplots_adjust(bottom=0.01, top=0.99, right=0.99, left=0.01, wspace=0)
     ax0 = fig.add_subplot(1, 3, 1, projection="3d")
@@ -180,8 +184,6 @@ def HV_subset_selection(
     ax0.set_zlabel(r"$f_3$")
     ax0.set_title(f"initial HV: {HV0:.5f}")
 
-    if problem == "convex":
-        Y = -1.0 * Y  # remember to invert the Y values
     ax1 = fig.add_subplot(1, 3, 2, projection="3d")
     ax1.set_box_aspect((1, 1, 1))
     ax1.view_init(45, 45)
@@ -217,4 +219,4 @@ params = [
     dict(problem="linear", N=100, ref_point=[1, 1, 1], max_iters=20),
     dict(problem="concave", N=100, ref_point=[1, 1, 1], max_iters=30),
 ]
-HV_subset_selection(**params[5])
+HV_subset_selection(**params[2])
