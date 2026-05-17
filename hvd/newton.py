@@ -56,6 +56,7 @@ class HVN:
         verbose: bool = True,
         metrics: Dict[str, Callable] = dict(),
         preconditioning: bool = False,
+        limit_max_step_size: bool = False,
     ):
         self.dim_p: int = n_var  # the number of primal variables
         self.n_obj: int = n_obj  # the number of objectives
@@ -75,8 +76,9 @@ class HVN:
         self.stop_dict: Dict[str, float] = {}
         self.metrics: Dict[str, Callable] = metrics
         self.preconditioning: bool = preconditioning
-        self.verbose: bool = verbose
+        self.limit_max_step_size: bool = limit_max_step_size
         self.eps: float = 1e-3 * np.max(self.xu - self.xl)
+        self.verbose: bool = verbose
 
     def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables
@@ -185,7 +187,7 @@ class HVN:
             max_step_size = self._compute_max_step_size(self.state[idx].primal, self.step[idx, : self.dim_p])
             # backtracking line search with Armijo's condition for each layer
             phi_func = self._get_phi_func(self.state[idx], step)
-            self.step_size[idx] = backtracking_line_search(R, phi_func, max_step_size=1)
+            self.step_size[idx] = backtracking_line_search(R, phi_func, max_step_size=max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))
 
@@ -264,6 +266,8 @@ class HVN:
         self.curr_indicator_value = self.indicator.compute(Y=self.state.Y)
 
     def _compute_max_step_size(self, X: np.ndarray, step: np.ndarray) -> float:
+        if not self.limit_max_step_size:
+            return 1
         N, dim = X.shape
         # normal vector to each decision boundary
         normal_vectors = np.c_[np.eye(dim * N), -1 * np.eye(dim * N)]
@@ -442,7 +446,6 @@ class DpN:
     def _set_logging(self, verbose):
         """parameters for logging the history"""
         self.verbose: bool = verbose
-        self.curr_indicator_value: float = None
         self.history_Y: List[np.ndarray] = []
         self.history_X: List[np.ndarray] = []
         self.history_indicator_value: List[float] = []
@@ -477,6 +480,10 @@ class DpN:
         else:
             indicator = self._gd if self.type == "gd" else self._igd
         return indicator
+
+    @property
+    def curr_indicator_value(self) -> float:
+        return max(self.GD_value, self.IGD_value)
 
     def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
         while not self.terminate():
@@ -655,7 +662,7 @@ class DpN:
         algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
         """
         # NOTE: for ZDT6, we have to project the gradient
-        if 1 < 2:
+        if 11 < 2:
             return step, np.ones(len(step))
 
         primal_vars = self.state.primal
