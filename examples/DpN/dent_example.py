@@ -165,7 +165,7 @@ ax1.set_ylabel(r"$f_2$")
 ax22 = ax2.twinx()
 ax2.plot(range(1, len(opt.history_indicator_value) + 1), opt.history_indicator_value, "b-")
 ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
-ax2.set_ylabel("HV", color="b")
+ax2.set_ylabel(r"$\Delta_p$", color="b")
 ax22.set_ylabel(r"$||R_I(\mathbf{X}, \lambda)||$", color="g")
 ax2.set_title("Performance")
 ax2.set_xlabel("iteration")
@@ -175,7 +175,7 @@ plt.savefig(f"dent-example-DpN-{N}.pdf", dpi=1000)
 
 data = pd.DataFrame(
     np.c_[np.arange(len(opt.history_indicator_value)), opt.history_indicator_value, opt.history_R_norm],
-    columns=["Iter", r"$\operatorname{HV}$", r"$\|R_I(\mathbf{X}, \lambda)\|$"],
+    columns=["Iter", r"$\Delta_p$", r"$\|R_I(\mathbf{X}, \lambda)\|$"],
 )
 caption = r"""Convergence of the hypervolume value and the root-finding error $\|R_I(\mathbf{X}, \lambda)\|$.
 """
