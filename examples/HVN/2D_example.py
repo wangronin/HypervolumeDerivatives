@@ -90,6 +90,7 @@ opt = HVN(
     max_iters=max_iters,
     verbose=True,
     preconditioning=False,
+    limit_max_step_size=True,
 )
 X, Y, stop = opt.run()
 
@@ -112,8 +113,8 @@ X1, X2 = np.meshgrid(x, x)
 Z = np.array([MOP1(p) for p in np.array([X1.flatten(), X2.flatten()]).T])
 Z1 = Z[:, 0].reshape(-1, len(x))
 Z2 = Z[:, 1].reshape(-1, len(x))
-CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.gray, linewidths=0.8, alpha=0.6)
-CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.gray, linewidths=0.8, linestyles="--", alpha=0.6)
+CS1 = ax0.contour(X1, X2, Z1, 10, cmap=plt.cm.Blues, linewidths=0.8, alpha=0.6)
+CS2 = ax0.contour(X1, X2, Z2, 10, cmap=plt.cm.Reds, linewidths=0.8, alpha=0.6)
 
 trajectory = np.array([x0] + opt.history_X)
 for i in range(mu):
@@ -171,6 +172,3 @@ ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
 
 plt.savefig(f"2D-example-{mu}.pdf", dpi=1000)
-
-# df = pd.DataFrame(dict(iteration=range(1, len(opt.hist_HV) + 1), HV=opt.hist_HV, G_norm=opt.hist_G_norm))
-# df.to_latex(buf=f"2D-example-{mu}.tex", index=False)
