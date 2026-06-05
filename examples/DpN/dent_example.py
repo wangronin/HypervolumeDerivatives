@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
+
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
 from hvd.problems.misc import DENT
@@ -90,8 +91,13 @@ opt = DpN(
 )
 X, Y, stop = opt.run()
 
-fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(22, 8))
-plt.subplots_adjust(right=0.93, left=0.05)
+fig, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=(8, 22), layout="compressed")
+ax22 = ax2.twinx()
+ax0.set_box_aspect(1)
+ax1.set_box_aspect(1)
+ax2.set_box_aspect(1)
+ax22.set_box_aspect(1)
+
 x = np.linspace(-2, 2, 400)
 y = -x
 lines = []
@@ -100,7 +106,6 @@ lines += ax0.plot(X0[:, 0], X0[:, 1], "k.", ms=8, clip_on=False)
 lines += ax0.plot(x, y, "k--", clip_on=False)
 ax0.set_xlim([-2, 2])
 ax0.set_ylim([-2, 2])
-ax0.set_title("Decision space")
 ax0.set_xlabel(r"$x_1$")
 ax0.set_ylabel(r"$x_2$")
 ax0.legend(lines, [r"$X_{\text{final}}$", r"$X_0$", r"Pareto set"])
@@ -158,17 +163,17 @@ for i in range(N):
         headwidth=2.7,
     )
 
-ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
-ax22 = ax2.twinx()
 ax2.plot(range(1, len(opt.history_indicator_value) + 1), opt.history_indicator_value, "b-")
 ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
-ax2.set_ylabel(r"$\Delta_p$", color="b")
-ax22.set_ylabel(r"$||R_I(\mathbf{X}, \lambda)||$", color="g")
-ax2.set_title("Performance")
-ax2.set_xlabel("iteration")
+ax2.set_ylabel("")
+ax22.set_ylabel("")
+ax2.text(0, 1.01, r"$\Delta_p$", transform=ax2.transAxes, color="b", ha="right", va="bottom")
+ax22.text(
+    1.12, 1.01, r"$||R(\mathbf{X}, \lambda)||$", transform=ax2.transAxes, color="g", ha="right", va="bottom"
+)
 ax2.set_xticks(range(1, max_iters + 1))
 
 plt.savefig(f"dent-example-DpN-{N}.pdf", dpi=1000)

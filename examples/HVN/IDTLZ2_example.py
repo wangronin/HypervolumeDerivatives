@@ -61,32 +61,30 @@ p = np.c_[xmid, ymid, zmid]
 mask = np.array([np.any(np.all(pp > p, axis=1)) for pp in p])
 triang.set_mask(mask)
 
-fig = plt.figure(figsize=(20, 8))
-ax = fig.add_subplot(1, 3, 1, projection="3d")
+fig = plt.figure(figsize=(8, 22), layout="compressed")
+ax = fig.add_subplot(3, 1, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
 ax.view_init(30, 45)
 lines = []
 lines += ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=13)
 lines.append(ax.plot_trisurf(triang, z, color="k", alpha=0.2))
 ax.legend(lines, [r"$Y_0$", r"Pareto front"], loc="upper left")
-ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
 ax.set_ylabel(r"$f_2$")
 ax.set_zlabel(r"$f_3$")
 
-ax = fig.add_subplot(1, 3, 2, projection="3d")
+ax = fig.add_subplot(3, 1, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
 ax.view_init(30, 45)
 lines = []
 lines += ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r.", ms=13)
 lines.append(ax.plot_trisurf(triang, z, color="k", alpha=0.2))
 ax.legend(lines, [r"$Y_{\text{final}}$", r"Pareto front"], loc="upper left")
-ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
 ax.set_ylabel(r"$f_2$")
 ax.set_zlabel(r"$f_3$")
 
-ax = fig.add_subplot(1, 3, 3)
+ax = fig.add_subplot(3, 1, 3)
 ax.set_box_aspect(1)
 ax_ = ax.twinx()
 ax_.set_box_aspect(1)
@@ -96,11 +94,7 @@ ax.set_ylabel("")
 ax_.set_ylabel("")
 ax.text(0, 1.01, r"$\operatorname{HV}$", transform=ax.transAxes, color="b", ha="right", va="bottom")
 ax_.text(
-    1.12, 1.01, r"$||R_I(\mathbf{X}, \lambda)||$", transform=ax.transAxes, color="g", ha="right", va="bottom"
+    1.12, 1.01, r"$||R(\mathbf{X}, \lambda)||$", transform=ax.transAxes, color="g", ha="right", va="bottom"
 )
-ax.set_title("Performance")
 ax.set_xlabel("iteration")
-
-plt.tight_layout()
-plt.subplots_adjust(wspace=0.15)
 plt.savefig(f"IDTLZ2-HVN-example-{N}.pdf", dpi=100)

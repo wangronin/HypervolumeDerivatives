@@ -11,20 +11,20 @@ class InvertedDTLZ(BaseDTLZ):
         x_, x_M = x[: self.n_obj - 1], x[self.n_obj - 1 :]
         g = self.g(x_M)
         x1, x2 = self._transform_x(x_, g)
-        return (1 + g) / 2 - self.scale * (1 + g) * jnp.cumprod(jnp.r_[[1], x1])[::-1] * jnp.r_[[1], x2[::-1]]
+        # return (1 + g) / 2 - self.scale * (1 + g) * jnp.cumprod(jnp.r_[[1], x1])[::-1] * jnp.r_[[1], x2[::-1]]
         # TODO: it seems the implementation in PlatEMO do not have the `1/2` factor, as below.
         # need to figure out which one is the correct definition.
         # the above implementation is from Cuate, Oliver, Lourdes Uribe, Adriana Lara, and Oliver Schütze.
         # "A benchmark for equality constrained multi-objective optimization."
         # Swarm and Evolutionary Computation 52 (2020): 100619.
-        # return (1 + g) - self.scale * (1 + g) * jnp.cumprod(jnp.r_[[1], x1])[::-1] * jnp.r_[[1], x2[::-1]]
+        return (1 + g) - self.scale * (1 + g) * jnp.cumprod(jnp.r_[[1], x1])[::-1] * jnp.r_[[1], x2[::-1]]
 
     def get_pareto_front(self, **kwargs) -> np.ndarray:
         ref_dirs = super().get_pareto_front(**kwargs)
         # TODO: it seems the implementation in PlatEMO do not have the `1/2` factor, as below.
         # need to figure out which one is the correct definition.
-        # return 1 - ref_dirs
-        return 0.5 - ref_dirs
+        return 1 - ref_dirs
+        # return 0.5 - ref_dirs
 
 
 class ConstrainedDTLZ(BaseDTLZ):

@@ -95,15 +95,17 @@ opt = HVN(
 )
 X, Y, stop = opt.run()
 
-fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(22, 8))
-plt.subplots_adjust(right=0.93, left=0.05)
+fig, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=(8, 22), layout="compressed")
+ax0.set_box_aspect(1)
+ax1.set_box_aspect(1)
+ax2.set_box_aspect(1)
+
 lines = []
 lines += ax0.plot(X[:, 0], X[:, 1], "r+", ms=12)
 lines += ax0.plot(X0[:, 0], X0[:, 1], "k.", ms=8, clip_on=False)
 lines += ax0.plot(pareto_set[:, 0], pareto_set[:, 1], "k--", clip_on=False)
 ax0.set_xlim([-1.2, 1.2])
 ax0.set_ylim([-1.2, 1.2])
-ax0.set_title("Decision space")
 ax0.set_xlabel(r"$x_1$")
 ax0.set_ylabel(r"$x_2$")
 ax0.legend(lines, [r"$X_{\text{final}}$", r"$X_0$", r"Pareto set"])
@@ -159,19 +161,21 @@ for i in range(N):
         headwidth=2.7,
     )
 
-ax1.set_title("Objective space")
 ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
 ax22 = ax2.twinx()
+ax22.set_box_aspect(1)
 ax2.plot(range(1, len(opt.history_indicator_value) + 1), opt.history_indicator_value, "b-")
 ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
-ax2.set_ylabel("HV", color="b")
-ax22.set_ylabel(r"$||R_I(\mathbf{X},\lambda)||$", color="g")
-ax2.set_title("Performance")
+ax2.set_ylabel("")
+ax22.set_ylabel("")
+ax2.text(0, 1.01, r"$\operatorname{HV}$", transform=ax2.transAxes, color="b", ha="right", va="bottom")
+ax22.text(
+    1.12, 1.01, r"$||R(\mathbf{X}, \lambda)||$", transform=ax2.transAxes, color="g", ha="right", va="bottom"
+)
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
-
 plt.savefig(f"EqCon1-example-HVN-{N}.pdf", dpi=1000)
 
 data = pd.DataFrame(
