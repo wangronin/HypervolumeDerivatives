@@ -22,8 +22,10 @@ from scipy.io import savemat
 from hvd.problems import *
 from hvd.sms_emoa import SMSEMOA
 
+N = 30
+n_gen = 300
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
-data_path = "./"
+data_path = "./data"
 
 
 def minimize(
@@ -105,8 +107,6 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
     return algorithm
 
 
-N = 30
-n_gen = 300
 # TODO: `globals` should be replaced by `getattr(my_models, class_name)`
 problems = (
     [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
@@ -136,4 +136,4 @@ for problem in [problems[int(sys.argv[1])]]:
         mdic = {"data": data.values, "columns": data.columns.values}
         savemat(f"{data_path}/{problem_name.upper()}_{algorithm_name}.mat", mdic)
         # save to CSV
-        data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+        data.to_csv(f"{data_path}/{problem_name.upper()}_{algorithm_name}.csv", index=False)
