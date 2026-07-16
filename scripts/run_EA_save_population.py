@@ -13,33 +13,13 @@ from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
-from pymoo.core.problem import Problem as PymooProblem
-from pymoo.problems.many import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
-from pymoo.problems.multi import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
+from pymoo.problems.many import *
+from pymoo.problems.multi import *
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
-from hvd.problems import (
-    CF1,
-    CF2,
-    CF3,
-    CF4,
-    CF5,
-    CF6,
-    CF7,
-    CF8,
-    CF9,
-    CF10,
-    CONV4_2F,
-    IDTLZ1,
-    IDTLZ2,
-    IDTLZ3,
-    IDTLZ4,
-)
-from hvd.problems.base import PymooProblemWrapper
-
-# NOTE: this is a slightly faster implementation of SMS-EMOA
+from hvd.problems import *
 from hvd.sms_emoa import SMSEMOA
 
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
@@ -69,16 +49,14 @@ def minimize(
             kwargs["termination"] = termination
         algorithm.setup(problem, **kwargs)
 
-    # actually execute the algorithm
-    k = 1
     while algorithm.has_next():
         algorithm.next()
+        k = algorithm.n_gen - 1  # NOTE: the first iteration is actually 2..
         pop = copy.deepcopy(algorithm.pop)
-        if algorithm.n_gen == k + 1:
+        if k >= n_gen - 5:
             df = pd.DataFrame(pop_to_numpy(pop), columns=columns)
             df.insert(0, "iteration", k)
             data.append(df)
-            k += 1
     res = algorithm.result()
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
@@ -128,51 +106,24 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 
 N = 30
-problems = [
-    # CF1(),
-    # CF2(),
-    # CF3(),
-    # CF4(),
-    # CF5(),
-    # CF6(),
-    # CF7(),
-    # CF8(),
-    # CF9(),
-    # CF10(),
-    # ZDT1(),
-    # ZDT2(),
-    # ZDT3(),
-    # ZDT4(),
-    # ZDT6(),
-    # DTLZ1(),
-    # DTLZ2(),
-    # DTLZ3(),
-    # DTLZ4(),
-    # DTLZ5(),
-    # DTLZ6(),
-    # DTLZ7(),
-    # Eq1IDTLZ1(),
-    # Eq1IDTLZ2(),
-    # Eq1IDTLZ3(),
-    # Eq1IDTLZ4(),
-    # IDTLZ1(),
-    # IDTLZ2(),
-    # IDTLZ3(),
-    # IDTLZ4(),
-    CONV4_2F(),
-]
+n_gen = 300
+# TODO: `globals` should be replaced by `getattr(my_models, class_name)`
+problems = (
+    [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
+    + [globals()[f"IDTLZ{k}"](n_var=10, n_obj=3) for k in range(1, 5)]
+    + [globals()[f"Eq1IDTLZ{k}"](n_var=10, n_obj=3) for k in range(1, 5)]
+    + [globals()[f"Eq1DTLZ{k}"](n_var=10, n_obj=3) for k in range(1, 5)]
+)
 
-# idx = int(sys.argv[1]) if len(sys.argv) >= 2 else 0
-# for problem in [problems[idx]]:
 for problem in problems:
     problem_name = problem.__class__.__name__
     print(problem_name)
-    problem = problem if isinstance(problem, PymooProblem) else PymooProblemWrapper(problem)
-    termination = get_termination("n_gen", 600)
+    problem = PymooProblemWrapper(problem) if isinstance(problem, MOOAnalytical) else problem
+    termination = get_termination("n_gen", n_gen)
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ["SMS-EMOA", "MOEAD"]:
+    for algorithm_name in ["NSGA-II", "NSGA-III", "MOEAD"]:
         print(algorithm_name)
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
         data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
@@ -185,4 +136,4 @@ for problem in problems:
         mdic = {"data": data.values, "columns": data.columns.values}
         savemat(f"{data_path}/{problem_name.upper()}_{algorithm_name}.mat", mdic)
         # save to CSV
-        # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+        data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
