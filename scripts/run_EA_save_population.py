@@ -112,9 +112,9 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 # TODO: `globals` should be replaced by `getattr(my_models, class_name)`
 problems = (
     [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
-    + [globals()[f"IDTLZ{k}"](n_var=10, n_obj=3) for k in range(1, 5)]
-    + [globals()[f"Eq1IDTLZ{k}"](n_var=10, n_obj=3) for k in range(1, 5)]
-    + [globals()[f"Eq1DTLZ{k}"](n_var=10, n_obj=3) for k in range(1, 5)]
+    + [globals()[f"IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+    + [globals()[f"Eq1IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+    + [globals()[f"Eq1DTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
 )
 for problem in [problems[int(sys.argv[1])]]:
     problem_name = problem.__class__.__name__
