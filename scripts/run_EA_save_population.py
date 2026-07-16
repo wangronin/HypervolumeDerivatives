@@ -25,7 +25,7 @@ from hvd.sms_emoa import SMSEMOA
 N = 30
 n_gen = 300
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
-data_path = "./data"
+data_path = "/home/wangh5/data"
 
 
 def minimize(
