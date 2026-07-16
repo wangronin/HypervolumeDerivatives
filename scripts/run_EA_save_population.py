@@ -124,10 +124,14 @@ for problem in [problems[int(sys.argv[1])]]:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ["NSGA-II", "NSGA-III", "MOEAD"]:
+    for algorithm_name in [
+        "MOEAD",
+        # "NSGA-II",
+        # "NSGA-III",
+    ]:
         print(algorithm_name)
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
-        if 1 < 2:  # for testing
+        if 11 < 2:  # for testing
             data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)

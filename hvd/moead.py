@@ -16,6 +16,15 @@ class ConstraintAwareMOEAD(MOEAD):
         self.perc_eps_until = perc_eps_until
         self.max_cv = None
 
+    def next(self):
+        if not self.is_initialized:
+            return super().next()
+
+        # Stock MOEAD yields one offspring per call; drain it to one generation per call.
+        n_gen = self.n_gen
+        while self.has_next() and self.n_gen == n_gen:
+            super().next()
+
     def _setup(self, problem, **kwargs):
         if self.ref_dirs is None:
             self.ref_dirs = default_ref_dirs(problem.n_obj)
