@@ -114,8 +114,7 @@ problems = (
     + [globals()[f"Eq1IDTLZ{k}"](n_var=10, n_obj=3) for k in range(1, 5)]
     + [globals()[f"Eq1DTLZ{k}"](n_var=10, n_obj=3) for k in range(1, 5)]
 )
-
-for problem in problems:
+for problem in [problems[int(sys.argv[1])]]:
     problem_name = problem.__class__.__name__
     print(problem_name)
     problem = PymooProblemWrapper(problem) if isinstance(problem, MOOAnalytical) else problem
@@ -126,7 +125,8 @@ for problem in problems:
     for algorithm_name in ["NSGA-II", "NSGA-III", "MOEAD"]:
         print(algorithm_name)
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
-        data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+        if 11 < 2:  # for testing
+            data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
             for i in range(N)
