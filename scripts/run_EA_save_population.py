@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from pymoo.algorithms.base.genetic import GeneticAlgorithm
-from pymoo.algorithms.moo.moead import MOEAD
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
@@ -19,6 +18,7 @@ from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
+from hvd.moead import ConstraintAwareMOEAD
 from hvd.problems import *
 from hvd.sms_emoa import SMSEMOA
 
@@ -97,13 +97,15 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
         elif n_objective == 4:
             ref_dirs = get_reference_directions("uniform", 3, n_partitions=14)
             ref_dirs = np.array(random.sample(ref_dirs.tolist(), pop_size))
-        algorithm = MOEAD(ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7)
+        algorithm = ConstraintAwareMOEAD(
+            ref_dirs, n_neighbors=15, prob_neighbor_mating=0.7, perc_eps_until=0.8
+        )
     elif algorithm_name == "SMS-EMOA":
         algorithm = SMSEMOA(pop_size=pop_size)
 
     if constrained:
-        # if algorithm_name != "MOEAD":
-        algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
+        if algorithm_name != "MOEAD":
+            algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
     return algorithm
 
 
@@ -122,7 +124,7 @@ for problem in [problems[int(sys.argv[1])]]:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ["MOEAD", "NSGA-II", "NSGA-III"]:
+    for algorithm_name in ["NSGA-II", "NSGA-III", "MOEAD"]:
         print(algorithm_name)
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
         if 1 < 2:  # for testing
