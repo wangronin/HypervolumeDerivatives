@@ -102,8 +102,8 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
         algorithm = SMSEMOA(pop_size=pop_size)
 
     if constrained:
-        if algorithm_name != "MOEAD":
-            algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
+        # if algorithm_name != "MOEAD":
+        algorithm = AdaptiveEpsilonConstraintHandling(algorithm, perc_eps_until=0.8)
     return algorithm
 
 
@@ -122,10 +122,10 @@ for problem in [problems[int(sys.argv[1])]]:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in ["NSGA-II", "NSGA-III", "MOEAD"]:
+    for algorithm_name in ["MOEAD", "NSGA-II", "NSGA-III"]:
         print(algorithm_name)
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
-        if 11 < 2:  # for testing
+        if 1 < 2:  # for testing
             data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
         data = Parallel(n_jobs=N)(
             delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
