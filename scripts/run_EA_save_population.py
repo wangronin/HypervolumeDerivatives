@@ -37,7 +37,7 @@ def minimize(
     copy_termination: bool = True,
     run_id: int | None = None,
     **kwargs,
-):
+) -> pd.DataFrame:
     data = []
     columns = (
         [f"x{i}" for i in range(1, problem.n_var + 1)]
@@ -62,10 +62,12 @@ def minimize(
         algorithm.next()
         k = algorithm.n_gen - 1  # NOTE: the first iteration is actually 2..
         pop = copy.deepcopy(algorithm.pop)
+        # save the population in the last six iterations
         if k >= n_gen - 5:
             df = pd.DataFrame(pop_to_numpy(pop), columns=columns)
             df.insert(0, "iteration", k)
             data.append(df)
+
     res = algorithm.result()
     # store the deep copied algorithm in the result object
     res.algorithm = algorithm
@@ -117,12 +119,13 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 
 
 # TODO: `globals` should be replaced by `getattr(my_models, class_name)`
-problems = (
-    [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
-    + [globals()[f"IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-    + [globals()[f"Eq1IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-    + [globals()[f"Eq1DTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-)
+# problems = (
+#     [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
+#     + [globals()[f"IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+#     + [globals()[f"Eq1IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+#     + [globals()[f"Eq1DTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+# )
+problems = [globals()[f"UF{k}"](n_var=10, n_obj=3) for k in range(1, 11)]
 for problem in [problems[int(sys.argv[1])]]:
     problem_name = problem.__class__.__name__
     print(problem_name)
@@ -131,11 +134,7 @@ for problem in [problems[int(sys.argv[1])]]:
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
     )
-    for algorithm_name in [
-        "MOEAD",
-        # "NSGA-II",
-        # "NSGA-III",
-    ]:
+    for algorithm_name in ["MOEAD", "NSGA-II", "NSGA-III"]:
         print(algorithm_name)
         algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
         if 11 < 2:  # for testing

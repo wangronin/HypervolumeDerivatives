@@ -99,6 +99,7 @@ class _PymooProblemAdapter(PymooProblem):
         return self._problem.get_pareto_front(*args, **kwargs)
 
 
+# TODO:  decide what to do with it
 class ModifiedObjective(PymooProblem):
     """Modified objective function based on the following paper:
 
