@@ -33,7 +33,7 @@ np.random.seed(66)
 max_iters = 10
 interval = 5
 
-problem = DTLZ1(n_var=7, boundry_constraints=True)
+problem = DTLZ1(n_var=7, boundary_constraints=True)
 pareto_front = problem.get_pareto_front()
 
 # read the reference set data

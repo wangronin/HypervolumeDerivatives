@@ -125,7 +125,7 @@ def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> G
 #     + [globals()[f"Eq1IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
 #     + [globals()[f"Eq1DTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
 # )
-problems = [globals()[f"UF{k}"](n_var=10, n_obj=3) for k in range(1, 11)]
+problems = [globals()[f"UF{k}"](n_var=10) for k in range(1, 11)]
 for problem in [problems[int(sys.argv[1])]]:
     problem_name = problem.__class__.__name__
     print(problem_name)

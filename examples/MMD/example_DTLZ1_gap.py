@@ -37,7 +37,7 @@ np.random.seed(66)
 max_iters = 11
 plot = False
 
-problem = DTLZ1(n_var=7, boundry_constraints=True)
+problem = DTLZ1(n_var=7, boundary_constraints=True)
 pareto_front = problem.get_pareto_front()
 
 ref_ = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_ref_1_gen0.csv", header=None).values

@@ -24,7 +24,15 @@ class _PymooBackedMOP(ConstrainedMOP):
         self.xl = np.broadcast_to(self._problem.xl, (self.n_var,)).copy()
         self.xu = np.broadcast_to(self._problem.xu, (self.n_var,)).copy()
         self._validate_jax_traceability()
-        super().__init__(boundry_constraints=boundary_constraints)
+        super().__init__(
+            n_var=self.n_var,
+            n_obj=self.n_obj,
+            xl=self.xl,
+            xu=self.xu,
+            n_eq_constr=self.n_eq_constr,
+            n_ieq_constr=self.n_ieq_constr,
+            boundary_constraints=boundary_constraints,
+        )
 
     def _validate_jax_traceability(self) -> None:
         """Fail early when pymoo's evaluation cannot be traced by JAX."""

@@ -48,7 +48,7 @@ def test_DTLZ(F):
 
 @pytest.mark.parametrize("F", [DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7])
 def test_DTLZ_with_boundary_constraints(F):
-    problem = F(boundry_constraints=True)
+    problem = F(boundary_constraints=True)
     x = np.random.rand(problem.n_var)
     problem.objective(x)
     problem.objective_jacobian(x)
@@ -75,7 +75,7 @@ def test_DTLZ_function_value(F):
 
 @pytest.mark.parametrize("F", [IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4])
 def test_IDTLZ(F):
-    problem = F(boundry_constraints=False)
+    problem = F(boundary_constraints=False)
     x = np.random.rand(problem.n_var)
     problem.objective(x)
     problem.objective_jacobian(x)

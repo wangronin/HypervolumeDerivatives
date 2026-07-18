@@ -32,7 +32,7 @@ class FLatConvex(MOP):
         self.n_var = 1
         self.xl = 0 * np.ones(self.n_var)
         self.xu = 1 * np.ones(self.n_var)
-        super().__init__(**kwargs)
+        super().__init__(n_var=self.n_var, n_obj=self.n_obj, xl=self.xl, xu=self.xu)
 
     def _objective(self, t: float) -> jnp.ndarray:
         t = t * 0.9 + 0.05  # rescale `t` to the interval [0.05, 0.95]
@@ -48,7 +48,7 @@ class Linear(MOP):
         self.n_var = 1
         self.xl = 0 * np.ones(self.n_var)
         self.xu = 1 * np.ones(self.n_var)
-        super().__init__(**kwargs)
+        super().__init__(n_var=self.n_var, n_obj=self.n_obj, xl=self.xl, xu=self.xu)
 
     def _objective(self, t: float) -> jnp.ndarray:
         t *= 0.3

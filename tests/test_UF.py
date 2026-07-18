@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from hvd.problems import MOP, UF1, UF2, UF3, UF4, UF5, UF6, UF7, UF8, UF9, UF10
+from hvd.problems import ConstrainedMOP, MOP, UF1, UF2, UF3, UF4, UF5, UF6, UF7, UF8, UF9, UF10
 
 
 @pytest.mark.parametrize("problem_type", [UF1, UF2, UF3, UF4, UF5, UF6, UF7, UF8, UF9, UF10])
@@ -33,3 +33,25 @@ def test_uf_objectives_vanish_to_the_documented_front_on_pareto_set():
         else:
             x[2:] = 2*x[1]*np.sin(2*np.pi*x[0]+indices[2:]*np.pi/problem.n_var)
         assert np.all(np.isfinite(problem.objective(x)))
+
+
+@pytest.mark.parametrize("problem_type", [UF1, UF2, UF3, UF4, UF5, UF6, UF7, UF8, UF9, UF10])
+def test_uf_can_expose_decision_bounds_as_constraints(problem_type: type[MOP]) -> None:
+    problem = problem_type(boundary_constraints=True)
+    assert isinstance(problem, ConstrainedMOP)
+    assert problem.n_ieq_constr == 2 * problem.n_var
+
+    x = (problem.xl + problem.xu) / 2
+    constraints = problem.ieq_constraint(x)
+    assert constraints.shape == (2 * problem.n_var,)
+    assert np.all(constraints <= 0)
+
+
+def test_uf_bounds_can_be_overridden_explicitly() -> None:
+    xl = np.array([0.1, -0.5, -0.25])
+    xu = np.array([0.9, 0.5, 0.25])
+    problem = UF1(n_var=3, xl=xl, xu=xu, boundary_constraints=True)
+
+    np.testing.assert_array_equal(problem.xl, xl)
+    np.testing.assert_array_equal(problem.xu, xu)
+    assert problem.ieq_constraint((xl + xu) / 2).shape == (2 * problem.n_var,)

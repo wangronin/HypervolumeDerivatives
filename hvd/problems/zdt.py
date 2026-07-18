@@ -2,6 +2,7 @@
 
 import jax.numpy as jnp
 import numpy as np
+from numpy.typing import ArrayLike
 
 from .base import MOP
 
@@ -11,11 +12,15 @@ _EPS = 1e-12
 class ZDT(MOP):
     n_obj = 2
 
-    def __init__(self, n_var: int = 30):
-        self.n_var = n_var
-        self.xl = np.zeros(n_var)
-        self.xu = np.ones(n_var)
-        super().__init__()
+    def __init__(
+        self, n_var: int = 30, xl: ArrayLike | None = None, xu: ArrayLike | None = None
+    ) -> None:
+        super().__init__(
+            n_var=n_var,
+            n_obj=self.n_obj,
+            xl=np.zeros(n_var) if xl is None else xl,
+            xu=np.ones(n_var) if xu is None else xu,
+        )
 
     def get_pareto_set(self, n_pareto_points: int = 100, kind: str = "linear") -> np.ndarray:
         x = np.linspace(0, 1, n_pareto_points) if kind == "linear" else np.random.random(n_pareto_points)
@@ -67,10 +72,12 @@ class ZDT3(ZDT1):
 
 
 class ZDT4(ZDT1):
-    def __init__(self, n_var: int = 10):
-        super().__init__(n_var)
-        self.xl = np.r_[0.0, np.full(n_var - 1, -5.0)]
-        self.xu = np.r_[1.0, np.full(n_var - 1, 5.0)]
+    def __init__(self, n_var: int = 10) -> None:
+        super().__init__(
+            n_var,
+            xl=np.r_[0.0, np.full(n_var - 1, -5.0)],
+            xu=np.r_[1.0, np.full(n_var - 1, 5.0)],
+        )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         g = 1 + 10 * (self.n_var - 1) + jnp.sum(x[1:] ** 2 - 10 * jnp.cos(4 * jnp.pi * x[1:]))
@@ -78,7 +85,7 @@ class ZDT4(ZDT1):
 
 
 class ZDT6(ZDT):
-    def __init__(self, n_var: int = 10):
+    def __init__(self, n_var: int = 10) -> None:
         super().__init__(n_var)
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:

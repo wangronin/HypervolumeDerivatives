@@ -49,7 +49,7 @@ kernel = laplace
 problem_name = sys.argv[1]
 if problem_name.startswith("DTLZ"):
     n_var = 7 if problem_name == "DTLZ1" else 10
-    problem = locals()[problem_name](n_var=n_var, boundry_constraints=True)
+    problem = locals()[problem_name](n_var=n_var, boundary_constraints=True)
 elif problem_name.startswith("ZDT"):
     problem = locals()[problem_name]()
 

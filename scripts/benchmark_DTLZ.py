@@ -38,10 +38,10 @@ emoa = "NSGA-II"
 print(problem_name)
 
 if problem_name.startswith("IDTLZ"):
-    problem = locals()[problem_name](boundry_constraints=True)
+    problem = locals()[problem_name](boundary_constraints=True)
     path = "./data-reference/IDTLZ/"
 elif problem_name.startswith("DTLZ"):
-    problem = locals()[problem_name](boundry_constraints=True)
+    problem = locals()[problem_name](boundary_constraints=True)
     # path = "./data-reference/DTLZ/"
     path = "./data"
 

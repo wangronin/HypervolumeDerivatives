@@ -21,16 +21,23 @@ class _DTLZ(ConstrainedMOP):
         n_var: int = 11,
         scale: float = 1,
         alpha: float = 1,
-        boundry_constraints: bool = False,
+        boundary_constraints: bool = False,
     ):
+        n_var = n_var if n_var is not None else n_obj + 8
         self.n_obj: int = n_obj
-        self.n_var: int = n_var if n_var is not None else self.n_obj + 8
+        self.n_var: int = n_var
         self.k: int = self.n_var - self.n_obj + 1
-        self.xl: np.ndarray = np.zeros(self.n_var)
-        self.xu: np.ndarray = np.ones(self.n_var)
         self.scale: float = scale
         self.alpha: float = alpha
-        super().__init__(boundry_constraints=boundry_constraints)
+        super().__init__(
+            n_var=self.n_var,
+            n_obj=self.n_obj,
+            xl=np.zeros(self.n_var),
+            xu=np.ones(self.n_var),
+            n_eq_constr=self.n_eq_constr,
+            n_ieq_constr=self.n_ieq_constr,
+            boundary_constraints=boundary_constraints,
+        )
 
     def _transform_x(self, x: jnp.ndarray, g: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         return jnp.cos(jnp.power(x, self.alpha) * jnp.pi / 2), jnp.sin(jnp.power(x, self.alpha) * jnp.pi / 2)

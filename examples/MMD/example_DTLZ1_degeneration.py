@@ -37,7 +37,7 @@ np.random.seed(66)
 interval = 3
 max_iters = 7 * interval + 1
 
-problem = DTLZ1(n_var=7, boundry_constraints=True)
+problem = DTLZ1(n_var=7, boundary_constraints=True)
 pareto_front = problem.get_pareto_front()
 X = pd.read_csv("./data/DTLZ1/DTLZ1_degenerate.csv", header=None).values
 Y = np.array([problem.objective(x) for x in X])

@@ -48,7 +48,15 @@ class ParetoFrontConvex(ConstrainedMOP):
         self.n_obj: int = 3
         self.xl: np.ndarray = np.array([-1] * self.n_var)
         self.xu: np.ndarray = np.array([0] * self.n_var)
-        super().__init__(boundry_constraints=True)
+        super().__init__(
+            n_var=self.n_var,
+            n_obj=self.n_obj,
+            xl=self.xl,
+            xu=self.xu,
+            n_eq_constr=self.n_eq_constr,
+            n_ieq_constr=self.n_ieq_constr,
+            boundary_constraints=True,
+        )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         return x
@@ -70,7 +78,16 @@ class ParetoFrontConcave(ParetoFrontConvex, ConstrainedMOP):
         self.n_obj: int = 3
         self.xl: np.ndarray = np.array([0] * self.n_var)
         self.xu: np.ndarray = np.array([1] * self.n_var)
-        ConstrainedMOP.__init__(self, boundry_constraints=True)
+        ConstrainedMOP.__init__(
+            self,
+            n_var=self.n_var,
+            n_obj=self.n_obj,
+            xl=self.xl,
+            xu=self.xu,
+            n_eq_constr=self.n_eq_constr,
+            n_ieq_constr=self.n_ieq_constr,
+            boundary_constraints=True,
+        )
 
 
 class ParetoFrontLinear(ConstrainedMOP):
@@ -82,7 +99,15 @@ class ParetoFrontLinear(ConstrainedMOP):
         self.n_obj: int = 3
         self.xl: np.ndarray = np.array([0] * self.n_var)
         self.xu: np.ndarray = np.array([1] * self.n_var)
-        super().__init__(boundry_constraints=True)
+        super().__init__(
+            n_var=self.n_var,
+            n_obj=self.n_obj,
+            xl=self.xl,
+            xu=self.xu,
+            n_eq_constr=self.n_eq_constr,
+            n_ieq_constr=self.n_ieq_constr,
+            boundary_constraints=True,
+        )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         return x

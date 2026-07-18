@@ -20,7 +20,7 @@ max_iters = 6
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
-problem = locals()[problem_name](boundry_constraints=True)
+problem = locals()[problem_name](boundary_constraints=True)
 pareto_front = problem.get_pareto_front(1000)
 
 path = "./data-reference/CF/"

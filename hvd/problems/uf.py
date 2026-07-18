@@ -4,24 +4,40 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 import numpy as np
+from numpy.typing import ArrayLike
 
-from .base import ConstrainedMOP, MOP
+from .base import ConstrainedMOP
 from .reference import generic_sphere, get_ref_dirs
 
 
-class _UF2D(MOP):
+class _UF2D(ConstrainedMOP):
     n_obj = 2
+    _default_lower = -1.0
+    _default_upper = 1.0
 
-    def __init__(self, n_var: int = 30, bound: float = 1.0):
+    def __init__(
+        self,
+        n_var: int = 30,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+        boundary_constraints: bool = False,
+    ) -> None:
         if n_var < 3:
             raise ValueError("UF1--UF7 require n_var >= 3")
-        self.n_var = n_var
-        self.xl = np.r_[0.0, np.full(n_var - 1, -bound)]
-        self.xu = np.r_[1.0, np.full(n_var - 1, bound)]
+        if xl is None:
+            xl = np.r_[0.0, np.full(n_var - 1, self._default_lower)]
+        if xu is None:
+            xu = np.r_[1.0, np.full(n_var - 1, self._default_upper)]
         self._indices = jnp.arange(1, n_var + 1)
         self._odd = jnp.arange(2, n_var, 2)  # MATLAB 3,5,...
         self._even = jnp.arange(1, n_var, 2)  # MATLAB 2,4,...
-        super().__init__()
+        super().__init__(
+            n_var=n_var,
+            n_obj=self.n_obj,
+            xl=xl,
+            xu=xu,
+            boundary_constraints=boundary_constraints,
+        )
 
     def _sine_y(self, x: jnp.ndarray) -> jnp.ndarray:
         return x - jnp.sin(6 * jnp.pi * x[0] + self._indices * jnp.pi / self.n_var)
@@ -60,9 +76,7 @@ class UF2(UF1):
 
 
 class UF3(UF1):
-    def __init__(self, n_var: int = 30):
-        super().__init__(n_var)
-        self.xl = np.zeros(n_var)
+    _default_lower = 0.0
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         exponent = 0.5 * (1 + 3 * (self._indices - 2) / (self.n_var - 2))
@@ -80,12 +94,12 @@ class UF3(UF1):
 
 
 class UF4(_UF2D):
+    _default_lower = -2.0
+    _default_upper = 2.0
+
     @staticmethod
     def _front(f: np.ndarray) -> np.ndarray:
         return 1 - f**2
-
-    def __init__(self, n_var: int = 30):
-        super().__init__(n_var, 2.0)
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         h = jnp.abs(self._sine_y(x)) / (1 + jnp.exp(2 * jnp.abs(self._sine_y(x))))
@@ -138,21 +152,31 @@ class UF7(_UF2D):
         return 1 - f
 
 
-class _UF3D(MOP):
+class _UF3D(ConstrainedMOP):
     n_obj = 3
 
-    def __init__(self, n_var: int = 30, boundry_constraints: bool = False):
+    def __init__(
+        self,
+        n_var: int = 30,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+        boundary_constraints: bool = False,
+    ) -> None:
         if n_var < 5:
             raise ValueError("UF8--UF10 require n_var >= 5")
-        self.n_var = n_var
-        self.xl = np.r_[0.0, 0.0, np.full(n_var - 2, -2.0)]
-        self.xu = np.r_[1.0, 1.0, np.full(n_var - 2, 2.0)]
+        if xl is None:
+            xl = np.r_[0.0, 0.0, np.full(n_var - 2, -2.0)]
+        if xu is None:
+            xu = np.r_[1.0, 1.0, np.full(n_var - 2, 2.0)]
         self._indices = jnp.arange(1, n_var + 1)
         self._groups = (jnp.arange(3, n_var, 3), jnp.arange(4, n_var, 3), jnp.arange(2, n_var, 3))
-        if isinstance(self, ConstrainedMOP):
-            ConstrainedMOP.__init__(self, boundry_constraints=boundry_constraints)
-        else:
-            super().__init__()
+        super().__init__(
+            n_var=n_var,
+            n_obj=self.n_obj,
+            xl=xl,
+            xu=xu,
+            boundary_constraints=boundary_constraints,
+        )
 
     def _y(self, x: jnp.ndarray) -> jnp.ndarray:
         return x - 2 * x[1] * jnp.sin(2 * jnp.pi * x[0] + self._indices * jnp.pi / self.n_var)
