@@ -1,85 +1,99 @@
-from functools import partial
-
+import jax
 import jax.numpy as jnp
 import numpy as np
-from jax import jacfwd, jacrev, jit
-from pymoo.core.problem import ElementwiseProblem as PymooElementwiseProblem
-from pymoo.core.problem import Problem
 from pymoo.core.problem import Problem as PymooProblem
 
-from ..utils import timeit
-from .base import MOOAnalytical, hessian
+from .base import MOP, ConstrainedMOP
 
 
-# TODO: unify this class with the `ConstrainedMOOAnalytical`
-class PymooProblemWithAD:
-    def __init__(self, problem: Problem) -> None:
+class _PymooBackedMOP(ConstrainedMOP):
+    """Adapt a JAX-compatible pymoo problem to the native analytical API.
+
+    The wrapped ``_evaluate`` implementation must already use JAX-traceable
+    operations; wrapping alone cannot make NumPy or autograd code traceable.
+    """
+
+    def __init__(self, problem: PymooProblem, boundary_constraints: bool = True) -> None:
+        if not isinstance(problem, PymooProblem):
+            raise TypeError(f"Expected a pymoo Problem, got {type(problem).__name__}.")
         self._problem = problem
         self.n_obj = self._problem.n_obj
         self.n_var = self._problem.n_var
-        self.n_eq_constr = self._problem.n_eq_constr
-        self.n_ieq_constr = self._problem.n_ieq_constr + 2 * self.n_var
-        self.xl = self._problem.xl
-        self.xu = self._problem.xu
-        self._obj_func = jit(partial(problem.__class__._evaluate, problem))
-        ieq_func = jit(partial(PymooProblemWithAD.ieq_constraint, self))
-        self._objective_jacobian = jit(jacrev(self._obj_func))
-        self._objective_hessian = jit(hessian(self._obj_func))
-        self._ieq_jacobian = jit(jacfwd(ieq_func))
-        self._ieq_hessian = jit(hessian(ieq_func))
-        self.CPU_time: int = 0  # measured in nanoseconds
+        self.n_eq_constr = getattr(self._problem, "n_eq_constr", 0)
+        self.n_ieq_constr = getattr(self._problem, "n_ieq_constr", 0)
+        self.xl = np.broadcast_to(self._problem.xl, (self.n_var,)).copy()
+        self.xu = np.broadcast_to(self._problem.xu, (self.n_var,)).copy()
+        self._validate_jax_traceability()
+        super().__init__(boundry_constraints=boundary_constraints)
 
-    def objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._obj_func(x)
+    def _validate_jax_traceability(self) -> None:
+        """Fail early when pymoo's evaluation cannot be traced by JAX."""
+        x = jnp.zeros(self.n_var)
+        outputs = [("objective output 'F'", self._objective)]
+        if self.n_ieq_constr > 0:
+            outputs.append(("inequality-constraint output 'G'", self._ieq_constraint))
+        if self.n_eq_constr > 0:
+            outputs.append(("equality-constraint output 'H'", self._eq_constraint))
 
-    def ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
-        # box constraints are converted to inequality constraints
-        return jnp.concatenate([self.xl - x, x - self.xu])
+        for label, function in outputs:
+            try:
+                jax.eval_shape(function, x)
+            except Exception as error:
+                raise TypeError(
+                    f"The pymoo {label} is not JAX-traceable. "
+                    "Use only JAX-compatible operations in `_evaluate`. For pymoo's "
+                    "built-in problems, call `pymoo.gradient.activate('jax.numpy')` "
+                    "before importing the problem module."
+                ) from error
 
-    @timeit
-    def objective_jacobian(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._objective_jacobian(x)
+    def _evaluate_key(self, x: jnp.ndarray, key: str) -> jnp.ndarray:
+        out = {}
+        result = self._problem._evaluate(jnp.atleast_2d(x), out)
+        if result is not None and not out and key == "F":
+            return result
+        return out[key]
 
-    @timeit
-    def objective_hessian(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._objective_hessian(x)
+    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(self._evaluate_key(x, "F")).reshape(-1)
 
-    @timeit
-    def ieq_jacobian(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._ieq_jacobian(x)
+    def _ieq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(self._evaluate_key(x, "G")).reshape(-1)
 
-    @timeit
-    def ieq_hessian(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self._ieq_hessian(x)
+    def _eq_constraint(self, x: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(self._evaluate_key(x, "H")).reshape(-1)
 
     def get_pareto_set(self, *args, **kwargs) -> np.ndarray:
-        return self._problem._calc_pareto_set(*args, **kwargs)
+        method = getattr(self._problem, "get_pareto_set", None) or self._problem._calc_pareto_set
+        return method(*args, **kwargs)
 
     def get_pareto_front(self, *args, **kwargs) -> np.ndarray:
-        return self._problem._calc_pareto_front(*args, **kwargs)
+        method = getattr(self._problem, "get_pareto_front", None) or self._problem._calc_pareto_front
+        return method(*args, **kwargs)
 
 
-class PymooProblemWrapper(PymooElementwiseProblem):
+class _PymooProblemAdapter(PymooProblem):
     """Wrap of the problem I wrote into `Pymoo`'s problem"""
 
-    def __init__(self, problem: MOOAnalytical) -> None:
+    def __init__(self, problem: MOP) -> None:
+        if not isinstance(problem, MOP):
+            raise TypeError(f"Expected an MOP, got {type(problem).__name__}.")
         self._problem = problem
         super().__init__(
             n_var=problem.n_var,
             n_obj=problem.n_obj,
             xl=problem.xl,
             xu=problem.xu,
-            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
-            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
+            n_ieq_constr=getattr(self._problem, "n_ieq_constr", 0),
+            n_eq_constr=getattr(self._problem, "n_eq_constr", 0),
         )
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
         x = np.atleast_2d(x)
-        out["F"] = np.array([self._problem.objective(_) for _ in x])  # objective value
+        out["F"] = self._problem.objective_batch(x)
         if hasattr(self._problem, "n_eq_constr") and self._problem.n_eq_constr > 0:
-            out["H"] = np.array([self._problem.eq_constraint(_) for _ in x])  # equality constraint value
+            out["H"] = self._problem.eq_constraint_batch(x)
         if hasattr(self._problem, "n_ieq_constr") and self._problem.n_ieq_constr > 0:
-            out["G"] = np.array([self._problem.ieq_constraint(_) for _ in x])  # inequality constraint value
+            out["G"] = self._problem.ieq_constraint_batch(x)
 
     def pareto_front(self, *args, **kwargs) -> np.ndarray:
         return self._problem.get_pareto_front(*args, **kwargs)
@@ -112,7 +126,3 @@ class ModifiedObjective(PymooProblem):
         out["F"] = (1 - self._alpha) * F + self._alpha * np.tile(
             F.sum(axis=1).reshape(-1, 1), (1, self.n_obj)
         ) / self.n_obj
-
-    # TODO: implement it
-    # def pareto_front(self, *args, **kwargs):
-    # return self._problem.pareto_front(*args, **kwargs)

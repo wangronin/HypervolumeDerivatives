@@ -5,14 +5,14 @@ import numpy as np
 import pandas as pd
 
 from hvd.newton import DpN
-from hvd.problems import DTLZ7, PymooProblemWithAD
+from hvd.problems import DTLZ7
 from scripts.utils import plot_3d
 
 np.random.seed(66)
 
 max_iters = 8
 run = 1
-problem = PymooProblemWithAD(DTLZ7())
+problem = DTLZ7()
 pareto_front = problem.get_pareto_front()
 
 # load the reference set

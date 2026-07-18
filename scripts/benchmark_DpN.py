@@ -10,7 +10,7 @@ from joblib import Parallel, delayed
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
-from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6, PymooProblemWithAD
+from hvd.problems import MOP, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.utils import plot_2d, read_reference_set_data
@@ -21,7 +21,7 @@ max_iters = 15
 n_jobs = 30
 problem_name = sys.argv[1]
 print(problem_name)
-problem = PymooProblemWithAD(locals()[problem_name]())
+problem = MOP.from_pymoo(locals()[problem_name]())
 pf = problem.get_pareto_front(1000)
 path = "./ZDT/"
 emoa = "NSGA-II"

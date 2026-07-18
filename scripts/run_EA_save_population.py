@@ -1,5 +1,6 @@
 import copy
 import sys
+from typing import Any
 
 sys.path.insert(0, "./")
 
@@ -29,7 +30,13 @@ data_path = "/home/wangh5/data"
 
 
 def minimize(
-    problem, algorithm, termination=None, copy_algorithm=True, copy_termination=True, run_id=None, **kwargs
+    problem: Any,
+    algorithm: Any,
+    termination: Any = None,
+    copy_algorithm: bool = True,
+    copy_termination: bool = True,
+    run_id: int | None = None,
+    **kwargs,
 ):
     data = []
     columns = (
@@ -119,7 +126,7 @@ problems = (
 for problem in [problems[int(sys.argv[1])]]:
     problem_name = problem.__class__.__name__
     print(problem_name)
-    problem = PymooProblemWrapper(problem) if isinstance(problem, MOOAnalytical) else problem
+    problem = problem.as_pymoo_problem() if isinstance(problem, MOP) else problem
     termination = get_termination("n_gen", n_gen)
     constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
         hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0

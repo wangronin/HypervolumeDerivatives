@@ -7,7 +7,7 @@ from matplotlib import rcParams
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
-from hvd.problems import ZDT1, PymooProblemWithAD
+from hvd.problems import ZDT1
 from hvd.reference_set import ReferenceSet
 
 plt.style.use("ggplot")
@@ -32,7 +32,7 @@ np.random.seed(77)
 
 N = 5
 max_iters = 10
-problem = PymooProblemWithAD(ZDT1(n_var=2))
+problem = ZDT1(n_var=2)
 pareto_front = problem.get_pareto_front(500)
 pareto_set = problem.get_pareto_set(500)
 

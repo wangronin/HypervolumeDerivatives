@@ -6,7 +6,7 @@ import numpy as np
 from pymoo.util.remote import Remote
 
 from ..utils import timeit
-from .base import ConstrainedMOOAnalytical
+from .base import ConstrainedMOP
 from .reference import generic_sphere, get_ref_dirs
 
 jax.config.update("jax_enable_x64", True)
@@ -14,7 +14,7 @@ jax.config.update("jax_enable_x64", True)
 eps = 1e-30
 
 
-class BaseDTLZ(ConstrainedMOOAnalytical):
+class _DTLZ(ConstrainedMOP):
     def __init__(
         self,
         n_obj: int = 3,
@@ -53,7 +53,7 @@ class BaseDTLZ(ConstrainedMOOAnalytical):
         return NotImplemented
 
 
-class DTLZ1(BaseDTLZ):
+class DTLZ1(_DTLZ):
     def __init__(self, **kwargs):
         super().__init__(scale=0.5, **kwargs)
 
@@ -68,7 +68,7 @@ class DTLZ1(BaseDTLZ):
         return 0.5 * ref_dirs
 
 
-class DTLZ2(BaseDTLZ):
+class DTLZ2(_DTLZ):
     def get_pareto_front(self, **kwargs) -> np.ndarray:
         ref_dirs = get_ref_dirs(self.n_obj)
         return generic_sphere(ref_dirs)
@@ -84,7 +84,7 @@ class DTLZ4(DTLZ2):
         super().__init__(alpha=100, **kwargs)
 
 
-class DTLZ5(BaseDTLZ):
+class DTLZ5(_DTLZ):
     def _transform_x(self, x: jnp.ndarray, g: jnp.ndarray) -> Tuple[jnp.ndarray, jnp.ndarray]:
         theta = (1 + 2 * g * x) / (2 * (1 + g))
         theta = jnp.r_[x[0], theta[1:]]
@@ -114,7 +114,7 @@ class DTLZ6(DTLZ5):
             raise Exception("Not implemented yet.")
 
 
-class DTLZ7(BaseDTLZ):
+class DTLZ7(_DTLZ):
     def g(self, x_M: jnp.ndarray) -> float:
         return 1 + 9 / self.k * jnp.sum(x_M[-self.k :])
 

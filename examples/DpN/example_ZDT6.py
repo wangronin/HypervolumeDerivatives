@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from hvd.newton import DpN
-from hvd.problems import ZDT6, PymooProblemWithAD
+from hvd.problems import ZDT6
 from scripts.utils import plot_2d
 
 np.random.seed(66)
@@ -13,7 +13,7 @@ np.random.seed(66)
 max_iters = 5
 run = 2
 f = ZDT6()
-problem = PymooProblemWithAD(f)
+problem = f
 pareto_front = problem.get_pareto_front(500)
 
 # load the reference set

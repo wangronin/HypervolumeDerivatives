@@ -8,7 +8,7 @@ import pandas as pd
 from matplotlib import rcParams
 
 from hvd.newton import HVN
-from hvd.problems.misc import DISCONNECTED
+from hvd.problems.misc import DisConnected
 
 plt.style.use("ggplot")
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
@@ -30,7 +30,7 @@ ref = np.array([1, 1])
 max_iters = 10
 X0 = pd.read_csv("disconnected_y.csv", header=None, index_col=None).values
 Y0 = pd.read_csv("disconnected_y.csv", header=None, index_col=None).values
-problem = DISCONNECTED()
+problem = DisConnected()
 # pareto_front = problem.get_pareto_front(1000)
 N = len(X0)
 

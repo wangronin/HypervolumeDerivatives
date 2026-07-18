@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 # import matlab.engine
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ from matplotlib import rcParams
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn_extra.cluster import KMedoids
 
-from .problems import MOOAnalytical
+from .problems import MOP
 from .reference_set import ReferenceSet
 from .rsg import RSG
 from .utils import compute_chim, get_non_dominated
@@ -84,8 +84,8 @@ def filter_outliers(data: List) -> np.ndarray:
 
 
 def bootstrap_reference_set(
-    optimizer,
-    problem: MOOAnalytical,
+    optimizer: Any,
+    problem: MOP,
     interval: int = 5,
     with_rsg: bool = True,
     plot: bool = True,
@@ -97,7 +97,7 @@ def bootstrap_reference_set(
 
     Args:
         optimizer (_type_): an MOO algorithm
-        problem (MOOAnalytical): the MOO problem to solve
+        problem (MOP): the multi-objective problem to solve
         init_ref (np.ndarray): the initial reference set
         interval (int, optional): intervals at which bootstrapping is performed. Defaults to 5
         with_rsg (bool, optional): whether to use Angel's RSG method to interpolate the reference set

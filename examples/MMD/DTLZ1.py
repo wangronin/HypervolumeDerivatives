@@ -7,7 +7,7 @@ import pandas as pd
 from matplotlib import rcParams
 from scipy.linalg import solve
 
-from hvd.problems import DTLZ1, PymooProblemWithAD
+from hvd.problems import DTLZ1
 
 plt.style.use("ggplot")
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
@@ -36,7 +36,7 @@ np.random.seed(42)
 # generate the reference set
 # mu = len(best_from_angel)
 mu = 30
-problem = PymooProblemWithAD(DTLZ1(n_obj=2, n_var=2))
+problem = DTLZ1(n_obj=2, n_var=2)
 # ref = 0.5 * UniformReferenceDirectionFactory(2, n_points=mu).do()
 ref = pd.read_csv("LIN_Y_RSG.csv", header=None).values
 # the reference set

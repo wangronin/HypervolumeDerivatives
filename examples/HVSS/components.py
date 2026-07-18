@@ -9,7 +9,7 @@ import numpy as np
 from matplotlib import rcParams
 
 from hvd.newton import HVN
-from hvd.problems.base import MOOAnalytical
+from hvd.problems.base import MOP
 
 plt.style.use("ggplot")
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
@@ -26,7 +26,7 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 
-class FLatConvex(MOOAnalytical):
+class FLatConvex(MOP):
     def __init__(self, **kwargs):
         self.n_obj = 2
         self.n_var = 1
@@ -42,7 +42,7 @@ class FLatConvex(MOOAnalytical):
         return jnp.array([f1, f2])
 
 
-class Linear(MOOAnalytical):
+class Linear(MOP):
     def __init__(self, **kwargs):
         self.n_obj = 2
         self.n_var = 1
@@ -58,8 +58,8 @@ class Linear(MOOAnalytical):
 
 
 class PiecewiseAnalytical:
-    def __init__(self, functions: List[MOOAnalytical]) -> None:
-        self._functions: List[MOOAnalytical] = functions
+    def __init__(self, functions: List[MOP]) -> None:
+        self._functions: List[MOP] = functions
         self.N: int = len(self._functions)
         self.intervals: np.ndarray = np.linspace(0, 1, self.N + 1)
         self.size: float = 1 / self.N

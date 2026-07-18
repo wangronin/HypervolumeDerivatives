@@ -16,7 +16,7 @@ from sklearn.cluster import KMeans
 
 from hvd.newton import HVN
 from hvd.problems import DTLZ1, DTLZ2
-from hvd.problems.base import ConstrainedMOOAnalytical
+from hvd.problems.base import ConstrainedMOP
 
 jax.config.update("jax_enable_x64", True)
 random.seed(42)
@@ -39,7 +39,7 @@ rcParams["ytick.major.width"] = 1
 path = "./data/HVSS/"
 
 
-class ParetoFrontConvex(ConstrainedMOOAnalytical):
+class ParetoFrontConvex(ConstrainedMOP):
     n_eq_constr: int = 1
     n_ieq_constr: int = 1
 
@@ -63,17 +63,17 @@ class ParetoFrontConvex(ConstrainedMOOAnalytical):
         return DTLZ2(n_var=3).get_pareto_front()
 
 
-class ParetoFrontConcave(ParetoFrontConvex, ConstrainedMOOAnalytical):
+class ParetoFrontConcave(ParetoFrontConvex, ConstrainedMOP):
 
     def __init__(self) -> None:
         self.n_var: int = 3
         self.n_obj: int = 3
         self.xl: np.ndarray = np.array([0] * self.n_var)
         self.xu: np.ndarray = np.array([1] * self.n_var)
-        ConstrainedMOOAnalytical.__init__(self, boundry_constraints=True)
+        ConstrainedMOP.__init__(self, boundry_constraints=True)
 
 
-class ParetoFrontLinear(ConstrainedMOOAnalytical):
+class ParetoFrontLinear(ConstrainedMOP):
     n_eq_constr: int = 1
     n_ieq_constr: int = 1
 

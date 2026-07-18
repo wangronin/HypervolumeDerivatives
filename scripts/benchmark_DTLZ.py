@@ -23,7 +23,7 @@ from hvd.problems import (
     IDTLZ2,
     IDTLZ3,
     IDTLZ4,
-    PymooProblemWithAD,
+    MOP,
 )
 from hvd.utils import get_non_dominated
 from scripts.utils import plot_3d, read_reference_set_data
@@ -45,7 +45,7 @@ elif problem_name.startswith("DTLZ"):
     # path = "./data-reference/DTLZ/"
     path = "./data"
 
-problem = PymooProblemWithAD(problem) if isinstance(problem, PymooProblem) else problem
+problem = MOP.from_pymoo(problem)
 pareto_front = problem.get_pareto_front()
 reference_point = {  # for hypervolume
     "DTLZ[1-6]": np.array([1, 1, 1]),

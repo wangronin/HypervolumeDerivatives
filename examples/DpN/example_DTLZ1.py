@@ -8,7 +8,7 @@ from matplotlib import rcParams
 from pymoo.util.ref_dirs import get_reference_directions
 
 from hvd.newton import DpN
-from hvd.problems import DTLZ1, PymooProblemWithAD
+from hvd.problems import DTLZ1
 from scripts.utils import plot_3d
 
 np.random.seed(66)
@@ -18,7 +18,7 @@ run = 1
 alg = "NSGA-III"
 path = "./DTLZ/DTLZ1/"
 
-problem = PymooProblemWithAD(DTLZ1())
+problem = DTLZ1()
 ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=45)
 pareto_front = problem.get_pareto_front(ref_dirs)
 

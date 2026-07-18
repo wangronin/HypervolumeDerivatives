@@ -36,8 +36,7 @@ from hvd.problems import (
     ZDT3,
     ZDT4,
     ZDT6,
-    MOOAnalytical,
-    PymooProblemWithAD,
+    MOP,
 )
 
 sns.set_theme(rc={"figure.figsize": (12, 6)})
@@ -84,7 +83,7 @@ else:
     problems_name = [type(p).__name__ for p in problems]
 
 for problem in problems:
-    f = problem if isinstance(problem, MOOAnalytical) else PymooProblemWithAD(problem)
+    f = MOP.from_pymoo(problem)
     FE_time = []
     for i in range(int(N)):
         r = problem.xu - problem.xl
@@ -104,7 +103,7 @@ data_FE = np.vstack([np.repeat(problems_name, N - 1), data_FE]).T
 N = 1e5
 data_AD = []
 for problem in problems:
-    f = problem if isinstance(problem, MOOAnalytical) else PymooProblemWithAD(problem)
+    f = MOP.from_pymoo(problem)
     FE_time = []
     func = f.objective
     jac = f.objective_jacobian

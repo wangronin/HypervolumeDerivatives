@@ -2,10 +2,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..utils import timeit
-from .dtlz import DTLZ1, DTLZ2, DTLZ3, DTLZ4, BaseDTLZ
+from .dtlz import _DTLZ, DTLZ1, DTLZ2, DTLZ3, DTLZ4
 
 
-class InvertedDTLZ(BaseDTLZ):
+class InvertedDTLZ(_DTLZ):
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         x_, x_M = x[: self.n_obj - 1], x[self.n_obj - 1 :]
@@ -27,7 +27,7 @@ class InvertedDTLZ(BaseDTLZ):
         return 0.5 - ref_dirs
 
 
-class ConstrainedDTLZ(BaseDTLZ):
+class ConstrainedDTLZ(_DTLZ):
     n_eq_constr = 1
 
     @timeit

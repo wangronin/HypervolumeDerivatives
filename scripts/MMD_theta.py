@@ -24,7 +24,6 @@ from hvd.problems import (
     ZDT3,
     ZDT4,
     ZDT6,
-    PymooProblemWithAD,
 )
 from hvd.reference_set import ReferenceSet
 from hvd.utils import precondition_hessian
@@ -52,7 +51,7 @@ if problem_name.startswith("DTLZ"):
     n_var = 7 if problem_name == "DTLZ1" else 10
     problem = locals()[problem_name](n_var=n_var, boundry_constraints=True)
 elif problem_name.startswith("ZDT"):
-    problem = PymooProblemWithAD(locals()[problem_name]())
+    problem = locals()[problem_name]()
 
 run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])

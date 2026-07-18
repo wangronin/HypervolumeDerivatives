@@ -1,6 +1,6 @@
 import os
 
-from .base import ConstrainedMOOAnalytical, MOOAnalytical
+from .base import ConstrainedMOP, MOP
 from .cf import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from .dtlz import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
 from .eqdtlz import (
@@ -17,16 +17,16 @@ from .eqdtlz import (
     Eq1IDTLZ3,
     Eq1IDTLZ4,
 )
-from .misc import CONV3, CONV4, CONV4_2F, UF7, UF8
-from .pymoo_wrapper import PymooProblemWithAD, PymooProblemWrapper
+from .misc import CONV3, CONV4, CONV4_2F
+from .uf import UF1, UF2, UF3, UF4, UF5, UF6, UF7, UF8, UF9, UF10
 from .zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 
 # enable double-precision of JAX
 os.environ["JAX_ENABLE_X64"] = "True"
 
 __all__ = [
-    "MOOAnalytical",
-    "ConstrainedMOOAnalytical",
+    "MOP",
+    "ConstrainedMOP",
     "Eq1DTLZ1",
     "Eq1DTLZ2",
     "Eq1DTLZ3",
@@ -52,8 +52,16 @@ __all__ = [
     "CONV3",
     "CONV4",
     "CONV4_2F",
+    "UF1",
+    "UF2",
+    "UF3",
+    "UF4",
+    "UF5",
+    "UF6",
     "UF7",
     "UF8",
+    "UF9",
+    "UF10",
     "ZDT1",
     "ZDT2",
     "ZDT3",
@@ -66,6 +74,4 @@ __all__ = [
     "DTLZ5",
     "DTLZ6",
     "DTLZ7",
-    "PymooProblemWithAD",
-    "PymooProblemWrapper",
 ]

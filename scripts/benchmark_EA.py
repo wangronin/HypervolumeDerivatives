@@ -1,5 +1,6 @@
 import copy
 import sys
+from typing import Any
 
 sys.path.insert(0, "./")
 
@@ -40,8 +41,7 @@ from hvd.problems import (
     IDTLZ2,
     IDTLZ3,
     IDTLZ4,
-    MOOAnalytical,
-    PymooProblemWrapper,
+    MOP,
 )
 from hvd.sms_emoa import SMSEMOA
 
@@ -64,14 +64,14 @@ reference_points = dict(
 
 
 def minimize(
-    problem,
-    algorithm,
-    algorithm_name,
-    termination=None,
-    copy_algorithm=True,
-    copy_termination=True,
-    run_id=None,
-    reference_point=None,
+    problem: Any,
+    algorithm: Any,
+    algorithm_name: str,
+    termination: Any = None,
+    copy_algorithm: bool = True,
+    copy_termination: bool = True,
+    run_id: int | None = None,
+    reference_point: np.ndarray | None = None,
     **kwargs,
 ):
     t0 = time.process_time_ns()
@@ -157,7 +157,7 @@ def get_reference_point(problem_name: str) -> np.ndarray:
     return reference_points[problem_name]
 
 
-def get_Jacobian_calls(path, problem_name, algorithm_name, gen):
+def get_Jacobian_calls(path: str, problem_name: str, algorithm_name: str, gen: int) -> int:
     return int(np.median(pd.read_csv(f"{path}/{problem_name}-{newton}-{algorithm_name}-{gen}.csv").Jac_calls))
 
 
@@ -173,7 +173,7 @@ newton = "MMD"
 for problem_name in [problem_names]:
     print(problem_name)
     problem = locals()[problem_name]()
-    problem = problem if isinstance(problem, PymooProblem) else PymooProblemWrapper(problem)
+    problem = problem if isinstance(problem, PymooProblem) else problem.as_pymoo_problem()
 
     if problem.n_obj == 2:
         pop_size = 100

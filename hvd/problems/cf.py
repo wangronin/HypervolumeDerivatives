@@ -14,11 +14,11 @@ import numpy as np
 from jax.numpy import pi
 
 from ..utils import timeit
-from .base import ConstrainedMOOAnalytical
-from .misc import UF8
+from .base import ConstrainedMOP
+from .uf import UF8
 
 
-class CF1(ConstrainedMOOAnalytical):
+class CF1(ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         self.n_obj = 2
         self.n_var = n_var
@@ -54,7 +54,7 @@ class CF1(ConstrainedMOOAnalytical):
         return np.c_[f, 1 - f]
 
 
-class CF2(ConstrainedMOOAnalytical):
+class CF2(ConstrainedMOP):
     """Constrained Problem 2 in CEC 09 benchmark
 
     Reference:
@@ -106,7 +106,7 @@ class CF2(ConstrainedMOOAnalytical):
         return np.c_[f, 1 - jnp.sqrt(f)]
 
 
-class CF3(ConstrainedMOOAnalytical):
+class CF3(ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         self.n_obj = 2
         self.n_var = n_var
@@ -143,7 +143,7 @@ class CF3(ConstrainedMOOAnalytical):
         return np.c_[f, 1 - f**2]
 
 
-class CF4(ConstrainedMOOAnalytical):
+class CF4(ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         self.n_obj = 2
         self.n_var = n_var
@@ -188,7 +188,7 @@ class CF4(ConstrainedMOOAnalytical):
         return np.c_[f1, f2]
 
 
-class CF5(ConstrainedMOOAnalytical):
+class CF5(ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         self.n_obj = 2
         self.n_var = n_var
@@ -238,7 +238,7 @@ class CF5(ConstrainedMOOAnalytical):
         return np.c_[f1, f2]
 
 
-class CF6(ConstrainedMOOAnalytical):
+class CF6(ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         self.n_obj = 2
         self.n_var = n_var
@@ -289,7 +289,7 @@ class CF6(ConstrainedMOOAnalytical):
         return np.c_[f1, f2]
 
 
-class CF7(ConstrainedMOOAnalytical):
+class CF7(ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         self.n_obj = 2
         self.n_var = n_var
@@ -339,7 +339,7 @@ class CF7(ConstrainedMOOAnalytical):
         return np.c_[f1, f2]
 
 
-class CF8(UF8, ConstrainedMOOAnalytical):
+class CF8(UF8, ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         self.n_ieq_constr = 1
         super().__init__(n_var=n_var, boundry_constraints=boundry_constraints)
@@ -348,8 +348,7 @@ class CF8(UF8, ConstrainedMOOAnalytical):
 
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.atleast_2d(x)
-        jnp.clip(x, self.xl, self.xu)
+        x = jnp.clip(jnp.ravel(x), self.xl, self.xu)
         return super()._objective(x)
 
     @timeit
@@ -374,7 +373,7 @@ class CF8(UF8, ConstrainedMOOAnalytical):
         return R
 
 
-class CF9(CF8, ConstrainedMOOAnalytical):
+class CF9(CF8, ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         super().__init__(n_var, boundry_constraints)
         self.xl = np.r_[0, 0, np.zeros(self.n_var - 2) - 2]
@@ -402,7 +401,7 @@ class CF9(CF8, ConstrainedMOOAnalytical):
         return R[~idx]
 
 
-class CF10(ConstrainedMOOAnalytical):
+class CF10(ConstrainedMOP):
     def __init__(self, n_var: int = 10, boundry_constraints: bool = False) -> None:
         self.n_var = n_var
         self.n_ieq_constr = 1

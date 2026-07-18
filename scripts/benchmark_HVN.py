@@ -9,17 +9,17 @@ from pymoo.util.ref_dirs import get_reference_directions
 from hvd.hypervolume import hypervolume
 from hvd.newton import HVN
 from hvd.problems import Eq1DTLZ1, Eq1DTLZ2, Eq1DTLZ3, Eq1DTLZ4, Eq1IDTLZ1, Eq1IDTLZ2, Eq1IDTLZ3, Eq1IDTLZ4
-from hvd.problems.base import MOOAnalytical, PymooProblemWrapper
+from hvd.problems.base import MOP
 from hvd.utils import non_domin_sort
 
 
-def hybrid(seed: int, problem: MOOAnalytical, ref: np.ndarray):
+def hybrid(seed: int, problem: MOP, ref: np.ndarray):
     # create the reference directions to be used for the optimization
     ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=18)
     termination = get_termination("n_gen", 1000)
     algorithm = AdaptiveEpsilonConstraintHandling(NSGA3(pop_size=200, ref_dirs=ref_dirs), perc_eps_until=0.5)
     # execute the optimization
-    res = minimize(PymooProblemWrapper(problem), algorithm, termination, seed=seed, verbose=False)
+    res = minimize(problem.as_pymoo_problem(), algorithm, termination, seed=seed, verbose=False)
     HV0 = hypervolume(res.F, ref)
     X_ = res.X
     X = np.array([p._X for p in res.pop])  # final approximation set of NSGA-III

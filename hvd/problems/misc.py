@@ -8,10 +8,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from ..utils import timeit
-from .base import ConstrainedMOOAnalytical, MOOAnalytical
+from .base import MOP, ConstrainedMOP
 
 
-class DENT(MOOAnalytical):
+class DENT(MOP):
     def __init__(self, **kwargs):
         self.n_obj = 2
         self.n_var = 2
@@ -35,7 +35,7 @@ class DENT(MOOAnalytical):
         return np.array([self.objective(x) for x in X])
 
 
-class CONV3(ConstrainedMOOAnalytical):
+class CONV3(ConstrainedMOP):
     def __init__(self, **kwargs):
         self.n_obj = 3
         self.n_var = 3
@@ -58,7 +58,7 @@ class CONV3(ConstrainedMOOAnalytical):
         return np.array([self._objective(x) for x in X])
 
 
-class CONV4(ConstrainedMOOAnalytical):
+class CONV4(ConstrainedMOP):
     """Convex Problem 4"""
 
     def __init__(self, **kwargs):
@@ -80,7 +80,7 @@ class CONV4(ConstrainedMOOAnalytical):
         return np.array([self._objective(x) for x in X])
 
 
-class CONV4_2F(ConstrainedMOOAnalytical):
+class CONV4_2F(ConstrainedMOP):
     """Convex Problem 4 with 2 disconnected Pareto fronts"""
 
     def __init__(self, **kwargs):
@@ -117,69 +117,7 @@ class CONV4_2F(ConstrainedMOOAnalytical):
         return np.array([self._objective(x) for x in np.vstack([X_1, X_2])])
 
 
-class UF7(MOOAnalytical):
-    def __init__(self, n_var: int = 30) -> None:
-        self.n_obj = 2
-        self.n_var = n_var
-        self.xl = np.r_[0, np.zeros(self.n_var - 1) - 1]
-        self.xu = np.ones(self.n_var)
-        self.encoding = np.ones(self.n_var)
-        super().__init__()
-
-    @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.atleast_2d(x)
-        N = x.shape[0]
-        D = self.n_var
-        J1 = jnp.arange(3, self.n_var, 2) - 1
-        J2 = jnp.arange(2, self.n_var + 2, 2) - 1
-        y = x - jnp.sin(
-            6 * jnp.pi * jnp.tile(x[:, [0]], (1, D)) + jnp.tile(jnp.arange(D) + 1, (N, 1)) * jnp.pi / D
-        )
-        return jnp.hstack(
-            [
-                x[:, 0] ** 0.2 + 2 * jnp.mean(y[:, J1] ** 2, 1),
-                1 - x[:, 0] ** 0.2 + 2 * jnp.mean(y[:, J2] ** 2, 1),
-            ]
-        ).T
-
-    def get_pareto_front(self, N: int = 1000) -> np.ndarray:
-        f = np.linspace(0, 1, N)
-        return np.c_[f, 1 - f]
-
-
-class UF8(MOOAnalytical):
-    def __init__(self, n_var: int = 30, **kwargs) -> None:
-        self.n_obj = 3
-        self.n_var = n_var
-        self.xl = np.r_[0, 0, np.zeros(self.n_var - 2) - 2]
-        self.xu = np.r_[1, 1, np.zeros(self.n_var - 2) + 2]
-        self.encoding = np.ones(self.n_var)
-        super().__init__()
-
-    @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        x = jnp.atleast_2d(x)
-        N = x.shape[0]
-        D = self.n_var
-        J1 = jnp.arange(4, D + 1, 3) - 1
-        J2 = jnp.arange(5, D + 1, 3) - 1
-        J3 = jnp.arange(3, D + 1, 3) - 1
-        y = x - 2 * jnp.tile(x[:, [1]], (1, D)) * jnp.sin(
-            2 * jnp.pi * jnp.tile(x[:, [0]], (1, D)) + jnp.tile(jnp.arange(D) + 1, (N, 1)) * jnp.pi / D
-        )
-        return jnp.hstack(
-            [
-                jnp.cos(0.5 * x[:, 0] * jnp.pi) * jnp.cos(0.5 * x[:, 1] * jnp.pi)
-                + 2 * jnp.mean(y[:, J1] ** 2, 1),
-                jnp.cos(0.5 * x[:, 0] * jnp.pi) * jnp.sin(0.5 * x[:, 1] * jnp.pi)
-                + 2 * jnp.mean(y[:, J2] ** 2, 1),
-                jnp.sin(0.5 * x[:, 0] * jnp.pi) + 2 * jnp.mean(y[:, J3] ** 2, 1),
-            ]
-        ).T
-
-
-class DISCONNECTED(ConstrainedMOOAnalytical):
+class DisConnected(ConstrainedMOP):
     def __init__(self, **kwargs):
         self.n_obj = 2
         self.n_var = 2

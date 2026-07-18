@@ -9,7 +9,7 @@ from matplotlib import rcParams
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.mmd_newton import MMDNewton
 from hvd.newton import DpN
-from hvd.problems import ZDT1, PymooProblemWithAD
+from hvd.problems import ZDT1
 from hvd.reference_set import ReferenceSet
 from hvd.utils import read_reference_set_data
 
@@ -32,7 +32,7 @@ max_iters = 15
 problem_name = "ZDT1"
 print(problem_name)
 f = locals()[problem_name](n_var=3)
-problem = PymooProblemWithAD(f)
+problem = f
 pareto_front = problem.get_pareto_front(1000)
 
 if 1 < 2:
