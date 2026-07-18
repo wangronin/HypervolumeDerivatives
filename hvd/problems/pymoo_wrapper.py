@@ -3,10 +3,10 @@ import jax.numpy as jnp
 import numpy as np
 from pymoo.core.problem import Problem as PymooProblem
 
-from .base import MOP, ConstrainedMOP
+from .base import CMOP, MOP
 
 
-class _PymooBackedMOP(ConstrainedMOP):
+class _PymooBackedMOP(CMOP):
     """Adapt a JAX-compatible pymoo problem to the native analytical API.
 
     The wrapped ``_evaluate`` implementation must already use JAX-traceable
@@ -18,22 +18,16 @@ class _PymooBackedMOP(ConstrainedMOP):
             raise TypeError(f"Expected a pymoo Problem, got {type(problem).__name__}.")
 
         self._problem = problem
-        self.n_obj = self._problem.n_obj
-        self.n_var = self._problem.n_var
-        self.n_eq_constr = getattr(self._problem, "n_eq_constr", 0)
-        self.n_ieq_constr = getattr(self._problem, "n_ieq_constr", 0)
-        self.xl = np.broadcast_to(self._problem.xl, (self.n_var,)).copy()
-        self.xu = np.broadcast_to(self._problem.xu, (self.n_var,)).copy()
-        self._validate_jax_traceability()
         super().__init__(
-            n_var=self.n_var,
-            n_obj=self.n_obj,
-            xl=self.xl,
-            xu=self.xu,
-            n_eq_constr=self.n_eq_constr,
-            n_ieq_constr=self.n_ieq_constr,
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
+            n_eq_constr=getattr(problem, "n_eq_constr", 0),
+            n_ieq_constr=getattr(problem, "n_ieq_constr", 0),
             boundary_constraints=boundary_constraints,
         )
+        self._validate_jax_traceability()
 
     def _validate_jax_traceability(self) -> None:
         """Fail early when pymoo's evaluation cannot be traced by JAX."""

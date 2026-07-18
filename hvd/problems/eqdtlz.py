@@ -28,7 +28,7 @@ class InvertedDTLZ(_DTLZ):
 
 
 class ConstrainedDTLZ(_DTLZ):
-    n_eq_constr = 1
+    default_n_eq_constr = 1
 
     @timeit
     def _eq_constraint(self, x: jnp.ndarray) -> float:

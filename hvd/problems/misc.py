@@ -6,22 +6,27 @@ os.environ["JAX_ENABLE_X64"] = "True"
 import jax
 import jax.numpy as jnp
 import numpy as np
+from numpy.typing import ArrayLike
 
 from ..utils import timeit
-from .base import ConstrainedMOP, MOP, fixed_n_obj
+from .base import CMOP, MOP, fixed_n_obj, fixed_n_var
 
 
 class DENT(MOP):
-    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
-        self.n_obj = 2
-        self.n_var = 2
-        self.xl = -2 * np.ones(self.n_var)
-        self.xu = 2 * np.ones(self.n_var)
+    def __init__(
+        self,
+        n_var: int | None = None,
+        n_obj: int | None = None,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+    ) -> None:
+        n_var = fixed_n_var(n_var, 2, type(self).__name__)
+        n_obj = fixed_n_obj(n_obj, 2, type(self).__name__)
         super().__init__(
-            n_var=self.n_var,
-            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
-            xl=self.xl,
-            xu=self.xu,
+            n_var=n_var,
+            n_obj=n_obj,
+            xl=-2.0 if xl is None else xl,
+            xu=2.0 if xu is None else xu,
         )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -40,22 +45,27 @@ class DENT(MOP):
         return np.array([self.objective(x) for x in X])
 
 
-class CONV3(ConstrainedMOP):
-    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
-        self.n_obj = 3
-        self.n_var = 3
-        self.xl = -3 * np.ones(self.n_var)
-        self.xu = 3 * np.ones(self.n_var)
+class CONV3(CMOP):
+    def __init__(
+        self,
+        n_var: int | None = None,
+        n_obj: int | None = None,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+        boundary_constraints: bool = False,
+    ) -> None:
+        n_var = fixed_n_var(n_var, 3, type(self).__name__)
+        n_obj = fixed_n_obj(n_obj, 3, type(self).__name__)
+        super().__init__(
+            n_var=n_var,
+            n_obj=n_obj,
+            xl=-3.0 if xl is None else xl,
+            xu=3.0 if xu is None else xu,
+            boundary_constraints=boundary_constraints,
+        )
         self.a1 = -1 * np.ones(self.n_var)
         self.a2 = np.ones(self.n_var)
         self.a3 = np.r_[-1 * np.ones(self.n_var - 1), 1]
-        super().__init__(
-            n_var=self.n_var,
-            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
-            xl=self.xl,
-            xu=self.xu,
-            **kwargs,
-        )
 
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -69,22 +79,27 @@ class CONV3(ConstrainedMOP):
         return np.array([self._objective(x) for x in X])
 
 
-class CONV4(ConstrainedMOP):
+class CONV4(CMOP):
     """Convex Problem 4"""
 
-    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
-        self.n_obj = 4
-        self.n_var = 4
-        self.xl = -10 * np.ones(self.n_var)
-        self.xu = 10 * np.ones(self.n_var)
-        self.centers = np.eye(self.n_var)
+    def __init__(
+        self,
+        n_var: int | None = None,
+        n_obj: int | None = None,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+        boundary_constraints: bool = False,
+    ) -> None:
+        n_var = fixed_n_var(n_var, 4, type(self).__name__)
+        n_obj = fixed_n_obj(n_obj, 4, type(self).__name__)
         super().__init__(
-            n_var=self.n_var,
-            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
-            xl=self.xl,
-            xu=self.xu,
-            **kwargs,
+            n_var=n_var,
+            n_obj=n_obj,
+            xl=-10.0 if xl is None else xl,
+            xu=10.0 if xu is None else xu,
+            boundary_constraints=boundary_constraints,
         )
+        self.centers = np.eye(self.n_var)
 
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -97,20 +112,25 @@ class CONV4(ConstrainedMOP):
         return np.array([self._objective(x) for x in X])
 
 
-class CONV4_2F(ConstrainedMOP):
+class CONV4_2F(CMOP):
     """Convex Problem 4 with 2 disconnected Pareto fronts"""
 
-    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
-        self.n_obj = 4
-        self.n_var = 4
-        self.xl = -10 * np.ones(self.n_var)
-        self.xu = 10 * np.ones(self.n_var)
+    def __init__(
+        self,
+        n_var: int | None = None,
+        n_obj: int | None = None,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+        boundary_constraints: bool = False,
+    ) -> None:
+        n_var = fixed_n_var(n_var, 4, type(self).__name__)
+        n_obj = fixed_n_obj(n_obj, 4, type(self).__name__)
         super().__init__(
-            n_var=self.n_var,
-            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
-            xl=self.xl,
-            xu=self.xu,
-            **kwargs,
+            n_var=n_var,
+            n_obj=n_obj,
+            xl=-10.0 if xl is None else xl,
+            xu=10.0 if xu is None else xu,
+            boundary_constraints=boundary_constraints,
         )
 
     @timeit
@@ -140,22 +160,25 @@ class CONV4_2F(ConstrainedMOP):
         return np.array([self._objective(x) for x in np.vstack([X_1, X_2])])
 
 
-class DisConnected(ConstrainedMOP):
-    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
-        self.n_obj = 2
-        self.n_var = 2
-        self.n_ieq_constr = 2
-        self.n_eq_constr = 1
-        self.xl = np.array([0, -8])
-        self.xu = np.array([1, 1])
+class DisConnected(CMOP):
+    def __init__(
+        self,
+        n_var: int | None = None,
+        n_obj: int | None = None,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+        boundary_constraints: bool = False,
+    ) -> None:
+        n_var = fixed_n_var(n_var, 2, type(self).__name__)
+        n_obj = fixed_n_obj(n_obj, 2, type(self).__name__)
         super().__init__(
-            n_var=self.n_var,
-            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
-            xl=self.xl,
-            xu=self.xu,
-            n_eq_constr=self.n_eq_constr,
-            n_ieq_constr=self.n_ieq_constr,
-            **kwargs,
+            n_var=n_var,
+            n_obj=n_obj,
+            xl=np.array([0, -8]) if xl is None else xl,
+            xu=np.array([1, 1]) if xu is None else xu,
+            n_eq_constr=1,
+            n_ieq_constr=2,
+            boundary_constraints=boundary_constraints,
         )
 
     @timeit

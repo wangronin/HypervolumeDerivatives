@@ -16,7 +16,7 @@ from sklearn.cluster import KMeans
 
 from hvd.newton import HVN
 from hvd.problems import DTLZ1, DTLZ2
-from hvd.problems.base import ConstrainedMOP
+from hvd.problems.base import CMOP
 
 jax.config.update("jax_enable_x64", True)
 random.seed(42)
@@ -39,22 +39,18 @@ rcParams["ytick.major.width"] = 1
 path = "./data/HVSS/"
 
 
-class ParetoFrontConvex(ConstrainedMOP):
-    n_eq_constr: int = 1
-    n_ieq_constr: int = 1
+class ParetoFrontConvex(CMOP):
+    default_n_eq_constr: int = 1
+    default_n_ieq_constr: int = 1
 
     def __init__(self) -> None:
-        self.n_var: int = 3
-        self.n_obj: int = 3
-        self.xl: np.ndarray = np.array([-1] * self.n_var)
-        self.xu: np.ndarray = np.array([0] * self.n_var)
         super().__init__(
-            n_var=self.n_var,
-            n_obj=self.n_obj,
-            xl=self.xl,
-            xu=self.xu,
-            n_eq_constr=self.n_eq_constr,
-            n_ieq_constr=self.n_ieq_constr,
+            n_var=3,
+            n_obj=3,
+            xl=-1.0,
+            xu=0.0,
+            n_eq_constr=self.default_n_eq_constr,
+            n_ieq_constr=self.default_n_ieq_constr,
             boundary_constraints=True,
         )
 
@@ -71,41 +67,33 @@ class ParetoFrontConvex(ConstrainedMOP):
         return DTLZ2(n_var=3).get_pareto_front()
 
 
-class ParetoFrontConcave(ParetoFrontConvex, ConstrainedMOP):
+class ParetoFrontConcave(ParetoFrontConvex, CMOP):
 
     def __init__(self) -> None:
-        self.n_var: int = 3
-        self.n_obj: int = 3
-        self.xl: np.ndarray = np.array([0] * self.n_var)
-        self.xu: np.ndarray = np.array([1] * self.n_var)
-        ConstrainedMOP.__init__(
+        CMOP.__init__(
             self,
-            n_var=self.n_var,
-            n_obj=self.n_obj,
-            xl=self.xl,
-            xu=self.xu,
-            n_eq_constr=self.n_eq_constr,
-            n_ieq_constr=self.n_ieq_constr,
+            n_var=3,
+            n_obj=3,
+            xl=0.0,
+            xu=1.0,
+            n_eq_constr=self.default_n_eq_constr,
+            n_ieq_constr=self.default_n_ieq_constr,
             boundary_constraints=True,
         )
 
 
-class ParetoFrontLinear(ConstrainedMOP):
-    n_eq_constr: int = 1
-    n_ieq_constr: int = 1
+class ParetoFrontLinear(CMOP):
+    default_n_eq_constr: int = 1
+    default_n_ieq_constr: int = 1
 
     def __init__(self) -> None:
-        self.n_var: int = 3
-        self.n_obj: int = 3
-        self.xl: np.ndarray = np.array([0] * self.n_var)
-        self.xu: np.ndarray = np.array([1] * self.n_var)
         super().__init__(
-            n_var=self.n_var,
-            n_obj=self.n_obj,
-            xl=self.xl,
-            xu=self.xu,
-            n_eq_constr=self.n_eq_constr,
-            n_ieq_constr=self.n_ieq_constr,
+            n_var=3,
+            n_obj=3,
+            xl=0.0,
+            xu=1.0,
+            n_eq_constr=self.default_n_eq_constr,
+            n_ieq_constr=self.default_n_ieq_constr,
             boundary_constraints=True,
         )
 

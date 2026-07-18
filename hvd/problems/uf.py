@@ -6,22 +6,22 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
 
-from .base import ConstrainedMOP, fixed_n_obj
+from .base import CMOP, fixed_n_obj
 from .reference import generic_sphere, get_ref_dirs
 
 
-class _UF2D(ConstrainedMOP):
-    n_obj = 2
+class _UF2D(CMOP):
+    default_n_obj = 2
     _default_lower = -1.0
     _default_upper = 1.0
 
     def __init__(
         self,
         n_var: int = 30,
+        n_obj: int | None = None,
         xl: ArrayLike | None = None,
         xu: ArrayLike | None = None,
         boundary_constraints: bool = False,
-        n_obj: int | None = None,
     ) -> None:
         if n_var < 3:
             raise ValueError("UF1--UF7 require n_var >= 3")
@@ -34,7 +34,7 @@ class _UF2D(ConstrainedMOP):
         self._even = jnp.arange(1, n_var, 2)  # MATLAB 2,4,...
         super().__init__(
             n_var=n_var,
-            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
+            n_obj=fixed_n_obj(n_obj, self.default_n_obj, type(self).__name__),
             xl=xl,
             xu=xu,
             boundary_constraints=boundary_constraints,
@@ -62,9 +62,7 @@ class UF1(_UF2D):
 
 class UF2(UF1):
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        def residual(
-            idx: jnp.ndarray, trig: Callable[[jnp.ndarray], jnp.ndarray]
-        ) -> jnp.ndarray:
+        def residual(idx: jnp.ndarray, trig: Callable[[jnp.ndarray], jnp.ndarray]) -> jnp.ndarray:
             phase = 6 * jnp.pi * x[0] + (idx + 1) * jnp.pi / self.n_var
             envelope = (
                 0.3 * x[0] ** 2 * jnp.cos(24 * jnp.pi * x[0] + 4 * (idx + 1) * jnp.pi / self.n_var)
@@ -153,16 +151,16 @@ class UF7(_UF2D):
         return 1 - f
 
 
-class _UF3D(ConstrainedMOP):
-    n_obj = 3
+class _UF3D(CMOP):
+    default_n_obj = 3
 
     def __init__(
         self,
         n_var: int = 30,
+        n_obj: int | None = None,
         xl: ArrayLike | None = None,
         xu: ArrayLike | None = None,
         boundary_constraints: bool = False,
-        n_obj: int | None = None,
     ) -> None:
         if n_var < 5:
             raise ValueError("UF8--UF10 require n_var >= 5")
@@ -174,11 +172,11 @@ class _UF3D(ConstrainedMOP):
         self._groups = (jnp.arange(3, n_var, 3), jnp.arange(4, n_var, 3), jnp.arange(2, n_var, 3))
         super().__init__(
             n_var=n_var,
-            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
+            n_obj=fixed_n_obj(n_obj, self.default_n_obj, type(self).__name__),
             xl=xl,
             xu=xu,
-            n_eq_constr=self.n_eq_constr,
-            n_ieq_constr=self.n_ieq_constr,
+            n_eq_constr=self.default_n_eq_constr,
+            n_ieq_constr=self.default_n_ieq_constr,
             boundary_constraints=boundary_constraints,
         )
 

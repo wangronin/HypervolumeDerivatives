@@ -28,11 +28,7 @@ rcParams["ytick.major.width"] = 1
 
 class FLatConvex(MOP):
     def __init__(self, **kwargs):
-        self.n_obj = 2
-        self.n_var = 1
-        self.xl = 0 * np.ones(self.n_var)
-        self.xu = 1 * np.ones(self.n_var)
-        super().__init__(n_var=self.n_var, n_obj=self.n_obj, xl=self.xl, xu=self.xu)
+        super().__init__(n_var=1, n_obj=2, xl=0.0, xu=1.0)
 
     def _objective(self, t: float) -> jnp.ndarray:
         t = t * 0.9 + 0.05  # rescale `t` to the interval [0.05, 0.95]
@@ -44,11 +40,7 @@ class FLatConvex(MOP):
 
 class Linear(MOP):
     def __init__(self, **kwargs):
-        self.n_obj = 2
-        self.n_var = 1
-        self.xl = 0 * np.ones(self.n_var)
-        self.xu = 1 * np.ones(self.n_var)
-        super().__init__(n_var=self.n_var, n_obj=self.n_obj, xl=self.xl, xu=self.xu)
+        super().__init__(n_var=1, n_obj=2, xl=0.0, xu=1.0)
 
     def _objective(self, t: float) -> jnp.ndarray:
         t *= 0.3

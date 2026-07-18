@@ -1,6 +1,6 @@
-from functools import partial
-from typing import Any, Callable
 import warnings
+from functools import partial
+from typing import Any, Callable, ClassVar
 
 import jax.numpy as jnp
 import numpy as np
@@ -28,6 +28,18 @@ def fixed_n_obj(n_obj: int | None, default: int, problem_name: str) -> int:
     return default
 
 
+def fixed_n_var(n_var: int | None, default: int, problem_name: str) -> int:
+    """Return a problem's fixed decision-space dimension and warn about overrides."""
+    if n_var is not None:
+        warnings.warn(
+            f"{problem_name} has a fixed n_var={default}; the supplied n_var={n_var} "
+            "is ignored because it cannot be changed for this problem.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return default
+
+
 def add_boundary_constraints(
     ieq_func: JaxFunction | None,
     xl: np.ndarray,
@@ -47,43 +59,39 @@ def add_boundary_constraints(
 class MOP:
     """Base contract for a differentiable multi-objective problem."""
 
+    default_n_obj: ClassVar[int]
     n_obj: int
     n_var: int
     xl: np.ndarray
     xu: np.ndarray
 
     def __init__(self, n_var: int, n_obj: int, xl: ArrayLike, xu: ArrayLike) -> None:
-        self.n_var = n_var
-        self.n_obj = n_obj
-        self.xl = np.asarray(xl)
-        self.xu = np.asarray(xu)
-        self._validate_problem_definition()
+        self.n_var = self._validate_dimension("n_var", n_var)
+        self.n_obj = self._validate_dimension("n_obj", n_obj)
+        self.xl = self._broadcast_bound("xl", xl)
+        self.xu = self._broadcast_bound("xu", xu)
+        self._validate_bound()
         self._obj_func = jit(partial(self.__class__._objective, self))
         self._objective_jacobian = jit(jacrev(self._obj_func))
         self._objective_hessian = jit(hessian(self._obj_func))
         self._objective_batch = jit(vmap(self._obj_func))
         self.CPU_time: int = 0  # in nanoseconds
 
-    def _validate_problem_definition(self) -> None:
-        """Validate and normalize the metadata supplied by a concrete problem."""
-        for name in ("n_obj", "n_var", "xl", "xu"):
-            if not hasattr(self, name):
-                raise TypeError(f"{type(self).__name__} must define `{name}` before calling MOP.__init__().")
+    @staticmethod
+    def _validate_dimension(name: str, value: int) -> int:
+        if not isinstance(value, (int, np.integer)) or value < 1:
+            raise ValueError(f"`{name}` must be a positive integer.")
+        return int(value)
 
-        if not isinstance(self.n_obj, (int, np.integer)) or self.n_obj < 1:
-            raise ValueError("`n_obj` must be a positive integer.")
-        if not isinstance(self.n_var, (int, np.integer)) or self.n_var < 1:
-            raise ValueError("`n_var` must be a positive integer.")
-        self.n_obj = int(self.n_obj)
-        self.n_var = int(self.n_var)
-
-        try:
-            self.xl = np.broadcast_to(np.asarray(self.xl, dtype=float), (self.n_var,)).copy()
-            self.xu = np.broadcast_to(np.asarray(self.xu, dtype=float), (self.n_var,)).copy()
-        except ValueError as error:
-            raise ValueError("`xl` and `xu` must be scalar or have shape `(n_var,)`.") from error
+    def _validate_bound(self) -> None:
         if np.any(self.xl > self.xu):
             raise ValueError("Every lower bound in `xl` must be less than or equal to `xu`.")
+
+    def _broadcast_bound(self, name: str, value: ArrayLike) -> np.ndarray:
+        try:
+            return np.broadcast_to(np.asarray(value, dtype=float), (self.n_var,)).copy()
+        except ValueError as error:
+            raise ValueError(f"`{name}` must be scalar or have shape `(n_var,)`.") from error
 
     def objective(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._obj_func(x))
@@ -121,9 +129,11 @@ class MOP:
         return np.array(self._objective_hessian(x)).reshape(self.n_obj, self.n_var, self.n_var)
 
 
-class ConstrainedMOP(MOP):
-    n_eq_constr: int = 0
-    n_ieq_constr: int = 0
+class CMOP(MOP):
+    """MOP with class-level constraint defaults and instance-level effective counts."""
+
+    default_n_eq_constr: ClassVar[int] = 0
+    default_n_ieq_constr: ClassVar[int] = 0
 
     def __init__(
         self,

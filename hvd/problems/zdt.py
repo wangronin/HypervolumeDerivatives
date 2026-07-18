@@ -10,20 +10,20 @@ _EPS = 1e-12
 
 
 class ZDT(MOP):
-    n_obj = 2
+    default_n_obj = 2
 
     def __init__(
         self,
         n_var: int = 30,
+        n_obj: int | None = None,
         xl: ArrayLike | None = None,
         xu: ArrayLike | None = None,
-        n_obj: int | None = None,
     ) -> None:
         super().__init__(
             n_var=n_var,
-            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
-            xl=np.zeros(n_var) if xl is None else xl,
-            xu=np.ones(n_var) if xu is None else xu,
+            n_obj=fixed_n_obj(n_obj, self.default_n_obj, type(self).__name__),
+            xl=0.0 if xl is None else xl,
+            xu=1.0 if xu is None else xu,
         )
 
     def get_pareto_set(self, n_pareto_points: int = 100, kind: str = "linear") -> np.ndarray:
@@ -76,12 +76,18 @@ class ZDT3(ZDT1):
 
 
 class ZDT4(ZDT1):
-    def __init__(self, n_var: int = 10, n_obj: int | None = None) -> None:
+    def __init__(
+        self,
+        n_var: int = 10,
+        n_obj: int | None = None,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+    ) -> None:
         super().__init__(
             n_var,
-            xl=np.r_[0.0, np.full(n_var - 1, -5.0)],
-            xu=np.r_[1.0, np.full(n_var - 1, 5.0)],
             n_obj=n_obj,
+            xl=np.r_[0.0, np.full(n_var - 1, -5.0)] if xl is None else xl,
+            xu=np.r_[1.0, np.full(n_var - 1, 5.0)] if xu is None else xu,
         )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -90,8 +96,14 @@ class ZDT4(ZDT1):
 
 
 class ZDT6(ZDT):
-    def __init__(self, n_var: int = 10, n_obj: int | None = None) -> None:
-        super().__init__(n_var, n_obj=n_obj)
+    def __init__(
+        self,
+        n_var: int = 10,
+        n_obj: int | None = None,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+    ) -> None:
+        super().__init__(n_var, n_obj=n_obj, xl=xl, xu=xu)
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         f1 = 1 - jnp.exp(-4 * x[0]) * jnp.sin(6 * jnp.pi * x[0]) ** 6

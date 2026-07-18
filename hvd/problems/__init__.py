@@ -1,6 +1,6 @@
 import os
 
-from .base import ConstrainedMOP, JaxFunction, MOP
+from .base import CMOP, MOP, JaxFunction
 from .cf import CF1, CF2, CF3, CF4, CF5, CF6, CF7, CF8, CF9, CF10
 from .dtlz import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7
 from .eqdtlz import (
@@ -26,7 +26,7 @@ os.environ["JAX_ENABLE_X64"] = "True"
 
 __all__ = [
     "MOP",
-    "ConstrainedMOP",
+    "CMOP",
     "JaxFunction",
     "Eq1DTLZ1",
     "Eq1DTLZ2",

@@ -63,14 +63,14 @@ refs = {
 
 N = 15
 problems = [
-    Eq1DTLZ1(3, 11),
-    Eq1DTLZ2(3, 11),
-    Eq1DTLZ3(3, 11),
-    Eq1DTLZ4(3, 11),
-    Eq1IDTLZ1(3, 11),
-    Eq1IDTLZ2(3, 11),
-    Eq1IDTLZ3(3, 11),
-    Eq1IDTLZ4(3, 11),
+    Eq1DTLZ1(n_var=11, n_obj=3),
+    Eq1DTLZ2(n_var=11, n_obj=3),
+    Eq1DTLZ3(n_var=11, n_obj=3),
+    Eq1DTLZ4(n_var=11, n_obj=3),
+    Eq1IDTLZ1(n_var=11, n_obj=3),
+    Eq1IDTLZ2(n_var=11, n_obj=3),
+    Eq1IDTLZ3(n_var=11, n_obj=3),
+    Eq1IDTLZ4(n_var=11, n_obj=3),
 ]
 
 for problem in problems:
