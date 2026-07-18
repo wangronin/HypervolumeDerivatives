@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
 
-from .base import ConstrainedMOP
+from .base import ConstrainedMOP, fixed_n_obj
 from .reference import generic_sphere, get_ref_dirs
 
 
@@ -21,6 +21,7 @@ class _UF2D(ConstrainedMOP):
         xl: ArrayLike | None = None,
         xu: ArrayLike | None = None,
         boundary_constraints: bool = False,
+        n_obj: int | None = None,
     ) -> None:
         if n_var < 3:
             raise ValueError("UF1--UF7 require n_var >= 3")
@@ -33,7 +34,7 @@ class _UF2D(ConstrainedMOP):
         self._even = jnp.arange(1, n_var, 2)  # MATLAB 2,4,...
         super().__init__(
             n_var=n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=xl,
             xu=xu,
             boundary_constraints=boundary_constraints,
@@ -161,6 +162,7 @@ class _UF3D(ConstrainedMOP):
         xl: ArrayLike | None = None,
         xu: ArrayLike | None = None,
         boundary_constraints: bool = False,
+        n_obj: int | None = None,
     ) -> None:
         if n_var < 5:
             raise ValueError("UF8--UF10 require n_var >= 5")
@@ -172,9 +174,11 @@ class _UF3D(ConstrainedMOP):
         self._groups = (jnp.arange(3, n_var, 3), jnp.arange(4, n_var, 3), jnp.arange(2, n_var, 3))
         super().__init__(
             n_var=n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=xl,
             xu=xu,
+            n_eq_constr=self.n_eq_constr,
+            n_ieq_constr=self.n_ieq_constr,
             boundary_constraints=boundary_constraints,
         )
 

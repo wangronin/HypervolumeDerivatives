@@ -1,5 +1,6 @@
 from functools import partial
 from typing import Any, Callable
+import warnings
 
 import jax.numpy as jnp
 import numpy as np
@@ -8,16 +9,30 @@ from numpy.typing import ArrayLike
 
 from ..utils import timeit
 
+JaxFunction = Callable[[jnp.ndarray], jnp.ndarray]
 
-def hessian(fun: Callable[[jnp.ndarray], jnp.ndarray]) -> Callable[[jnp.ndarray], jnp.ndarray]:
+
+def hessian(fun: JaxFunction) -> JaxFunction:
     return jit(jacfwd(jacrev(fun)))
 
 
+def fixed_n_obj(n_obj: int | None, default: int, problem_name: str) -> int:
+    """Return a problem's fixed objective count and warn about explicit overrides."""
+    if n_obj is not None:
+        warnings.warn(
+            f"{problem_name} has a fixed n_obj={default}; the supplied n_obj={n_obj} "
+            "is ignored because it cannot be changed for this problem.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return default
+
+
 def add_boundary_constraints(
-    ieq_func: Callable[[jnp.ndarray], jnp.ndarray] | None,
+    ieq_func: JaxFunction | None,
     xl: np.ndarray,
     xu: np.ndarray,
-) -> Callable[[jnp.ndarray], jnp.ndarray]:
+) -> JaxFunction:
 
     def func(x: jnp.ndarray) -> jnp.ndarray:
         return (
@@ -127,10 +142,10 @@ class ConstrainedMOP(MOP):
 
         super().__init__(n_var=n_var, n_obj=n_obj, xl=xl, xu=xu)
 
-        self._eq: Callable[[jnp.ndarray], jnp.ndarray] | None = (
+        self._eq: JaxFunction | None = (
             jit(partial(self.__class__._eq_constraint, self)) if self.n_eq_constr > 0 else None
         )
-        self._ieq: Callable[[jnp.ndarray], jnp.ndarray] | None = (
+        self._ieq: JaxFunction | None = (
             jit(partial(self.__class__._ieq_constraint, self)) if self.n_ieq_constr > 0 else None
         )
         if boundary_constraints:

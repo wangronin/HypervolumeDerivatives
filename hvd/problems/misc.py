@@ -6,19 +6,23 @@ os.environ["JAX_ENABLE_X64"] = "True"
 import jax
 import jax.numpy as jnp
 import numpy as np
-from numpy.typing import ArrayLike
 
 from ..utils import timeit
-from .base import MOP, ConstrainedMOP
+from .base import ConstrainedMOP, MOP, fixed_n_obj
 
 
 class DENT(MOP):
-    def __init__(self, **kwargs):
+    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
         self.n_obj = 2
         self.n_var = 2
         self.xl = -2 * np.ones(self.n_var)
         self.xu = 2 * np.ones(self.n_var)
-        super().__init__(n_var=self.n_var, n_obj=self.n_obj, xl=self.xl, xu=self.xu)
+        super().__init__(
+            n_var=self.n_var,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
+            xl=self.xl,
+            xu=self.xu,
+        )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         term1 = jnp.sqrt(1 + (x[0] + x[1]) ** 2) + jnp.sqrt(1 + (x[0] - x[1]) ** 2)
@@ -37,7 +41,7 @@ class DENT(MOP):
 
 
 class CONV3(ConstrainedMOP):
-    def __init__(self, **kwargs):
+    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
         self.n_obj = 3
         self.n_var = 3
         self.xl = -3 * np.ones(self.n_var)
@@ -45,7 +49,13 @@ class CONV3(ConstrainedMOP):
         self.a1 = -1 * np.ones(self.n_var)
         self.a2 = np.ones(self.n_var)
         self.a3 = np.r_[-1 * np.ones(self.n_var - 1), 1]
-        super().__init__(n_var=self.n_var, n_obj=self.n_obj, xl=self.xl, xu=self.xu, **kwargs)
+        super().__init__(
+            n_var=self.n_var,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
+            xl=self.xl,
+            xu=self.xu,
+            **kwargs,
+        )
 
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -62,13 +72,19 @@ class CONV3(ConstrainedMOP):
 class CONV4(ConstrainedMOP):
     """Convex Problem 4"""
 
-    def __init__(self, **kwargs):
+    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
         self.n_obj = 4
         self.n_var = 4
         self.xl = -10 * np.ones(self.n_var)
         self.xu = 10 * np.ones(self.n_var)
         self.centers = np.eye(self.n_var)
-        super().__init__(n_var=self.n_var, n_obj=self.n_obj, xl=self.xl, xu=self.xu, **kwargs)
+        super().__init__(
+            n_var=self.n_var,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
+            xl=self.xl,
+            xu=self.xu,
+            **kwargs,
+        )
 
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -84,12 +100,18 @@ class CONV4(ConstrainedMOP):
 class CONV4_2F(ConstrainedMOP):
     """Convex Problem 4 with 2 disconnected Pareto fronts"""
 
-    def __init__(self, **kwargs):
+    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
         self.n_obj = 4
         self.n_var = 4
         self.xl = -10 * np.ones(self.n_var)
         self.xu = 10 * np.ones(self.n_var)
-        super().__init__(n_var=self.n_var, n_obj=self.n_obj, xl=self.xl, xu=self.xu, **kwargs)
+        super().__init__(
+            n_var=self.n_var,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
+            xl=self.xl,
+            xu=self.xu,
+            **kwargs,
+        )
 
     @timeit
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -118,44 +140,8 @@ class CONV4_2F(ConstrainedMOP):
         return np.array([self._objective(x) for x in np.vstack([X_1, X_2])])
 
 
-class UF8(MOP):
-    """Original UF8 implementation retained as the objective base for CF8/CF9."""
-
-    def __init__(
-        self,
-        n_var: int = 30,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
-        **kwargs,
-    ) -> None:
-        if xl is None:
-            xl = np.r_[0.0, 0.0, np.full(n_var - 2, -2.0)]
-        if xu is None:
-            xu = np.r_[1.0, 1.0, np.full(n_var - 2, 2.0)]
-        super().__init__(n_var=n_var, n_obj=3, xl=xl, xu=xu, **kwargs)
-
-    @timeit
-    def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
-        indices = jnp.arange(1, self.n_var + 1)
-        groups = (
-            jnp.arange(3, self.n_var, 3),
-            jnp.arange(4, self.n_var, 3),
-            jnp.arange(2, self.n_var, 3),
-        )
-        y = x - 2 * x[1] * jnp.sin(2 * jnp.pi * x[0] + indices * jnp.pi / self.n_var)
-        penalties = [2 * jnp.mean(y[group] ** 2) for group in groups]
-        a, b = 0.5 * jnp.pi * x[0], 0.5 * jnp.pi * x[1]
-        return jnp.array(
-            [
-                jnp.cos(a) * jnp.cos(b) + penalties[0],
-                jnp.cos(a) * jnp.sin(b) + penalties[1],
-                jnp.sin(a) + penalties[2],
-            ]
-        )
-
-
 class DisConnected(ConstrainedMOP):
-    def __init__(self, **kwargs):
+    def __init__(self, n_obj: int | None = None, **kwargs) -> None:
         self.n_obj = 2
         self.n_var = 2
         self.n_ieq_constr = 2
@@ -164,7 +150,7 @@ class DisConnected(ConstrainedMOP):
         self.xu = np.array([1, 1])
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_eq_constr=self.n_eq_constr,

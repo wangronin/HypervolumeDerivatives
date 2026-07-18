@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
 
-from .base import MOP
+from .base import MOP, fixed_n_obj
 
 _EPS = 1e-12
 
@@ -13,11 +13,15 @@ class ZDT(MOP):
     n_obj = 2
 
     def __init__(
-        self, n_var: int = 30, xl: ArrayLike | None = None, xu: ArrayLike | None = None
+        self,
+        n_var: int = 30,
+        xl: ArrayLike | None = None,
+        xu: ArrayLike | None = None,
+        n_obj: int | None = None,
     ) -> None:
         super().__init__(
             n_var=n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=np.zeros(n_var) if xl is None else xl,
             xu=np.ones(n_var) if xu is None else xu,
         )
@@ -72,11 +76,12 @@ class ZDT3(ZDT1):
 
 
 class ZDT4(ZDT1):
-    def __init__(self, n_var: int = 10) -> None:
+    def __init__(self, n_var: int = 10, n_obj: int | None = None) -> None:
         super().__init__(
             n_var,
             xl=np.r_[0.0, np.full(n_var - 1, -5.0)],
             xu=np.r_[1.0, np.full(n_var - 1, 5.0)],
+            n_obj=n_obj,
         )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -85,8 +90,8 @@ class ZDT4(ZDT1):
 
 
 class ZDT6(ZDT):
-    def __init__(self, n_var: int = 10) -> None:
-        super().__init__(n_var)
+    def __init__(self, n_var: int = 10, n_obj: int | None = None) -> None:
+        super().__init__(n_var, n_obj=n_obj)
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         f1 = 1 - jnp.exp(-4 * x[0]) * jnp.sin(6 * jnp.pi * x[0]) ** 6

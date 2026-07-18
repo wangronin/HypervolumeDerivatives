@@ -16,6 +16,7 @@ class _PymooBackedMOP(ConstrainedMOP):
     def __init__(self, problem: PymooProblem, boundary_constraints: bool = True) -> None:
         if not isinstance(problem, PymooProblem):
             raise TypeError(f"Expected a pymoo Problem, got {type(problem).__name__}.")
+
         self._problem = problem
         self.n_obj = self._problem.n_obj
         self.n_var = self._problem.n_var

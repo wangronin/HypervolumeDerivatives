@@ -14,12 +14,14 @@ import numpy as np
 from jax.numpy import pi
 
 from ..utils import timeit
-from .base import ConstrainedMOP
-from .misc import UF8
+from .base import ConstrainedMOP, fixed_n_obj
+from .uf import UF8
 
 
 class CF1(ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         self.n_obj = 2
         self.n_var = n_var
         self.xl = np.zeros(self.n_var)
@@ -27,7 +29,7 @@ class CF1(ConstrainedMOP):
         self.n_ieq_constr = 1
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_ieq_constr=self.n_ieq_constr,
@@ -70,7 +72,9 @@ class CF2(ConstrainedMOP):
         session and competition." (2008): 1-30.
     """
 
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         self.n_obj = 2
         self.n_var = n_var
         self.xl = np.r_[0, np.zeros(self.n_var - 1) - 1]
@@ -78,7 +82,7 @@ class CF2(ConstrainedMOP):
         self.n_ieq_constr = 1
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_ieq_constr=self.n_ieq_constr,
@@ -121,7 +125,9 @@ class CF2(ConstrainedMOP):
 
 
 class CF3(ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         self.n_obj = 2
         self.n_var = n_var
         self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
@@ -129,7 +135,7 @@ class CF3(ConstrainedMOP):
         self.n_ieq_constr = 1
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_ieq_constr=self.n_ieq_constr,
@@ -165,7 +171,9 @@ class CF3(ConstrainedMOP):
 
 
 class CF4(ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         self.n_obj = 2
         self.n_var = n_var
         self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
@@ -173,7 +181,7 @@ class CF4(ConstrainedMOP):
         self.n_ieq_constr = 1
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_ieq_constr=self.n_ieq_constr,
@@ -217,7 +225,9 @@ class CF4(ConstrainedMOP):
 
 
 class CF5(ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         self.n_obj = 2
         self.n_var = n_var
         self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
@@ -225,7 +235,7 @@ class CF5(ConstrainedMOP):
         self.n_ieq_constr = 1
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_ieq_constr=self.n_ieq_constr,
@@ -274,7 +284,9 @@ class CF5(ConstrainedMOP):
 
 
 class CF6(ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         self.n_obj = 2
         self.n_var = n_var
         self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
@@ -282,7 +294,7 @@ class CF6(ConstrainedMOP):
         self.n_ieq_constr = 2
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_ieq_constr=self.n_ieq_constr,
@@ -332,7 +344,9 @@ class CF6(ConstrainedMOP):
 
 
 class CF7(ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         self.n_obj = 2
         self.n_var = n_var
         self.xl = np.r_[0, np.zeros(self.n_var - 1) - 2]
@@ -340,7 +354,7 @@ class CF7(ConstrainedMOP):
         self.n_ieq_constr = 2
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_ieq_constr=self.n_ieq_constr,
@@ -388,16 +402,20 @@ class CF7(ConstrainedMOP):
         return np.c_[f1, f2]
 
 
-class CF8(UF8, ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+class CF8(UF8):
+    n_ieq_constr = 1
+
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         xl = np.r_[0.0, 0.0, np.full(n_var - 2, -4.0)]
         xu = np.r_[1.0, 1.0, np.full(n_var - 2, 4.0)]
         super().__init__(
             n_var=n_var,
             xl=xl,
             xu=xu,
-            n_ieq_constr=1,
             boundary_constraints=boundary_constraints,
+            n_obj=n_obj,
         )
 
     @timeit
@@ -427,8 +445,10 @@ class CF8(UF8, ConstrainedMOP):
         return R
 
 
-class CF9(CF8, ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+class CF9(CF8):
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         xl = np.r_[0.0, 0.0, np.full(n_var - 2, -2.0)]
         xu = np.r_[1.0, 1.0, np.full(n_var - 2, 2.0)]
         UF8.__init__(
@@ -436,8 +456,8 @@ class CF9(CF8, ConstrainedMOP):
             n_var=n_var,
             xl=xl,
             xu=xu,
-            n_ieq_constr=1,
             boundary_constraints=boundary_constraints,
+            n_obj=n_obj,
         )
 
     @timeit
@@ -463,7 +483,9 @@ class CF9(CF8, ConstrainedMOP):
 
 
 class CF10(ConstrainedMOP):
-    def __init__(self, n_var: int = 10, boundary_constraints: bool = False) -> None:
+    def __init__(
+        self, n_var: int = 10, boundary_constraints: bool = False, n_obj: int | None = None
+    ) -> None:
         self.n_var = n_var
         self.n_ieq_constr = 1
         self.n_obj = 3
@@ -471,7 +493,7 @@ class CF10(ConstrainedMOP):
         self.xu = np.r_[1, 1, np.zeros(self.n_var - 2) + 2]
         super().__init__(
             n_var=self.n_var,
-            n_obj=self.n_obj,
+            n_obj=fixed_n_obj(n_obj, self.n_obj, type(self).__name__),
             xl=self.xl,
             xu=self.xu,
             n_ieq_constr=self.n_ieq_constr,
