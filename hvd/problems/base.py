@@ -137,9 +137,9 @@ class MOP:
         """
         if isinstance(problem, cls):
             return problem
-        from ._pymoo_wrapper import _adapt_pymoo_problem
+        from ._pymoo_wrapper import _PymooBackedProblem
 
-        return _adapt_pymoo_problem(problem, boundary_constraints=boundary_constraints)
+        return _PymooBackedProblem(problem, boundary_constraints=boundary_constraints)
 
 
 class CMOP(MOP):

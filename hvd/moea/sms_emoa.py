@@ -15,7 +15,7 @@ from pymoo.util.dominator import Dominator
 from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 from pymoo.util.normalization import normalize
 
-from .exact import ExactHypervolume
+from ..exact import ExactHypervolume
 
 # NOTE: speedup the MC hypervolume contribution with `numba`
 
@@ -64,7 +64,7 @@ class ApproximateMonteCarloHypervolume(DynamicHypervolume):
         super().__init__(ref_point, **kwargs)
 
     def _calc(self, ref_point, F):
-        (N, M) = F.shape
+        N, M = F.shape
 
         ideal = F.min(axis=0)
         V = np.prod(ref_point - ideal)

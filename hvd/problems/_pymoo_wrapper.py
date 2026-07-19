@@ -82,11 +82,6 @@ class _PymooBackedProblem(CMOP):
         return method(*args, **kwargs)
 
 
-def _adapt_pymoo_problem(problem: PymooProblem, boundary_constraints: bool) -> MOP:
-    """Wrap a pymoo problem in the single CMOP-backed adapter."""
-    return _PymooBackedProblem(problem, boundary_constraints=boundary_constraints)
-
-
 class _PymooProblemAdapter(PymooProblem):
     """Wrap of the problem I wrote into `Pymoo`'s problem"""
 

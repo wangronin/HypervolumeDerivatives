@@ -19,9 +19,8 @@ from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
 
-from hvd.moead import ConstraintAwareMOEAD
+from hvd.moea import SMSEMOA, ConstraintAwareMOEAD
 from hvd.problems import *
-from hvd.sms_emoa import SMSEMOA
 
 N = 30
 n_gen = 300
@@ -77,33 +76,33 @@ def minimize(
     return data
 
 
-def get_algorithm(n_objective: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:
-    if n_objective == 2:
+def get_algorithm(n_obj: int, algorithm_name: str, constrained: bool) -> GeneticAlgorithm:
+    if n_obj == 2:
         pop_size = 100
-    elif n_objective == 3:
+    elif n_obj == 3:
         pop_size = 300
-    elif n_objective == 4:
+    elif n_obj == 4:
         pop_size = 600
 
     if algorithm_name == "NSGA-II":
         algorithm = NSGA2(pop_size=pop_size)
     elif algorithm_name == "NSGA-III":
         # create the reference directions to be used for the optimization
-        if n_objective == 2:
+        if n_obj == 2:
             ref_dirs = get_reference_directions("das-dennis", 2, n_partitions=pop_size - 1)
-        elif n_objective == 3:
+        elif n_obj == 3:
             ref_dirs = get_reference_directions("das-dennis", 3, n_partitions=23)
-        elif n_objective == 4:
+        elif n_obj == 4:
             ref_dirs = get_reference_directions("das-dennis", 4, n_partitions=13)
 
         algorithm = NSGA3(pop_size=pop_size, ref_dirs=ref_dirs)
     elif algorithm_name == "MOEAD":
         # the reference points are set to make the population size ~100
-        if n_objective == 2:
+        if n_obj == 2:
             ref_dirs = get_reference_directions("uniform", 2, n_partitions=99)
-        elif n_objective == 3:
+        elif n_obj == 3:
             ref_dirs = get_reference_directions("uniform", 3, n_partitions=23)
-        elif n_objective == 4:
+        elif n_obj == 4:
             ref_dirs = get_reference_directions("uniform", 3, n_partitions=14)
             ref_dirs = np.array(random.sample(ref_dirs.tolist(), pop_size))
         algorithm = ConstraintAwareMOEAD(
