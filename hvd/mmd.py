@@ -4,10 +4,21 @@ from typing import Dict, List, Tuple, Union
 import jax.numpy as jnp
 import numpy as np
 from jax import jacfwd, jacrev, jit, vmap
-from scipy.linalg import block_diag
 from scipy.spatial.distance import cdist
 
 from .reference_set import ReferenceSet
+
+
+@jit
+def _assemble_decision_hessian(MMDdY2, MMDdY, YdX, YdX2):
+    """Apply the Hessian chain rule to all point-pair blocks at once."""
+    blocks = jnp.einsum("mai,mnab,nbj->mnij", YdX, MMDdY2, YdX)
+    diagonal = jnp.einsum("ma,maij->mij", MMDdY, YdX2)
+    indices = jnp.arange(len(YdX))
+    blocks = blocks.at[indices, indices].add(diagonal)
+    return blocks.transpose(0, 2, 1, 3).reshape(
+        len(YdX) * YdX.shape[2], len(YdX) * YdX.shape[2]
+    )
 
 @jit
 def rational_quadratic(x: np.ndarray, y: np.ndarray, theta: float = 1.0, alpha: float = 1.0) -> float:
@@ -67,6 +78,7 @@ class MMD:
         self.k_dx2 = jit(jacfwd(jacrev(self.k)))
         self.k_dxdy = jit(jacfwd(jacrev(self.k), argnums=1))  # cross second-order derivatives of the kernel
         self._kernel_gradient = jit(self._build_kernel_gradient())
+        self._kernel_hessian = jit(self._build_kernel_hessian())
 
     def _build_kernel_gradient(self):
         """Build a vectorized objective-space MMD gradient."""
@@ -80,6 +92,25 @@ class MMD:
             return 2 * (yy_dx / len(Y) ** 2 - yr_dx.sum(axis=1) / (len(Y) * len(reference_set)))
 
         return gradient
+
+    def _build_kernel_hessian(self):
+        pairwise_dx2 = vmap(vmap(self.k_dx2, in_axes=(None, 0)), in_axes=(0, None))
+        pairwise_dxdy = vmap(vmap(self.k_dxdy, in_axes=(None, 0)), in_axes=(0, None))
+
+        def hessian(Y, reference_set):
+            N, M = len(Y), len(reference_set)
+            yy_dx2 = pairwise_dx2(Y, Y)
+            yr_dx2 = pairwise_dx2(Y, reference_set)
+            indices = jnp.arange(N)
+            diagonal = 2 * (
+                (yy_dx2.sum(axis=1) - yy_dx2[indices, indices]) / N**2
+                - yr_dx2.sum(axis=1) / (N * M)
+            )
+            # Block (m, l) uses d^2 k(Y[l], Y[m]) / dY[l] dY[m].
+            blocks = 2 * pairwise_dxdy(Y, Y).transpose(1, 0, 2, 3) / N**2
+            return blocks.at[indices, indices].set(diagonal)
+
+        return hessian
 
     def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
         """Compute the indicator value
@@ -167,28 +198,18 @@ class MMD:
         MMDdY = np.asarray(self._kernel_gradient(jnp.asarray(Y), jnp.asarray(reference_set)))
         MMDdX = np.einsum("ij,ijk->ik", MMDdY, YdX)
         N, dim_y = Y.shape
-        dim_x = self.n_var
-        reference_set = self.ref.reference_set
-        N, M = len(Y), len(reference_set)
-        MMDdY2 = np.zeros((N * dim_y, N * dim_y))
-        MMDdX2 = np.zeros((N * dim_x, N * dim_x))
-        for l in range(N):
-            for m in range(l, N):
-                # compute MMDdY2
-                r, c = slice(m * dim_y, (m + 1) * dim_y), slice(l * dim_y, (l + 1) * dim_y)
-                if m != l:
-                    MMDdY2[r, c] = 2 * self.k_dxdy(Y[l], Y[m]) / N**2
-                    MMDdY2[c, r] = MMDdY2[r, c].T
-                else:
-                    # TODO: `term1` is only correct for stationary kernels
-                    term1 = np.sum([self.k_dx2(Y[l], Y[i]) for i in range(N) if i != l], axis=0)
-                    term2 = np.sum([self.k_dx2(Y[l], reference_set[i]) for i in range(M)], axis=0)
-                    MMDdY2[r, c] = 2 * (term1 / N**2 - term2 / (N * M))
-                # compute MMDdX2
-                rr, cc = slice(m * dim_x, (m + 1) * dim_x), slice(l * dim_x, (l + 1) * dim_x)
-                MMDdX2[rr, cc] = YdX[m].T @ MMDdY2[r, c] @ YdX[l]
-                MMDdX2[cc, rr] = MMDdX2[rr, cc].T
-        MMDdX2 += block_diag(*np.einsum("ij,ij...->i...", MMDdY, YdX2))
+        MMDdY2_blocks = np.asarray(
+            self._kernel_hessian(jnp.asarray(Y), jnp.asarray(reference_set))
+        )
+        MMDdY2 = MMDdY2_blocks.transpose(0, 2, 1, 3).reshape(N * dim_y, N * dim_y)
+        MMDdX2 = np.asarray(
+            _assemble_decision_hessian(
+                jnp.asarray(MMDdY2_blocks),
+                jnp.asarray(MMDdY),
+                jnp.asarray(YdX),
+                jnp.asarray(YdX2),
+            )
+        )
         return dict(
             MMDdX2=MMDdX2,
             MMDdY2=MMDdY2,
@@ -274,6 +295,7 @@ class MMDMatching:
         self.k_dxdy = jit(jacfwd(jacrev(self.k), argnums=1))  # cross second-order derivatives of the kernel
         self.beta = beta  # the weight to scale the spread term, RKHS norm of images of `Y`
         self._kernel_gradient = jit(self._build_kernel_gradient())
+        self._kernel_hessian = jit(self._build_kernel_hessian())
 
     def _build_kernel_gradient(self):
         pairwise_dx = vmap(vmap(self.k_dx, in_axes=(None, 0)), in_axes=(0, None))
@@ -288,6 +310,24 @@ class MMDMatching:
             )
 
         return gradient
+
+    def _build_kernel_hessian(self):
+        pairwise_dx2 = vmap(vmap(self.k_dx2, in_axes=(None, 0)), in_axes=(0, None))
+        pairwise_dxdy = vmap(vmap(self.k_dxdy, in_axes=(None, 0)), in_axes=(0, None))
+        matched_dx2 = vmap(self.k_dx2)
+
+        def hessian(Y, matched_reference_set):
+            N = len(Y)
+            yy_dx2 = pairwise_dx2(Y, Y)
+            indices = jnp.arange(N)
+            diagonal = 2 * (
+                self.beta * (yy_dx2.sum(axis=1) - yy_dx2[indices, indices]) / N**2
+                - matched_dx2(Y, matched_reference_set) / N
+            )
+            blocks = 2 * self.beta * pairwise_dxdy(Y, Y).transpose(1, 0, 2, 3) / N**2
+            return blocks.at[indices, indices].set(diagonal)
+
+        return hessian
 
     def compute(self, X: np.ndarray = None, Y: np.ndarray = None) -> float:
         """Compute the indicator value
@@ -372,26 +412,18 @@ class MMDMatching:
         Y, YdX, YdX2, MMDdY, MMDdX = out["Y"], out["YdX"], out["YdX2"], out["MMDdY"], out["MMDdX"]
         YdX2 = np.array([self.hessian(x) for x in self._check_X(X)])
         N, dim_y = Y.shape
-        dim_x = self.n_decision_var
-        MMDdY2 = np.zeros((N * dim_y, N * dim_y))
-        MMDdX2 = np.zeros((N * dim_x, N * dim_x))
-        for l in range(N):
-            for m in range(l, N):
-                # compute MMDdY2
-                r, c = slice(m * dim_y, (m + 1) * dim_y), slice(l * dim_y, (l + 1) * dim_y)
-                if m != l:
-                    MMDdY2[r, c] = 2 * self.beta * self.k_dxdy(Y[l], Y[m]) / N**2
-                    MMDdY2[c, r] = MMDdY2[r, c].T
-                else:
-                    # TODO: `term1` is only correct for stationary kernels
-                    term1 = np.sum([self.k_dx2(Y[l], Y[i]) for i in range(N) if i != l], axis=0) / N**2
-                    term2 = self.k_dx2(Y[l], self.ref.reference_set[l]) / N
-                    MMDdY2[r, c] = 2 * (self.beta * term1 - term2)
-                # compute MMDdX2
-                rr, cc = slice(m * dim_x, (m + 1) * dim_x), slice(l * dim_x, (l + 1) * dim_x)
-                MMDdX2[rr, cc] = YdX[m].T @ MMDdY2[r, c] @ YdX[l]
-                MMDdX2[cc, rr] = MMDdX2[rr, cc].T
-        MMDdX2 += block_diag(*np.einsum("ij,ij...->i...", MMDdY, YdX2))
+        MMDdY2_blocks = np.asarray(
+            self._kernel_hessian(jnp.asarray(Y), jnp.asarray(self.ref.reference_set))
+        )
+        MMDdY2 = MMDdY2_blocks.transpose(0, 2, 1, 3).reshape(N * dim_y, N * dim_y)
+        MMDdX2 = np.asarray(
+            _assemble_decision_hessian(
+                jnp.asarray(MMDdY2_blocks),
+                jnp.asarray(MMDdY),
+                jnp.asarray(YdX),
+                jnp.asarray(YdX2),
+            )
+        )
         return dict(
             MMDdX2=MMDdX2,
             MMDdY2=MMDdY2,

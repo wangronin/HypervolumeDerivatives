@@ -6,7 +6,7 @@ from jax import jacfwd, jacrev, jit
 
 sys.path.insert(0, "./")
 
-from hvd.mmd import MMD
+from hvd.mmd import MMD, MMDMatching
 
 np.random.seed(42)
 
@@ -128,3 +128,27 @@ def test_supplied_jacobian_is_used_for_hessian_chain_rule():
     mmd = MMD(n_var=dim, n_obj=2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian)
     gradient, _ = mmd.compute_derivatives(X, compute_hessian=True, jacobian=zero_jacobian)
     assert np.allclose(gradient, 0)
+
+
+def test_matching_hessian_against_ad_with_fixed_matching():
+    beta = 0.37
+    mmd = MMDMatching(
+        n_var=2,
+        n_obj=2,
+        ref=ref,
+        func=lambda x: x,
+        jac=lambda _: np.eye(2),
+        beta=beta,
+    )
+    result = mmd.compute_hessian(X=Y)
+    matched_reference = jnp.asarray(mmd.ref.reference_set.copy())
+
+    def fixed_matching_indicator(points):
+        yy = jnp.array([kernel(y1, y2) for y1 in points for y2 in points])
+        matched = jnp.array([kernel(y, r) for y, r in zip(points, matched_reference)])
+        return beta * jnp.mean(yy) + jnp.mean(2 - 2 * matched)
+
+    hessian = jacfwd(jacrev(fixed_matching_indicator))(Y)
+    expected = hessian.reshape(N * 2, N * 2)
+
+    assert np.allclose(result["MMDdY2"], expected)
