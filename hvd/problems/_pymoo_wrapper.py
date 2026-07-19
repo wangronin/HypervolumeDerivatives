@@ -6,37 +6,30 @@ from pymoo.core.problem import Problem as PymooProblem
 from .base import CMOP, MOP
 
 
-class _PymooBackedMOP(CMOP):
-    """Adapt a JAX-compatible pymoo problem to the native analytical API.
+class _PymooBackedMixin:
+    """Shared behavior for JAX-compatible pymoo problem adapters.
 
     The wrapped ``_evaluate`` implementation must already use JAX-traceable
     operations; wrapping alone cannot make NumPy or autograd code traceable.
     """
 
-    def __init__(self, problem: PymooProblem, boundary_constraints: bool = True) -> None:
+    _problem: PymooProblem
+
+    @staticmethod
+    def _validate_problem_type(problem: PymooProblem) -> None:
         if not isinstance(problem, PymooProblem):
             raise TypeError(f"Expected a pymoo Problem, got {type(problem).__name__}.")
-
-        self._problem = problem
-        super().__init__(
-            n_var=problem.n_var,
-            n_obj=problem.n_obj,
-            xl=problem.xl,
-            xu=problem.xu,
-            n_eq_constr=getattr(problem, "n_eq_constr", 0),
-            n_ieq_constr=getattr(problem, "n_ieq_constr", 0),
-            boundary_constraints=boundary_constraints,
-        )
-        self._validate_jax_traceability()
 
     def _validate_jax_traceability(self) -> None:
         """Fail early when pymoo's evaluation cannot be traced by JAX."""
         x = jnp.zeros(self.n_var)
         outputs = [("objective output 'F'", self._objective)]
-        if self._ieq is not None:
-            outputs.append(("inequality constraints", self._ieq))
-        if self._eq is not None:
-            outputs.append(("equality constraints", self._eq))
+        ieq = getattr(self, "_ieq", None)
+        eq = getattr(self, "_eq", None)
+        if ieq is not None:
+            outputs.append(("inequality constraints", ieq))
+        if eq is not None:
+            outputs.append(("equality constraints", eq))
 
         for label, function in outputs:
             try:
@@ -71,6 +64,45 @@ class _PymooBackedMOP(CMOP):
     def get_pareto_front(self, *args, **kwargs) -> np.ndarray:
         method = getattr(self._problem, "get_pareto_front", None) or self._problem._calc_pareto_front
         return method(*args, **kwargs)
+
+
+class _PymooBackedMOP(_PymooBackedMixin, MOP):
+    """Adapt an unconstrained JAX-compatible pymoo problem."""
+
+    def __init__(self, problem: PymooProblem) -> None:
+        self._validate_problem_type(problem)
+        self._problem = problem
+        super().__init__(n_var=problem.n_var, n_obj=problem.n_obj, xl=problem.xl, xu=problem.xu)
+        self._validate_jax_traceability()
+
+
+class _PymooBackedCMOP(_PymooBackedMixin, CMOP):
+    """Adapt a constrained JAX-compatible pymoo problem."""
+
+    def __init__(self, problem: PymooProblem, boundary_constraints: bool) -> None:
+        self._validate_problem_type(problem)
+        self._problem = problem
+        super().__init__(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
+            n_eq_constr=getattr(problem, "n_eq_constr", 0),
+            n_ieq_constr=getattr(problem, "n_ieq_constr", 0),
+            boundary_constraints=boundary_constraints,
+        )
+        self._validate_jax_traceability()
+
+
+def _adapt_pymoo_problem(problem: PymooProblem, boundary_constraints: bool) -> MOP:
+    """Select the adapter whose base-class invariant matches the pymoo problem."""
+    _PymooBackedMixin._validate_problem_type(problem)
+    has_constraints = (
+        getattr(problem, "n_eq_constr", 0) > 0 or getattr(problem, "n_ieq_constr", 0) > 0
+    )
+    if boundary_constraints or has_constraints:
+        return _PymooBackedCMOP(problem, boundary_constraints=boundary_constraints)
+    return _PymooBackedMOP(problem)
 
 
 class _PymooProblemAdapter(PymooProblem):

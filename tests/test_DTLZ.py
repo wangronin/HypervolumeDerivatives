@@ -4,7 +4,6 @@ sys.path.insert(0, "./")
 
 import numpy as np
 import pandas as pd
-import pymoo.problems.many as many
 import pytest
 
 from hvd.problems import (
@@ -27,6 +26,7 @@ from hvd.problems import (
     Eq1IDTLZ2,
     Eq1IDTLZ3,
     Eq1IDTLZ4,
+    get_pymoo_problem,
 )
 
 np.random.seed(42)
@@ -66,25 +66,40 @@ def test_DTLZ_with_boundary_constraints(F):
 @pytest.mark.parametrize("F", [DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7])
 def test_DTLZ_function_value(F):
     problem = F()
-    F_pymoo = getattr(many, F.__name__)
-    problem_pymoo = F_pymoo(n_var=problem.n_var, n_obj=problem.n_obj)
-    for _ in range(10):
+    problem_pymoo = get_pymoo_problem(
+        F.__name__,
+        n_var=problem.n_var,
+        n_obj=problem.n_obj,
+    )
+    for index in range(10):
         x = np.random.rand(problem.n_var)
-        assert all(np.isclose(problem.objective(x), problem_pymoo.evaluate(x)))
+        np.testing.assert_allclose(problem.objective(x), problem_pymoo.objective(x))
+        if index == 0:
+            np.testing.assert_allclose(
+                problem.objective_jacobian(x),
+                problem_pymoo.objective_jacobian(x),
+            )
+            np.testing.assert_allclose(
+                problem.objective_hessian(x),
+                problem_pymoo.objective_hessian(x),
+                rtol=1e-6,
+                atol=1e-8,
+            )
 
 
 @pytest.mark.parametrize("F", [IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4])
 def test_IDTLZ(F):
-    problem = F(boundary_constraints=False)
+    problem = F()
     x = np.random.rand(problem.n_var)
     problem.objective(x)
     problem.objective_jacobian(x)
     problem.objective_hessian(x)
     with pytest.raises(Exception):
         problem.eq_constraint(x)
-        problem.ieq_constraint(x)
     assert problem.n_eq_constr == 0
     assert problem.n_ieq_constr == 0
+    with pytest.raises(Exception):
+        problem.ieq_constraint(x)
     problem.get_pareto_front()
 
 

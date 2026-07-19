@@ -1,7 +1,26 @@
 import numpy as np
 import pytest
 
-from hvd.problems import MOP, ZDT1, get_pymoo_problem, pymoo_problem_names
+from hvd.problems import (
+    MOP,
+    CMOP,
+    WFG1,
+    WFG2,
+    WFG3,
+    WFG4,
+    WFG5,
+    WFG6,
+    WFG7,
+    WFG8,
+    WFG9,
+    ZDT1,
+    ZDT2,
+    ZDT3,
+    ZDT4,
+    ZDT6,
+    get_pymoo_problem,
+    pymoo_problem_names,
+)
 
 
 def test_native_problem_as_pymoo_problem():
@@ -35,8 +54,56 @@ def test_selected_pymoo_problem_factory_is_differentiable_and_restores_backend()
 
 def test_pymoo_problem_factory_rejects_unselected_problem():
     assert "zdt1" in pymoo_problem_names()
+    assert "wfg1" not in pymoo_problem_names()
     with pytest.raises(ValueError, match="Unsupported pymoo problem"):
         get_pymoo_problem("not-selected")
+
+
+@pytest.mark.parametrize("problem_type", [ZDT1, ZDT2, ZDT3, ZDT4, ZDT6])
+def test_native_zdt_matches_factory_values_and_derivatives(problem_type: type[MOP]):
+    native = problem_type(n_var=10)
+    wrapped = get_pymoo_problem(problem_type.__name__, n_var=10)
+    x = np.linspace(0.15, 0.85, native.n_var)
+
+    np.testing.assert_allclose(native.objective(x), wrapped.objective(x))
+    np.testing.assert_array_equal(native.xl, wrapped.xl)
+    np.testing.assert_array_equal(native.xu, wrapped.xu)
+    np.testing.assert_allclose(native.get_pareto_front(), wrapped.get_pareto_front())
+    np.testing.assert_allclose(native.objective_jacobian(x), wrapped.objective_jacobian(x))
+    np.testing.assert_allclose(
+        native.objective_hessian(x),
+        wrapped.objective_hessian(x),
+        rtol=1e-6,
+        atol=1e-8,
+    )
+
+
+@pytest.mark.parametrize(
+    "problem_type",
+    [WFG1, WFG2, WFG3, WFG4, WFG5, WFG6, WFG7, WFG8, WFG9],
+)
+def test_native_wfg_matches_pymoo_and_supports_ad(problem_type: type[CMOP]):
+    from pymoo.problems import get_problem
+
+    problem = problem_type(n_var=6, n_obj=3)
+    raw = get_problem(problem_type.__name__, n_var=6, n_obj=3)
+    x = np.linspace(0.17, 0.73, raw.n_var) * raw.xu
+
+    np.testing.assert_allclose(
+        problem.objective(x),
+        raw.evaluate(x, return_values_of=["F"]),
+        rtol=2e-6,
+        atol=2e-6,
+    )
+    assert isinstance(problem, CMOP)
+    assert problem.n_ieq_constr == 0
+    assert np.all(np.isfinite(problem.objective_jacobian(x)))
+    assert np.all(np.isfinite(problem.objective_hessian(x)))
+
+
+def test_native_wfg_can_add_box_constraints() -> None:
+    problem = WFG1(n_var=6, n_obj=3, boundary_constraints=True)
+    assert problem.n_ieq_constr == 2 * problem.n_var
 
 
 def test_jax_compatible_pymoo_problem_as_native_mop():

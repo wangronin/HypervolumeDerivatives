@@ -60,21 +60,19 @@ class MOP:
     """Base contract for a differentiable multi-objective problem."""
 
     default_n_obj: ClassVar[int]
-    n_obj: int
-    n_var: int
-    xl: np.ndarray
-    xu: np.ndarray
 
     def __init__(self, n_var: int, n_obj: int, xl: ArrayLike, xu: ArrayLike) -> None:
-        self.n_var = self._validate_dimension("n_var", n_var)
-        self.n_obj = self._validate_dimension("n_obj", n_obj)
-        self.xl = self._broadcast_bound("xl", xl)
-        self.xu = self._broadcast_bound("xu", xu)
+        self.n_var: int = self._validate_dimension("n_var", n_var)
+        self.n_obj: int = self._validate_dimension("n_obj", n_obj)
+        self.xl: np.ndarray = self._broadcast_bound("xl", xl)
+        self.xu: np.ndarray = self._broadcast_bound("xu", xu)
         self._validate_bound()
         self._obj_func = jit(partial(self.__class__._objective, self))
         self._objective_jacobian = jit(jacrev(self._obj_func))
         self._objective_hessian = jit(hessian(self._obj_func))
         self._objective_batch = jit(vmap(self._obj_func))
+        self._objective_jacobian_batch = jit(vmap(self._objective_jacobian))
+        self._objective_hessian_batch = jit(vmap(self._objective_hessian))
         self.CPU_time: int = 0  # in nanoseconds
 
     @staticmethod
@@ -100,6 +98,22 @@ class MOP:
         """Evaluate a population without a Python-level loop."""
         return np.asarray(self._objective_batch(jnp.asarray(x)))
 
+    @timeit
+    def objective_jacobian_batch(self, x: np.ndarray) -> np.ndarray:
+        """Evaluate one objective Jacobian per row of a population."""
+        batch_size = len(x)
+        return np.asarray(self._objective_jacobian_batch(jnp.asarray(x))).reshape(
+            batch_size, self.n_obj, self.n_var
+        )
+
+    @timeit
+    def objective_hessian_batch(self, x: np.ndarray) -> np.ndarray:
+        """Evaluate one objective Hessian tensor per row of a population."""
+        batch_size = len(x)
+        return np.asarray(self._objective_hessian_batch(jnp.asarray(x))).reshape(
+            batch_size, self.n_obj, self.n_var, self.n_var
+        )
+
     def as_pymoo_problem(self):
         """Return a pymoo view of this problem (pymoo is imported lazily)."""
         from ._pymoo_wrapper import _PymooProblemAdapter
@@ -115,9 +129,9 @@ class MOP:
         """
         if isinstance(problem, cls):
             return problem
-        from ._pymoo_wrapper import _PymooBackedMOP
+        from ._pymoo_wrapper import _adapt_pymoo_problem
 
-        return _PymooBackedMOP(problem, boundary_constraints=boundary_constraints)
+        return _adapt_pymoo_problem(problem, boundary_constraints=boundary_constraints)
 
     @timeit
     def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
@@ -144,8 +158,8 @@ class CMOP(MOP):
         n_ieq_constr: int = 0,
         boundary_constraints: bool = False,
     ) -> None:
-        self.n_eq_constr = int(n_eq_constr)
-        self.n_ieq_constr = int(n_ieq_constr)
+        self.n_eq_constr: int = int(n_eq_constr)
+        self.n_ieq_constr: int = int(n_ieq_constr)
         if self.n_eq_constr < 0 or self.n_ieq_constr < 0:
             raise ValueError("Constraint counts must be non-negative integers.")
 
@@ -161,14 +175,18 @@ class CMOP(MOP):
             self._ieq = add_boundary_constraints(self._ieq, self.xl, self.xu)
             self.n_ieq_constr += 2 * self.n_var
 
-        if self._eq:
+        if self._eq is not None:
             self._eq_jacobian = jit(jacrev(self._eq))
             self._eq_hessian = hessian(self._eq)
             self._eq_batch = jit(vmap(self._eq))
-        if self._ieq:
+            self._eq_jacobian_batch = jit(vmap(self._eq_jacobian))
+            self._eq_hessian_batch = jit(vmap(self._eq_hessian))
+        if self._ieq is not None:
             self._ieq_jacobian = jit(jacrev(self._ieq))
             self._ieq_hessian = hessian(self._ieq)
             self._ieq_batch = jit(vmap(self._ieq))
+            self._ieq_jacobian_batch = jit(vmap(self._ieq_jacobian))
+            self._ieq_hessian_batch = jit(vmap(self._ieq_hessian))
 
     def eq_constraint(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._eq(x))
@@ -184,16 +202,44 @@ class CMOP(MOP):
 
     @timeit
     def eq_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq_jacobian(x))
+        return np.array(self._eq_jacobian(x)).reshape(self.n_eq_constr, self.n_var)
 
     @timeit
     def eq_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq_hessian(x))
+        return np.array(self._eq_hessian(x)).reshape(self.n_eq_constr, self.n_var, self.n_var)
+
+    @timeit
+    def eq_jacobian_batch(self, x: np.ndarray) -> np.ndarray:
+        batch_size = len(x)
+        return np.asarray(self._eq_jacobian_batch(jnp.asarray(x))).reshape(
+            batch_size, self.n_eq_constr, self.n_var
+        )
+
+    @timeit
+    def eq_hessian_batch(self, x: np.ndarray) -> np.ndarray:
+        batch_size = len(x)
+        return np.asarray(self._eq_hessian_batch(jnp.asarray(x))).reshape(
+            batch_size, self.n_eq_constr, self.n_var, self.n_var
+        )
 
     @timeit
     def ieq_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq_jacobian(x))
+        return np.array(self._ieq_jacobian(x)).reshape(self.n_ieq_constr, self.n_var)
 
     @timeit
     def ieq_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq_hessian(x))
+        return np.array(self._ieq_hessian(x)).reshape(self.n_ieq_constr, self.n_var, self.n_var)
+
+    @timeit
+    def ieq_jacobian_batch(self, x: np.ndarray) -> np.ndarray:
+        batch_size = len(x)
+        return np.asarray(self._ieq_jacobian_batch(jnp.asarray(x))).reshape(
+            batch_size, self.n_ieq_constr, self.n_var
+        )
+
+    @timeit
+    def ieq_hessian_batch(self, x: np.ndarray) -> np.ndarray:
+        batch_size = len(x)
+        return np.asarray(self._ieq_hessian_batch(jnp.asarray(x))).reshape(
+            batch_size, self.n_ieq_constr, self.n_var, self.n_var
+        )

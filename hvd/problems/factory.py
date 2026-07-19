@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 _ProblemSpec = tuple[str, str]
 
 # Keep this registry explicit: inclusion means that the problem has been checked
-# for compatibility with pymoo's JAX toolbox and the MOP adapter.
+# with this factory's JAX path and the MOP adapter.
 _PYMOO_PROBLEMS: Final[dict[str, _ProblemSpec]] = {
     "bnh": ("pymoo.problems.multi.bnh", "BNH"),
     "osy": ("pymoo.problems.multi.osy", "OSY"),
@@ -94,7 +94,9 @@ def get_pymoo_problem(
         raise ValueError(f"Unsupported pymoo problem {name!r}. Available problems: {supported}.") from error
 
     problem_type = _import_jax_problem_type(module_name, class_name)
+    pymoo_problem = problem_type(**problem_kwargs)
+
     return MOP.from_pymoo(
-        problem_type(**problem_kwargs),
+        pymoo_problem,
         boundary_constraints=boundary_constraints,
     )

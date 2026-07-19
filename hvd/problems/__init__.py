@@ -20,6 +20,7 @@ from .eqdtlz import (
 from .factory import get_pymoo_problem, pymoo_problem_names
 from .misc import CONV3, CONV4, CONV4_2F
 from .uf import UF1, UF2, UF3, UF4, UF5, UF6, UF7, UF8, UF9, UF10
+from .wfg import WFG1, WFG2, WFG3, WFG4, WFG5, WFG6, WFG7, WFG8, WFG9
 from .zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 
 # enable double-precision of JAX
@@ -66,6 +67,15 @@ __all__ = [
     "UF8",
     "UF9",
     "UF10",
+    "WFG1",
+    "WFG2",
+    "WFG3",
+    "WFG4",
+    "WFG5",
+    "WFG6",
+    "WFG7",
+    "WFG8",
+    "WFG9",
     "ZDT1",
     "ZDT2",
     "ZDT3",

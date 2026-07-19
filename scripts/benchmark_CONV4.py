@@ -23,7 +23,7 @@ n_jobs = 30
 gen = 400
 emoa = "NSGA-III"
 problem_name = "CONV4_2F"
-problem = CONV4_2F(boundary_constraints=False)
+problem = CONV4_2F()
 pareto_front = problem.get_pareto_front(5000)
 reference_point = np.array([2, 2, 2, 10])  # for hypervolume
 path = "./data-reference/CONV4_2F/"

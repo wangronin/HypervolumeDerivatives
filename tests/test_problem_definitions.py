@@ -3,7 +3,7 @@ import inspect
 import numpy as np
 import pytest
 
-from hvd.problems import CF1, DTLZ1, MOP, UF1, UF8, ZDT1
+from hvd.problems import CF1, DTLZ1, Eq1DTLZ1, MOP, UF1, UF8, ZDT1
 from hvd.problems.misc import CONV3, DENT
 
 
@@ -48,3 +48,53 @@ def test_effective_constraint_counts_are_instance_local() -> None:
     assert CF1.default_n_ieq_constr == 1
     assert plain.n_ieq_constr == 1
     assert with_bounds.n_ieq_constr == 1 + 2 * with_bounds.n_var
+
+
+def test_resolved_metadata_are_instance_annotations() -> None:
+    assert {"n_obj", "n_var", "xl", "xu"}.isdisjoint(MOP.__annotations__)
+    problem = ZDT1(n_var=5)
+    assert {"n_obj", "n_var", "xl", "xu"} <= problem.__dict__.keys()
+
+
+def test_boundary_constraints_is_only_a_boolean_box_constraint_switch() -> None:
+    without_bounds = UF1()
+    with_bounds = UF1(boundary_constraints=True)
+
+    assert without_bounds.n_ieq_constr == 0
+    assert with_bounds.n_ieq_constr == 2 * with_bounds.n_var
+    with pytest.raises(TypeError, match="must be a Boolean"):
+        UF1(boundary_constraints=None)
+
+
+def test_batched_objective_derivatives_match_single_evaluations() -> None:
+    problem = ZDT1(n_var=5)
+    x = np.linspace(0.1, 0.9, problem.n_var)
+    X = np.stack((x, 0.9 * x))
+
+    expected_jacobians = np.stack([problem.objective_jacobian(row) for row in X])
+    expected_hessians = np.stack([problem.objective_hessian(row) for row in X])
+    np.testing.assert_allclose(problem.objective_jacobian_batch(X), expected_jacobians)
+    np.testing.assert_allclose(problem.objective_hessian_batch(X), expected_hessians)
+
+
+def test_batched_constraint_derivatives_match_single_evaluations() -> None:
+    ieq_problem = CF1(n_var=5)
+    eq_problem = Eq1DTLZ1(n_var=5)
+    X = np.stack((np.full(5, 0.3), np.full(5, 0.6)))
+
+    np.testing.assert_allclose(
+        ieq_problem.ieq_jacobian_batch(X),
+        np.stack([ieq_problem.ieq_jacobian(row) for row in X]),
+    )
+    np.testing.assert_allclose(
+        ieq_problem.ieq_hessian_batch(X),
+        np.stack([ieq_problem.ieq_hessian(row) for row in X]),
+    )
+    np.testing.assert_allclose(
+        eq_problem.eq_jacobian_batch(X),
+        np.stack([eq_problem.eq_jacobian(row) for row in X]),
+    )
+    np.testing.assert_allclose(
+        eq_problem.eq_hessian_batch(X),
+        np.stack([eq_problem.eq_hessian(row) for row in X]),
+    )
