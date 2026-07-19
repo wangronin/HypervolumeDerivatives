@@ -77,7 +77,7 @@ class MOP:
 
     @staticmethod
     def _validate_dimension(name: str, value: int) -> int:
-        if not isinstance(value, (int, np.integer)) or value < 1:
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 1:
             raise ValueError(f"`{name}` must be a positive integer.")
         return int(value)
 
@@ -99,12 +99,20 @@ class MOP:
         return np.asarray(self._objective_batch(jnp.asarray(x)))
 
     @timeit
+    def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._objective_jacobian(x)).reshape(self.n_obj, self.n_var)
+
+    @timeit
     def objective_jacobian_batch(self, x: np.ndarray) -> np.ndarray:
         """Evaluate one objective Jacobian per row of a population."""
         batch_size = len(x)
         return np.asarray(self._objective_jacobian_batch(jnp.asarray(x))).reshape(
             batch_size, self.n_obj, self.n_var
         )
+
+    @timeit
+    def objective_hessian(self, x: np.ndarray) -> np.ndarray:
+        return np.array(self._objective_hessian(x)).reshape(self.n_obj, self.n_var, self.n_var)
 
     @timeit
     def objective_hessian_batch(self, x: np.ndarray) -> np.ndarray:
@@ -132,14 +140,6 @@ class MOP:
         from ._pymoo_wrapper import _adapt_pymoo_problem
 
         return _adapt_pymoo_problem(problem, boundary_constraints=boundary_constraints)
-
-    @timeit
-    def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective_jacobian(x)).reshape(self.n_obj, self.n_var)
-
-    @timeit
-    def objective_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective_hessian(x)).reshape(self.n_obj, self.n_var, self.n_var)
 
 
 class CMOP(MOP):

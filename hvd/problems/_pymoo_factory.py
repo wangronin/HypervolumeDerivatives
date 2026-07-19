@@ -42,7 +42,14 @@ def pymoo_problem_names() -> tuple[str, ...]:
 
 @contextmanager
 def _jax_pymoo_backend() -> Iterator[None]:
-    """Temporarily select JAX for pymoo modules imported in this context."""
+    """Bind modules imported in the context to JAX without changing pymoo globally.
+
+    ``pymoo.gradient.activate`` changes which module a subsequent
+    ``import pymoo.gradient.toolbox`` resolves to.  A problem module imported
+    while JAX is active keeps its own ``anp`` reference to ``jax.numpy`` after
+    this context exits.  Restoring the previous setting only controls future
+    toolbox imports; it does not rewrite that already-imported problem module.
+    """
     import pymoo.gradient as gradient
 
     previous_backend = gradient.TOOLBOX

@@ -6,14 +6,30 @@ from pymoo.core.problem import Problem as PymooProblem
 from .base import CMOP, MOP
 
 
-class _PymooBackedMixin:
-    """Shared behavior for JAX-compatible pymoo problem adapters.
+class _PymooBackedProblem(CMOP):
+    """Adapt any JAX-compatible pymoo problem as a constrained MOP.
 
     The wrapped ``_evaluate`` implementation must already use JAX-traceable
     operations; wrapping alone cannot make NumPy or autograd code traceable.
+    Unconstrained pymoo problems simply have zero equality and inequality
+    constraints, which is already a valid :class:`CMOP` configuration.
     """
 
     _problem: PymooProblem
+
+    def __init__(self, problem: PymooProblem, boundary_constraints: bool) -> None:
+        self._validate_problem_type(problem)
+        self._problem = problem
+        super().__init__(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
+            n_eq_constr=getattr(problem, "n_eq_constr", 0),
+            n_ieq_constr=getattr(problem, "n_ieq_constr", 0),
+            boundary_constraints=boundary_constraints,
+        )
+        self._validate_jax_traceability()
 
     @staticmethod
     def _validate_problem_type(problem: PymooProblem) -> None:
@@ -66,43 +82,9 @@ class _PymooBackedMixin:
         return method(*args, **kwargs)
 
 
-class _PymooBackedMOP(_PymooBackedMixin, MOP):
-    """Adapt an unconstrained JAX-compatible pymoo problem."""
-
-    def __init__(self, problem: PymooProblem) -> None:
-        self._validate_problem_type(problem)
-        self._problem = problem
-        super().__init__(n_var=problem.n_var, n_obj=problem.n_obj, xl=problem.xl, xu=problem.xu)
-        self._validate_jax_traceability()
-
-
-class _PymooBackedCMOP(_PymooBackedMixin, CMOP):
-    """Adapt a constrained JAX-compatible pymoo problem."""
-
-    def __init__(self, problem: PymooProblem, boundary_constraints: bool) -> None:
-        self._validate_problem_type(problem)
-        self._problem = problem
-        super().__init__(
-            n_var=problem.n_var,
-            n_obj=problem.n_obj,
-            xl=problem.xl,
-            xu=problem.xu,
-            n_eq_constr=getattr(problem, "n_eq_constr", 0),
-            n_ieq_constr=getattr(problem, "n_ieq_constr", 0),
-            boundary_constraints=boundary_constraints,
-        )
-        self._validate_jax_traceability()
-
-
 def _adapt_pymoo_problem(problem: PymooProblem, boundary_constraints: bool) -> MOP:
-    """Select the adapter whose base-class invariant matches the pymoo problem."""
-    _PymooBackedMixin._validate_problem_type(problem)
-    has_constraints = (
-        getattr(problem, "n_eq_constr", 0) > 0 or getattr(problem, "n_ieq_constr", 0) > 0
-    )
-    if boundary_constraints or has_constraints:
-        return _PymooBackedCMOP(problem, boundary_constraints=boundary_constraints)
-    return _PymooBackedMOP(problem)
+    """Wrap a pymoo problem in the single CMOP-backed adapter."""
+    return _PymooBackedProblem(problem, boundary_constraints=boundary_constraints)
 
 
 class _PymooProblemAdapter(PymooProblem):

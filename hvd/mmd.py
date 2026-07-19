@@ -1,4 +1,3 @@
-import os
 from functools import partial
 from typing import Dict, List, Tuple, Union
 
@@ -9,10 +8,6 @@ from scipy.linalg import block_diag
 from scipy.spatial.distance import cdist
 
 from .reference_set import ReferenceSet
-
-# enable double-precision of JAX
-os.environ["JAX_ENABLE_X64"] = "True"
-
 
 @jit
 def rational_quadratic(x: np.ndarray, y: np.ndarray, theta: float = 1.0, alpha: float = 1.0) -> float:

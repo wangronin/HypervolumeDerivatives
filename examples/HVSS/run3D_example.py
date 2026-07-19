@@ -5,7 +5,6 @@ sys.path.insert(0, "./")
 import random
 import time
 
-import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
@@ -18,7 +17,6 @@ from hvd.newton import HVN
 from hvd.problems import DTLZ1, DTLZ2
 from hvd.problems.base import CMOP
 
-jax.config.update("jax_enable_x64", True)
 random.seed(42)
 np.random.seed(42)
 

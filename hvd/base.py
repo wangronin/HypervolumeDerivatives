@@ -1,8 +1,12 @@
 import pickle
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable, Self, Tuple
+from typing import Self
 
 import numpy as np
+from scipy.optimize import linprog
+
+ArrayFunction = Callable[[np.ndarray], np.ndarray]
 
 
 class State:
@@ -11,14 +15,14 @@ class State:
         n_var: int,
         n_eq: int,
         n_ieq: int,
-        func: Callable,
-        jac: Callable,
-        h: Callable = None,
-        h_jac: Callable = None,
-        h_hess: Callable = None,
-        g: Callable = None,
-        g_jac: Callable = None,
-        g_hess: Callable = None,
+        func: ArrayFunction,
+        jac: ArrayFunction,
+        h: ArrayFunction | None = None,
+        h_jac: ArrayFunction | None = None,
+        h_hess: ArrayFunction | None = None,
+        g: ArrayFunction | None = None,
+        g_jac: ArrayFunction | None = None,
+        g_hess: ArrayFunction | None = None,
     ) -> None:
         """State object of numerical optimization
 
@@ -39,84 +43,126 @@ class State:
         self.n_eq: int = n_eq
         self.n_ieq: int = n_ieq
         self.n_cstr: int = self.n_eq + self.n_ieq
-        self.func: Callable = func
-        self._jac: Callable = jac
-        self.h: Callable = h
-        self.h_jac: Callable = h_jac
-        self.h_hess: Callable = h_hess
-        self.g: Callable = g
-        self.g_jac: Callable = g_jac
-        self.g_hess: Callable = g_hess
+        self.func: ArrayFunction = func
+        self.jac: ArrayFunction = jac
+        self.h: ArrayFunction | None = h
+        self.h_jac: ArrayFunction | None = h_jac
+        self.h_hess: ArrayFunction | None = h_hess
+        self.g: ArrayFunction | None = g
+        self.g_jac: ArrayFunction | None = g_jac
+        self.g_hess: ArrayFunction | None = g_hess
         self._constrained: bool = self.g is not None or self.h is not None
         self.n_jac_evals: int = 0
         self.n_cstr_jac_evals: int = 0
         self.n_cstr_hess_evals: int = 0
 
     @property
-    def N(self):
+    def N(self) -> int:
         return len(self.X)
 
-    def jac(self, x: np.ndarray) -> np.ndarray:
+    @staticmethod
+    def _get_batch_variant(function: ArrayFunction) -> ArrayFunction:
+        """Return the batch implementation associated with a callback.
+
+        Native problem methods always expose ``<method>_batch``.  The small
+        row-wise adapter preserves support for legacy standalone callbacks.
+        """
+        owner = getattr(function, "__self__", None)
+        name = getattr(function, "__name__", None)
+        batch_function = getattr(owner, f"{name}_batch", None) if owner is not None and name else None
+        if callable(batch_function):
+            return batch_function
+
+        def evaluate_rows(x: np.ndarray) -> np.ndarray:
+            return np.stack([function(row) for row in x])
+
+        return evaluate_rows
+
+    @classmethod
+    def evaluate(
+        cls,
+        function: ArrayFunction | None,
+        x: np.ndarray,
+        output_shape: tuple[int, ...] | None = None,
+    ) -> np.ndarray:
+        """Evaluate any callback at one point or a population.
+
+        A one-dimensional input calls the point function; a two-dimensional
+        input calls its batch variant.  ``output_shape`` describes one point's
+        output and is used to keep empty constraints and scalar outputs
+        shape-stable.
+        """
+        x = np.asarray(x)
+        if x.ndim not in (1, 2):
+            raise ValueError("Evaluation input must have shape `(n_var,)` or `(n_points, n_var)`.")
+
+        prefix = (len(x),) if x.ndim == 2 else ()
+        if function is None:
+            if output_shape is None:
+                raise ValueError("`output_shape` is required when the function is None.")
+            return np.zeros((*prefix, *output_shape))
+
+        evaluator = function if x.ndim == 1 else cls._get_batch_variant(function)
+        values = np.asarray(evaluator(x))
+        return values if output_shape is None else values.reshape(*prefix, *output_shape)
+
+    @staticmethod
+    def _count(x: np.ndarray) -> int:
+        return len(x) if np.ndim(x) == 2 else 1
+
+    def eval_jac(self, x: np.ndarray) -> np.ndarray:
         """Jacobian of the objective function"""
-        self.n_jac_evals += 1
-        return self._jac(x)
+        self.n_jac_evals += self._count(x)
+        return self.evaluate(self.jac, x)
 
-    def evaluate_cstr(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        H = self.h(x) if self.h is not None else []
-        G = self.g(x) if self.g is not None else []
-        if isinstance(H, (int, float)):
-            H = np.array([H])
-        if isinstance(G, (int, float)):
-            G = np.array([G])
-        active_indices = [True] * self.n_eq
-        if self.g is not None:
-            active_indices += (G >= -1e-4).tolist()
-        return np.r_[H, G], np.array(active_indices)
+    def eval_cstr(self, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        x = np.asarray(x)
+        H = self.evaluate(self.h, x, (self.n_eq,))
+        G = self.evaluate(self.g, x, (self.n_ieq,))
+        axis = 1 if x.ndim == 2 else 0
+        values = np.concatenate((H, G), axis=axis)
+        equality_active = np.ones((*values.shape[:-1], self.n_eq), dtype=bool)
+        active_indices = np.concatenate((equality_active, G >= -1e-4), axis=axis)
+        return values, active_indices
 
-    def evaluate_cstr_jac(self, x: np.ndarray) -> np.ndarray:
-        if self.g_jac is not None or self.h_jac is not None:
-            self.n_cstr_jac_evals += 1
-        # TODO: only evaluate active inequality constraints
-        dH = self.h_jac(x).reshape(self.n_eq, -1).tolist() if self.h_jac is not None else []
-        dG = self.g_jac(x).reshape(self.n_ieq, -1).tolist() if self.g_jac is not None else []
-        out = np.array(dH + dG)
-        return out if len(out) == 0 else out.reshape(self.n_cstr, self.n_var)
+    def eval_cstr_jac(self, x: np.ndarray) -> np.ndarray:
+        x = np.asarray(x)
+        prefix = (len(x),) if x.ndim == 2 else ()
+        if self.h_jac is None and self.g_jac is None:
+            return np.empty((*prefix, 0, self.n_var))
 
-    def evaluate_cstr_hess(self, x: np.ndarray) -> np.ndarray:
-        if self.g_hess is not None or self.h_hess is not None:
-            self.n_cstr_hess_evals += 1
-        # TODO: only evaluate active inequality constraints
-        ddH = self.h_hess(x).reshape(self.n_eq, self.n_var, -1).tolist() if self.h_hess is not None else []
-        ddG = self.g_hess(x).reshape(self.n_ieq, self.n_var, -1).tolist() if self.g_hess is not None else []
-        out = np.array(ddH + ddG)
-        return out if len(out) == 0 else out.reshape(self.n_cstr, self.n_var, self.n_var)
+        self.n_cstr_jac_evals += self._count(x)
+        dH = self.evaluate(self.h_jac, x, (self.n_eq, self.n_var))
+        dG = self.evaluate(self.g_jac, x, (self.n_ieq, self.n_var))
+        return np.concatenate((dH, dG), axis=-2)
 
-    def update(self, X: np.ndarray, compute_gradient: bool = True):
-        self.X = X.copy()
-        primal_vars = self.primal
-        self.Y = np.array([self.func(x) for x in primal_vars])
-        self.J = np.array([self.jac(x) for x in primal_vars]) if compute_gradient else None
-        cstr_value, active_indices = list(zip(*[self.evaluate_cstr(x) for x in primal_vars]))
-        self.cstr_value = np.array(cstr_value)
-        self.active_indices = np.array(active_indices)
-        self.cstr_grad = np.array([self.evaluate_cstr_jac(x) for x in primal_vars])
-        self.cstr_hess = np.array([self.evaluate_cstr_hess(x) for x in primal_vars])
+    def eval_cstr_hess(self, x: np.ndarray) -> np.ndarray:
+        x = np.asarray(x)
+        prefix = (len(x),) if x.ndim == 2 else ()
+        if self.h_hess is None and self.g_hess is None:
+            return np.empty((*prefix, 0, self.n_var, self.n_var))
 
-    def update_one(self, x: np.ndarray, k: int):
+        self.n_cstr_hess_evals += self._count(x)
+        ddH = self.evaluate(self.h_hess, x, (self.n_eq, self.n_var, self.n_var))
+        ddG = self.evaluate(self.g_hess, x, (self.n_ieq, self.n_var, self.n_var))
+        return np.concatenate((ddH, ddG), axis=-3)
+
+    def update(self, X: np.ndarray, compute_gradient: bool = True) -> None:
+        self.X = np.asarray(X).copy()
+        self.Y = self.evaluate(self.func, self.primal)
+        self.J = self.eval_jac(self.primal) if compute_gradient else None
+        self.cstr_value, self.active_indices = self.eval_cstr(self.primal)
+        self.cstr_grad = self.eval_cstr_jac(self.primal)
+        self.cstr_hess = self.eval_cstr_hess(self.primal)
+
+    def update_one(self, x: np.ndarray, k: int) -> None:
         primal_vars = x[: self.n_var]
         self.X[k] = x
-        self.Y[k] = self.func(primal_vars)
-        self.J[k] = self.jac(primal_vars)
-        cstr_value, active_indices = self.evaluate_cstr(primal_vars)
-        cstr_grad = self.evaluate_cstr_jac(primal_vars)
-        cstr_hess = self.evaluate_cstr_hess(primal_vars)
-        if cstr_value is not None:
-            self.cstr_value[k] = cstr_value
-            self.active_indices[k] = active_indices
-        if cstr_grad is not None:
-            self.cstr_grad[k] = cstr_grad
-        if cstr_hess is not None:
-            self.cstr_hess[k] = cstr_hess
+        self.Y[k] = self.evaluate(self.func, primal_vars)
+        self.J[k] = self.eval_jac(primal_vars)
+        self.cstr_value[k], self.active_indices[k] = self.eval_cstr(primal_vars)
+        self.cstr_grad[k] = self.eval_cstr_jac(primal_vars)
+        self.cstr_hess[k] = self.eval_cstr_hess(primal_vars)
 
     def is_feasible(self) -> np.ndarray:
         """Check whether the solutions are feasible.
@@ -130,18 +176,82 @@ class State:
         ieq_feasible = ~np.any(ieq_active_idx, axis=1)
         return np.bitwise_and(eq_feasible, ieq_feasible)
 
-    def check_KKT(self) -> np.ndarray:
-        """Check the KKT condition for each point in `self.X`"""
-        is_KKT = np.empty(self.N, dtype=np.bool_)
+    def check_KKT(
+        self,
+        stationarity_tol: float = 1e-4,
+        feasibility_tol: float = 1e-4,
+        active_tol: float = 1e-4,
+    ) -> np.ndarray:
+        """Approximately test first-order multi-objective KKT conditions.
+
+        Inequality constraints use the convention ``g(x) <= 0``.  For every
+        feasible point, a small linear program minimizes the infinity norm of
+        the stationarity residual subject to nonnegative objective weights
+        summing to one, free equality multipliers, and nonnegative multipliers
+        for active inequalities.
+        """
+        tolerances = (stationarity_tol, feasibility_tol, active_tol)
+        if any(tolerance < 0 for tolerance in tolerances):
+            raise ValueError("KKT tolerances must be non-negative.")
+        if self.J is None:
+            raise RuntimeError("Objective Jacobians are required to check KKT conditions.")
+        if self.n_cstr and self.cstr_grad.shape[1] != self.n_cstr:
+            raise RuntimeError("Constraint Jacobians are required to check KKT conditions.")
+
+        is_KKT = np.zeros(self.N, dtype=np.bool_)
         for i in range(self.N):
-            M = np.r_[self.J[i], self.cstr_grad[i][self.active_indices[i]]]
-            n = len(M)
-            _, S, Vh = np.linalg.svd(M.T)
-            tol = 1e-1 * max(S)
-            rank = sum(_ > tol for _ in S)
-            sign = np.sign(Vh[n - 1])
-            cond = np.all(sign == 1) or np.all(sign == -1)
-            is_KKT[i] = (rank == n - 1) and cond
+            H, G = self.H[i], self.G[i]
+            if (
+                not np.all(np.isfinite(H))
+                or not np.all(np.isfinite(G))
+                or np.any(np.abs(H) > feasibility_tol)
+                or np.any(G > feasibility_tol)
+            ):
+                continue
+
+            objective_jacobian = np.asarray(self.J[i]).reshape(-1, self.n_var)
+            n_obj = len(objective_jacobian)
+            equality_jacobian = self.cstr_grad[i, : self.n_eq].reshape(self.n_eq, self.n_var)
+            active_ieq = G >= -active_tol
+            inequality_jacobian = self.cstr_grad[i, self.n_eq :][active_ieq].reshape(
+                np.count_nonzero(active_ieq), self.n_var
+            )
+            stationarity_matrix = np.concatenate(
+                (
+                    objective_jacobian.T,
+                    equality_jacobian.T,
+                    inequality_jacobian.T,
+                ),
+                axis=1,
+            )
+            if not np.all(np.isfinite(stationarity_matrix)):
+                continue
+
+            n_multipliers = stationarity_matrix.shape[1]
+            objective = np.zeros(n_multipliers + 1)
+            objective[-1] = 1.0
+            residual_bound = np.c_[
+                np.vstack((stationarity_matrix, -stationarity_matrix)),
+                -np.ones(2 * self.n_var),
+            ]
+            normalization = np.zeros((1, n_multipliers + 1))
+            normalization[0, :n_obj] = 1.0
+            bounds = (
+                [(0.0, None)] * n_obj
+                + [(None, None)] * self.n_eq
+                + [(0.0, None)] * np.count_nonzero(active_ieq)
+                + [(0.0, None)]
+            )
+            result = linprog(
+                objective,
+                A_ub=residual_bound,
+                b_ub=np.zeros(2 * self.n_var),
+                A_eq=normalization,
+                b_eq=np.ones(1),
+                bounds=bounds,
+                method="highs",
+            )
+            is_KKT[i] = bool(result.success and result.x[-1] <= stationarity_tol)
         return is_KKT
 
     @property

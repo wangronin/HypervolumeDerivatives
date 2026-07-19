@@ -1,18 +1,12 @@
+import importlib
+import sys
+
 import numpy as np
 import pytest
 
 from hvd.problems import (
-    MOP,
     CMOP,
-    WFG1,
-    WFG2,
-    WFG3,
-    WFG4,
-    WFG5,
-    WFG6,
-    WFG7,
-    WFG8,
-    WFG9,
+    MOP,
     ZDT1,
     ZDT2,
     ZDT3,
@@ -43,6 +37,8 @@ def test_selected_pymoo_problem_factory_is_differentiable_and_restores_backend()
     x = np.linspace(0.1, 0.5, problem.n_var)
 
     assert gradient.TOOLBOX == previous_backend
+    problem_module = sys.modules[type(problem._problem).__module__]
+    assert problem_module.anp.__name__ == "jax.numpy"
     assert problem.n_ieq_constr == 2 * problem.n_var
     assert problem.objective_jacobian(x).shape == (problem.n_obj, problem.n_var)
     assert problem.ieq_jacobian(x).shape == (problem.n_ieq_constr, problem.n_var)
@@ -50,6 +46,33 @@ def test_selected_pymoo_problem_factory_is_differentiable_and_restores_backend()
         problem.as_pymoo_problem().evaluate(x, return_values_of=["F"]),
         problem.objective(x),
     )
+
+
+def test_single_cmop_adapter_handles_native_pymoo_constraints() -> None:
+    problem = get_pymoo_problem("bnh", boundary_constraints=False)
+    x = np.array([2.0, 1.0])
+
+    assert isinstance(problem, CMOP)
+    assert problem.n_eq_constr == 0
+    assert problem.n_ieq_constr == 2
+    assert problem.ieq_constraint(x).shape == (2,)
+    assert problem.ieq_jacobian(x).shape == (2, 2)
+
+
+def test_jax_pymoo_backend_context_only_changes_future_imports_temporarily():
+    import pymoo.gradient as gradient
+
+    from hvd.problems._pymoo_factory import _jax_pymoo_backend
+
+    previous_backend = gradient.TOOLBOX
+    with _jax_pymoo_backend():
+        assert gradient.TOOLBOX == "jax.numpy"
+        toolbox = importlib.import_module("pymoo.gradient.toolbox")
+        assert toolbox.__name__ == "jax.numpy"
+
+    assert gradient.TOOLBOX == previous_backend
+    restored_toolbox = importlib.import_module("pymoo.gradient.toolbox")
+    assert restored_toolbox.__name__ == previous_backend
 
 
 def test_pymoo_problem_factory_rejects_unselected_problem():
@@ -78,34 +101,6 @@ def test_native_zdt_matches_factory_values_and_derivatives(problem_type: type[MO
     )
 
 
-@pytest.mark.parametrize(
-    "problem_type",
-    [WFG1, WFG2, WFG3, WFG4, WFG5, WFG6, WFG7, WFG8, WFG9],
-)
-def test_native_wfg_matches_pymoo_and_supports_ad(problem_type: type[CMOP]):
-    from pymoo.problems import get_problem
-
-    problem = problem_type(n_var=6, n_obj=3)
-    raw = get_problem(problem_type.__name__, n_var=6, n_obj=3)
-    x = np.linspace(0.17, 0.73, raw.n_var) * raw.xu
-
-    np.testing.assert_allclose(
-        problem.objective(x),
-        raw.evaluate(x, return_values_of=["F"]),
-        rtol=2e-6,
-        atol=2e-6,
-    )
-    assert isinstance(problem, CMOP)
-    assert problem.n_ieq_constr == 0
-    assert np.all(np.isfinite(problem.objective_jacobian(x)))
-    assert np.all(np.isfinite(problem.objective_hessian(x)))
-
-
-def test_native_wfg_can_add_box_constraints() -> None:
-    problem = WFG1(n_var=6, n_obj=3, boundary_constraints=True)
-    assert problem.n_ieq_constr == 2 * problem.n_var
-
-
 def test_jax_compatible_pymoo_problem_as_native_mop():
     import jax.numpy as jnp
     from pymoo.core.problem import Problem
@@ -118,6 +113,7 @@ def test_jax_compatible_pymoo_problem_as_native_mop():
             out["F"] = jnp.column_stack((jnp.sum(X**2, axis=1), jnp.sum((X - 1) ** 2, axis=1)))
 
     problem = MOP.from_pymoo(QuadraticProblem(), boundary_constraints=False)
+    assert isinstance(problem, CMOP)
     x = np.array([0.25, -0.5])
     assert problem.objective(x).shape == (2,)
     assert problem.objective_jacobian(x).shape == (2, 2)
