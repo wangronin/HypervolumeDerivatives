@@ -140,20 +140,23 @@ class State:
         x = np.asarray(x)
         prefix = (len(x),) if x.ndim == 2 else ()
         if self.h_hess is None and self.g_hess is None:
-            return np.empty((*prefix, 0, self.n_var, self.n_var))
+            return np.zeros((*prefix, self.n_cstr, self.n_var, self.n_var))
 
         self.n_cstr_hess_evals += self._count(x)
         ddH = self.evaluate(self.h_hess, x, (self.n_eq, self.n_var, self.n_var))
         ddG = self.evaluate(self.g_hess, x, (self.n_ieq, self.n_var, self.n_var))
         return np.concatenate((ddH, ddG), axis=-3)
 
-    def update(self, X: np.ndarray, compute_gradient: bool = True) -> None:
+    def update(
+        self, X: np.ndarray, compute_gradient: bool = True, compute_hessian: bool = True
+    ) -> None:
         self.X = np.asarray(X).copy()
         self.Y = self.evaluate(self.func, self.primal)
         self.J = self.eval_jac(self.primal) if compute_gradient else None
         self.cstr_value, self.active_indices = self.eval_cstr(self.primal)
         self.cstr_grad = self.eval_cstr_jac(self.primal)
-        self.cstr_hess = self.eval_cstr_hess(self.primal)
+        if compute_hessian:
+            self.cstr_hess = self.eval_cstr_hess(self.primal)
 
     def update_one(self, x: np.ndarray, k: int) -> None:
         primal_vars = x[: self.n_var]

@@ -105,3 +105,26 @@ def test_2D_decision_space_against_ad():
     assert np.isclose(value, float(f(X)))
     assert np.all(np.isclose(grad, grad_ad))
     assert np.all(np.isclose(H, H_ad))
+
+
+def test_gradient_does_not_evaluate_objective_hessian():
+    def unexpected_hessian(_):
+        raise AssertionError("gradient-only evaluation must not call the objective Hessian")
+
+    mmd = MMD(
+        n_var=2,
+        n_obj=2,
+        ref=ref,
+        func=lambda x: x,
+        jac=lambda _: np.eye(2),
+        hessian=unexpected_hessian,
+    )
+    gradient = mmd.compute_gradient(X=Y)["MMDdX"]
+    assert gradient.shape == Y.shape
+
+
+def test_supplied_jacobian_is_used_for_hessian_chain_rule():
+    zero_jacobian = np.zeros((N, 2, dim))
+    mmd = MMD(n_var=dim, n_obj=2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian)
+    gradient, _ = mmd.compute_derivatives(X, compute_hessian=True, jacobian=zero_jacobian)
+    assert np.allclose(gradient, 0)
