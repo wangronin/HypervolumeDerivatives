@@ -144,14 +144,14 @@ def bootstrap_reference_set(
                 Y = Y[idx]
 
             # only take the non-dominated points
-            idx = get_non_dominated(Y, return_index=True)
-            Y = Y[idx]
+            # idx = get_non_dominated(Y, return_index=True)
+            # Y = Y[idx]
             # take out the outliers
             # TODO: not robust FIXIT!
             # idx = np.isclose(Y.sum(axis=1), 0.5, atol=1e-1)
             # Y = Y[idx]
-            indices = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
-            Y = Y[indices == 1]
+            # indices = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
+            # Y = Y[indices == 1]
             if with_rsg:  # call the RSG method written in Matlab to fill the reference set
                 ref = RSG(Py=Y, Nf=N)
                 # pd.DataFrame(Y).to_csv("./RSG/MMD_boostrap.csv", index=False, header=False)

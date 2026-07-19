@@ -70,7 +70,13 @@ opt = MMDNewton(
 opt.indicator.beta = 0.25
 # TODO: figure out how to determine when to bootstrap automatically
 X, Y, _, __ = bootstrap_reference_set(
-    opt, problem, interval=interval, plot=True, save_reference_set=False, save_population=False
+    opt,
+    problem,
+    interval=interval,
+    plot=True,
+    save_reference_set=False,
+    save_population=False,
+    with_rsg=False,
 )
 # TODO: maybe create a `ref0` in the optimizer
 ref_new = opt.ref.reference_set - 0.05 * opt.ref.eta[0]

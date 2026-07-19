@@ -11,7 +11,7 @@ from hvd.mmd_newton import MMDNewton
 from hvd.newton import DpN
 from hvd.problems import ZDT1
 from hvd.reference_set import ReferenceSet
-from hvd.utils import read_reference_set_data
+from scripts.utils import read_reference_set_data
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 15
