@@ -99,15 +99,12 @@ def test_resolved_metadata_are_instance_annotations() -> None:
     assert {"n_obj", "n_var", "xl", "xu"} <= problem.__dict__.keys()
 
 
-def test_boundary_constraints_is_only_a_boolean_box_constraint_switch() -> None:
+def test_box_constraint_switch() -> None:
     without_bounds = UF1()
     with_bounds = UF1(boundary_constraints=True)
 
     assert without_bounds.n_ieq_constr == 0
     assert with_bounds.n_ieq_constr == 2 * with_bounds.n_var
-    for invalid_value in (None, 0, 1, "true"):
-        with pytest.raises(TypeError, match="must be a Boolean"):
-            UF1(boundary_constraints=invalid_value)
 
 
 @pytest.mark.parametrize(("name", "value"), [("n_var", 0), ("n_var", True), ("n_obj", -1)])

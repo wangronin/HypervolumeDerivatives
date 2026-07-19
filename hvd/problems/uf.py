@@ -7,7 +7,7 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from .base import CMOP, fixed_n_obj
-from .reference import generic_sphere, get_ref_dirs
+from .utils import generic_sphere, get_ref_dirs
 
 
 class _UF2D(CMOP):
