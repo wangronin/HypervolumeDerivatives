@@ -33,10 +33,10 @@ class _PymooBackedMOP(CMOP):
         """Fail early when pymoo's evaluation cannot be traced by JAX."""
         x = jnp.zeros(self.n_var)
         outputs = [("objective output 'F'", self._objective)]
-        if self.n_ieq_constr > 0:
-            outputs.append(("inequality-constraint output 'G'", self._ieq_constraint))
-        if self.n_eq_constr > 0:
-            outputs.append(("equality-constraint output 'H'", self._eq_constraint))
+        if self._ieq is not None:
+            outputs.append(("inequality constraints", self._ieq))
+        if self._eq is not None:
+            outputs.append(("equality constraints", self._eq))
 
         for label, function in outputs:
             try:
@@ -44,9 +44,8 @@ class _PymooBackedMOP(CMOP):
             except Exception as error:
                 raise TypeError(
                     f"The pymoo {label} is not JAX-traceable. "
-                    "Use only JAX-compatible operations in `_evaluate`. For pymoo's "
-                    "built-in problems, call `pymoo.gradient.activate('jax.numpy')` "
-                    "before importing the problem module."
+                    "Use only JAX-compatible operations in `_evaluate`, or use "
+                    "`get_pymoo_problem` for a supported built-in pymoo problem."
                 ) from error
 
     def _evaluate_key(self, x: jnp.ndarray, key: str) -> jnp.ndarray:
@@ -80,6 +79,7 @@ class _PymooProblemAdapter(PymooProblem):
     def __init__(self, problem: MOP) -> None:
         if not isinstance(problem, MOP):
             raise TypeError(f"Expected an MOP, got {type(problem).__name__}.")
+
         self._problem = problem
         super().__init__(
             n_var=problem.n_var,
@@ -100,33 +100,3 @@ class _PymooProblemAdapter(PymooProblem):
 
     def pareto_front(self, *args, **kwargs) -> np.ndarray:
         return self._problem.get_pareto_front(*args, **kwargs)
-
-
-# TODO:  decide what to do with it
-class ModifiedObjective(PymooProblem):
-    """Modified objective function based on the following paper:
-
-    Ishibuchi, H.; Matsumoto, T.; Masuyama, N.; Nojima, Y.
-    Effects of dominance resistant solutions on the performance of evolutionary multi-objective
-    and many-objective algorithms. In Proceedings of the Genetic and Evolutionary Computation
-    Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020.
-    """
-
-    def __init__(self, problem: PymooProblem) -> None:
-        self._problem = problem
-        self._alpha = 0.02
-        super().__init__(
-            n_var=problem.n_var,
-            n_obj=problem.n_obj,
-            xl=problem.xl,
-            xu=problem.xu,
-            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
-            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
-        )
-
-    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
-        self._problem._evaluate(x, out, *args, **kwargs)
-        F = out["F"]
-        out["F"] = (1 - self._alpha) * F + self._alpha * np.tile(
-            F.sum(axis=1).reshape(-1, 1), (1, self.n_obj)
-        ) / self.n_obj

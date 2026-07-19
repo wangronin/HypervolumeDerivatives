@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
+from pymoo.core.problem import Problem as PymooProblem
 
 from ..utils import timeit
 from .base import CMOP, MOP, fixed_n_obj, fixed_n_var
@@ -17,16 +18,16 @@ class DENT(MOP):
         self,
         n_var: int | None = None,
         n_obj: int | None = None,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = -2.0,
+        xu: ArrayLike = 2.0,
     ) -> None:
         n_var = fixed_n_var(n_var, 2, type(self).__name__)
         n_obj = fixed_n_obj(n_obj, 2, type(self).__name__)
         super().__init__(
             n_var=n_var,
             n_obj=n_obj,
-            xl=-2.0 if xl is None else xl,
-            xu=2.0 if xu is None else xu,
+            xl=xl,
+            xu=xu,
         )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -50,8 +51,8 @@ class CONV3(CMOP):
         self,
         n_var: int | None = None,
         n_obj: int | None = None,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = -3.0,
+        xu: ArrayLike = 3.0,
         boundary_constraints: bool = False,
     ) -> None:
         n_var = fixed_n_var(n_var, 3, type(self).__name__)
@@ -59,8 +60,8 @@ class CONV3(CMOP):
         super().__init__(
             n_var=n_var,
             n_obj=n_obj,
-            xl=-3.0 if xl is None else xl,
-            xu=3.0 if xu is None else xu,
+            xl=xl,
+            xu=xu,
             boundary_constraints=boundary_constraints,
         )
         self.a1 = -1 * np.ones(self.n_var)
@@ -86,8 +87,8 @@ class CONV4(CMOP):
         self,
         n_var: int | None = None,
         n_obj: int | None = None,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = -10.0,
+        xu: ArrayLike = 10.0,
         boundary_constraints: bool = False,
     ) -> None:
         n_var = fixed_n_var(n_var, 4, type(self).__name__)
@@ -95,8 +96,8 @@ class CONV4(CMOP):
         super().__init__(
             n_var=n_var,
             n_obj=n_obj,
-            xl=-10.0 if xl is None else xl,
-            xu=10.0 if xu is None else xu,
+            xl=xl,
+            xu=xu,
             boundary_constraints=boundary_constraints,
         )
         self.centers = np.eye(self.n_var)
@@ -119,8 +120,8 @@ class CONV4_2F(CMOP):
         self,
         n_var: int | None = None,
         n_obj: int | None = None,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = -10.0,
+        xu: ArrayLike = 10.0,
         boundary_constraints: bool = False,
     ) -> None:
         n_var = fixed_n_var(n_var, 4, type(self).__name__)
@@ -128,8 +129,8 @@ class CONV4_2F(CMOP):
         super().__init__(
             n_var=n_var,
             n_obj=n_obj,
-            xl=-10.0 if xl is None else xl,
-            xu=10.0 if xu is None else xu,
+            xl=xl,
+            xu=xu,
             boundary_constraints=boundary_constraints,
         )
 
@@ -199,3 +200,33 @@ class DisConnected(CMOP):
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
         pass
+
+
+# TODO:  decide what to do with it
+class ModifiedObjective(PymooProblem):
+    """Modified objective function based on the following paper:
+
+    Ishibuchi, H.; Matsumoto, T.; Masuyama, N.; Nojima, Y.
+    Effects of dominance resistant solutions on the performance of evolutionary multi-objective
+    and many-objective algorithms. In Proceedings of the Genetic and Evolutionary Computation
+    Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020.
+    """
+
+    def __init__(self, problem: PymooProblem) -> None:
+        self._problem = problem
+        self._alpha = 0.02
+        super().__init__(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            xl=problem.xl,
+            xu=problem.xu,
+            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
+            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
+        )
+
+    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
+        self._problem._evaluate(x, out, *args, **kwargs)
+        F = out["F"]
+        out["F"] = (1 - self._alpha) * F + self._alpha * np.tile(
+            F.sum(axis=1).reshape(-1, 1), (1, self.n_obj)
+        ) / self.n_obj

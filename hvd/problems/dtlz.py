@@ -20,8 +20,8 @@ class _DTLZ(CMOP):
         self,
         n_var: int | None = 11,
         n_obj: int = 3,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = 0.0,
+        xu: ArrayLike = 1.0,
         boundary_constraints: bool = False,
         scale: float = 1,
         alpha: float = 1,
@@ -33,8 +33,8 @@ class _DTLZ(CMOP):
         super().__init__(
             n_var=n_var,
             n_obj=n_obj,
-            xl=0.0 if xl is None else xl,
-            xu=1.0 if xu is None else xu,
+            xl=xl,
+            xu=xu,
             n_eq_constr=self.default_n_eq_constr,
             n_ieq_constr=self.default_n_ieq_constr,
             boundary_constraints=boundary_constraints,
@@ -66,8 +66,8 @@ class DTLZ1(_DTLZ):
         self,
         n_var: int | None = 11,
         n_obj: int = 3,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = 0.0,
+        xu: ArrayLike = 1.0,
         boundary_constraints: bool = False,
     ) -> None:
         super().__init__(
@@ -106,8 +106,8 @@ class DTLZ4(DTLZ2):
         self,
         n_var: int | None = 11,
         n_obj: int = 3,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = 0.0,
+        xu: ArrayLike = 1.0,
         boundary_constraints: bool = False,
     ) -> None:
         super().__init__(

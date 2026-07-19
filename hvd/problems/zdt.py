@@ -16,14 +16,14 @@ class ZDT(MOP):
         self,
         n_var: int = 30,
         n_obj: int | None = None,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = 0.0,
+        xu: ArrayLike = 1.0,
     ) -> None:
         super().__init__(
             n_var=n_var,
             n_obj=fixed_n_obj(n_obj, self.default_n_obj, type(self).__name__),
-            xl=0.0 if xl is None else xl,
-            xu=1.0 if xu is None else xu,
+            xl=xl,
+            xu=xu,
         )
 
     def get_pareto_set(self, n_pareto_points: int = 100, kind: str = "linear") -> np.ndarray:
@@ -100,8 +100,8 @@ class ZDT6(ZDT):
         self,
         n_var: int = 10,
         n_obj: int | None = None,
-        xl: ArrayLike | None = None,
-        xu: ArrayLike | None = None,
+        xl: ArrayLike = 0.0,
+        xu: ArrayLike = 1.0,
     ) -> None:
         super().__init__(n_var, n_obj=n_obj, xl=xl, xu=xu)
 

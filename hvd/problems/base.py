@@ -102,7 +102,7 @@ class MOP:
 
     def as_pymoo_problem(self):
         """Return a pymoo view of this problem (pymoo is imported lazily)."""
-        from .pymoo_wrapper import _PymooProblemAdapter
+        from ._pymoo_wrapper import _PymooProblemAdapter
 
         return _PymooProblemAdapter(self)
 
@@ -110,13 +110,12 @@ class MOP:
     def from_pymoo(cls, problem: Any, *, boundary_constraints: bool = True) -> "MOP":
         """Adapt a JAX-traceable pymoo problem to the native MOP API.
 
-        This adapter does not translate NumPy or autograd operations to JAX. For
-        pymoo's built-in problems, activate pymoo's ``jax.numpy`` gradient
-        toolbox before importing the problem module.
+        This adapter does not translate NumPy or autograd operations to JAX.
+        Use ``get_pymoo_problem`` for supported built-in pymoo problems.
         """
         if isinstance(problem, cls):
             return problem
-        from .pymoo_wrapper import _PymooBackedMOP
+        from ._pymoo_wrapper import _PymooBackedMOP
 
         return _PymooBackedMOP(problem, boundary_constraints=boundary_constraints)
 
@@ -130,7 +129,7 @@ class MOP:
 
 
 class CMOP(MOP):
-    """MOP with class-level constraint defaults and instance-level effective counts."""
+    """Constrained MOP with class-level constraint defaults and instance-level effective counts."""
 
     default_n_eq_constr: ClassVar[int] = 0
     default_n_ieq_constr: ClassVar[int] = 0

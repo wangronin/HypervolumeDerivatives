@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from hvd.problems import MOP, ZDT1
+from hvd.problems import MOP, ZDT1, get_pymoo_problem, pymoo_problem_names
 
 
 def test_native_problem_as_pymoo_problem():
@@ -14,6 +14,29 @@ def test_native_problem_as_pymoo_problem():
 def test_from_pymoo_is_idempotent_for_native_problem():
     problem = ZDT1()
     assert MOP.from_pymoo(problem) is problem
+
+
+def test_selected_pymoo_problem_factory_is_differentiable_and_restores_backend():
+    import pymoo.gradient as gradient
+
+    previous_backend = gradient.TOOLBOX
+    problem = get_pymoo_problem("ZDT1", n_var=5)
+    x = np.linspace(0.1, 0.5, problem.n_var)
+
+    assert gradient.TOOLBOX == previous_backend
+    assert problem.n_ieq_constr == 2 * problem.n_var
+    assert problem.objective_jacobian(x).shape == (problem.n_obj, problem.n_var)
+    assert problem.ieq_jacobian(x).shape == (problem.n_ieq_constr, problem.n_var)
+    np.testing.assert_allclose(
+        problem.as_pymoo_problem().evaluate(x, return_values_of=["F"]),
+        problem.objective(x),
+    )
+
+
+def test_pymoo_problem_factory_rejects_unselected_problem():
+    assert "zdt1" in pymoo_problem_names()
+    with pytest.raises(ValueError, match="Unsupported pymoo problem"):
+        get_pymoo_problem("not-selected")
 
 
 def test_jax_compatible_pymoo_problem_as_native_mop():
@@ -50,7 +73,7 @@ def test_non_jax_pymoo_problem_fails_during_adaptation():
 
 
 def test_pymoo_adapter_rejects_non_mop_problem():
-    from hvd.problems.pymoo_wrapper import _PymooProblemAdapter
+    from hvd.problems._pymoo_wrapper import _PymooProblemAdapter
 
     with pytest.raises(TypeError, match="Expected an MOP"):
         _PymooProblemAdapter(object())

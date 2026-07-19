@@ -17,6 +17,7 @@ from .eqdtlz import (
     Eq1IDTLZ3,
     Eq1IDTLZ4,
 )
+from .factory import get_pymoo_problem, pymoo_problem_names
 from .misc import CONV3, CONV4, CONV4_2F
 from .uf import UF1, UF2, UF3, UF4, UF5, UF6, UF7, UF8, UF9, UF10
 from .zdt import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
@@ -28,6 +29,8 @@ __all__ = [
     "MOP",
     "CMOP",
     "JaxFunction",
+    "get_pymoo_problem",
+    "pymoo_problem_names",
     "Eq1DTLZ1",
     "Eq1DTLZ2",
     "Eq1DTLZ3",
