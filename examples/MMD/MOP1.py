@@ -91,7 +91,7 @@ opt = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     metrics=metrics,
-    preconditioning=False,
+    regularization=False,
     matching=False,
     theta=theta,
 )

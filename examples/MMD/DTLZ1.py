@@ -28,7 +28,7 @@ from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.mmd import MMD, rational_quadratic, rbf
-from hvd.utils import precondition_hessian
+from hvd.utils import regularize_hessian
 
 np.random.seed(42)
 
@@ -100,7 +100,7 @@ ax1.set_ylabel(r"$f_2$")
 for i in range(max_iters):
     out = mmd.compute_hessian(X)
     H, g = out["MMDdX2"], out["MMDdX"]
-    H = precondition_hessian(H)
+    H = regularize_hessian(H)
     g_ = g.reshape(-1, 1)
     hist_value.append(mmd_metric.compute(Y))
     hist_norm.append(np.linalg.norm(g_))

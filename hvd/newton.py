@@ -13,14 +13,14 @@ from scipy.spatial.distance import cdist
 from .base import State
 from .delta_p import GenerationalDistance, InvertedGenerationalDistance
 from .hypervolume_derivatives import HypervolumeDerivatives
-from .line_search import backtracking_line_search
+from .line_search import residual_armijo_line_search
 from .reference_set import ReferenceSet
 from .utils import (
     Nd_vector_to_matrix,
     get_logger,
     matrix_to_Nd_vector,
     non_domin_sort,
-    precondition_hessian,
+    regularize_hessian,
     set_bounds,
 )
 
@@ -187,7 +187,10 @@ class HVN:
             max_step_size = self._compute_max_step_size(self.state[idx].primal, self.step[idx, : self.dim_p])
             # backtracking line search with Armijo's condition for each layer
             phi_func = self._get_phi_func(self.state[idx], step)
-            self.step_size[idx] = backtracking_line_search(R, phi_func, max_step_size=max_step_size)
+            result = residual_armijo_line_search(
+                R, phi_func, max_step=float(np.min(max_step_size))
+            )
+            self.step_size[idx] = result.step_size
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))
 
@@ -243,7 +246,7 @@ class HVN:
         R, H, idx = self._compute_R(state, grad=grad)
         # in case the Hessian is not NSD
         if self.preconditioning:
-            DR = -1.0 * precondition_hessian(-1.0 * DR)
+            DR = -1.0 * regularize_hessian(-1.0 * DR)
         if self._constrained:
             H = block_diag(*H)  # (N * p, N * dim), `p` is the number of active constraints
             B = state.cstr_hess
@@ -280,7 +283,7 @@ class HVN:
             state_ = deepcopy(state)
             state_.update(state.X + alpha * step)
             R = self._compute_R(state_)[0]
-            return np.linalg.norm(R)
+            return R
 
         return phi_func
 
@@ -575,7 +578,7 @@ class DpN:
             Z = np.zeros((len(dh), len(dh)))
             # pre-condition indicator's Hessian if needed, e.g., on ZDT6, CF1, CF7
             if self.preconditioning:
-                Hessian[r] = precondition_hessian(Hessian[r])
+                Hessian[r] = regularize_hessian(Hessian[r])
             # derivative of the root-finding problem
             DR = np.r_[np.c_[Hessian[r] + S[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             R[r, c] = R_list[r]

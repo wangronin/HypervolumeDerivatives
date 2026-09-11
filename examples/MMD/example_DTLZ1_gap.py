@@ -82,7 +82,7 @@ opt = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     metrics=metrics,
-    preconditioning=False,
+    regularization=False,
 )
 opt.indicator.beta = 0.25  # start with a large spreading effect
 X2, Y2, _, __ = bootstrap_reference_set(opt, problem, interval=3, plot=plot)
@@ -107,7 +107,7 @@ opt = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     metrics=metrics,
-    preconditioning=False,
+    regularization=False,
 )
 opt.indicator.beta = 0.25  # start with a large spreading effect
 X1, Y1, _, __ = bootstrap_reference_set(opt, problem, interval=3, plot=plot)

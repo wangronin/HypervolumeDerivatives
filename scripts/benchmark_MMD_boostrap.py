@@ -16,19 +16,7 @@ from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.mmd import MMD, laplace, rbf
 from hvd.mmd_newton import MMDNewton
-from hvd.problems import (
-    DTLZ1,
-    DTLZ2,
-    DTLZ3,
-    DTLZ4,
-    DTLZ5,
-    DTLZ6,
-    DTLZ7,
-    ZDT1,
-    ZDT2,
-    ZDT3,
-    ZDT4,
-)
+from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, ZDT1, ZDT2, ZDT3, ZDT4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.utils import plot_2d, plot_3d, read_reference_set_data
@@ -114,7 +102,7 @@ def execute(run: int) -> np.ndarray:
         verbose=True,
         metrics=metrics,
         matching=False,
-        preconditioning=True,
+        regularization=True,
         theta=theta,
         kernel=kernel,
     )

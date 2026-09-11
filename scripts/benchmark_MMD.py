@@ -15,19 +15,7 @@ from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.mmd import MMD, laplace, rbf
 from hvd.mmd_newton import MMDNewton
-from hvd.problems import (
-    DTLZ1,
-    DTLZ2,
-    DTLZ3,
-    DTLZ4,
-    DTLZ5,
-    DTLZ6,
-    DTLZ7,
-    ZDT1,
-    ZDT2,
-    ZDT3,
-    ZDT4,
-)
+from hvd.problems import *
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.utils import plot_2d, plot_3d, read_reference_set_data
@@ -47,23 +35,26 @@ ref_point = dict(
     DTLZ5=[2, 2, 2],
     DTLZ6=[2, 2, 2],
     DTLZ7=[2, 2, 10],
+    IDTLZ1=[2, 2, 2],
 )
 
 max_iters = 5
 n_jobs = 30
 problem_name = sys.argv[1]
+boundary_constraints = False
 print(problem_name)
 
 if problem_name.startswith("DTLZ"):
     n_var = 7 if problem_name == "DTLZ1" else 10
-    problem = locals()[problem_name](n_var=n_var, boundary_constraints=True)
-elif problem_name.startswith("ZDT"):
-    problem = locals()[problem_name]()
+    problem = globals()[problem_name](n_var=n_var, boundary_constraints=boundary_constraints)
+else:
+    problem = globals()[problem_name](boundary_constraints=boundary_constraints)
 
 path = "./MMD_data/"
 emoa = "NSGA-II"
 # emoa = "MOEAD"
-gen = 200 if emoa == "MOEAD" else 300
+gen = 300
+# gen = 200 if emoa == "MOEAD" else 300
 # get hyperparameters
 params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
 params = params[(params.algorithm == emoa) & (params.problem == problem_name)]
@@ -95,6 +86,7 @@ def execute(run: int) -> np.ndarray:
     print(f"initial GD: {gd_value0}")
     print(f"initial IGD: {igd_value0}")
     print(f"initial MMD: {mmd_value0}")
+    has_inequality_constraints = problem.n_ieq_constr > 0
     t0 = time.process_time_ns()
     opt = MMDNewton(
         n_var=problem.n_var,
@@ -103,8 +95,9 @@ def execute(run: int) -> np.ndarray:
         func=problem.objective,
         jac=problem.objective_jacobian,
         hessian=problem.objective_hessian,
-        g=problem.ieq_constraint,
-        g_jac=problem.ieq_jacobian,
+        g=problem.ieq_constraint if has_inequality_constraints else None,
+        g_jac=problem.ieq_jacobian if has_inequality_constraints else None,
+        g_hessian=problem.ieq_hessian if has_inequality_constraints else None,
         N=N,
         X0=x0,
         xl=problem.xl,
@@ -113,7 +106,7 @@ def execute(run: int) -> np.ndarray:
         verbose=True,
         metrics=metrics,
         matching=False,
-        preconditioning=True,
+        regularization=True,
         theta=theta,
         kernel=kernel,
     )

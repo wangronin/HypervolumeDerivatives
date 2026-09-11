@@ -24,7 +24,7 @@ rcParams["ytick.major.width"] = 1
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.mmd import MMD, rational_quadratic, rbf
-from hvd.utils import precondition_hessian
+from hvd.utils import regularize_hessian
 
 np.random.seed(42)
 
@@ -103,7 +103,7 @@ max_iters = 8
 for i in range(max_iters):
     out = mmd.compute_hessian(X)
     H, g = out["MMDdX2"], out["MMDdX"]
-    H = precondition_hessian(H)
+    H = regularize_hessian(H)
     g_ = g.reshape(-1, 1)
     hist_norm.append(np.linalg.norm(g_))
     newton_step = -1 * solve(H, g_).reshape(mu, -1)

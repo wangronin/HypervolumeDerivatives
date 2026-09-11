@@ -11,22 +11,9 @@ from matplotlib import rcParams
 from scipy.linalg import block_diag, solve
 
 from hvd.mmd import MMD, laplace, rbf
-from hvd.problems import (
-    DTLZ1,
-    DTLZ2,
-    DTLZ3,
-    DTLZ4,
-    DTLZ5,
-    DTLZ6,
-    DTLZ7,
-    ZDT1,
-    ZDT2,
-    ZDT3,
-    ZDT4,
-    ZDT6,
-)
+from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from hvd.reference_set import ReferenceSet
-from hvd.utils import precondition_hessian
+from hvd.utils import regularize_hessian
 from scripts.utils import read_reference_set_data
 
 rcParams["font.size"] = 12
@@ -79,7 +66,7 @@ for run in [26]:
         )
         res = mmd.compute_hessian(X=X0)
         H, g = res["MMDdX2"], res["MMDdX"]
-        H_ = precondition_hessian(H)
+        H_ = regularize_hessian(H)
         g = g.reshape(-1, 1)
         sigmas = np.linalg.eigh(H_)[0]
         sigma_min.append(sigmas[0])

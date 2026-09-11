@@ -9,24 +9,16 @@ from scipy.linalg import block_diag, solve
 from scipy.spatial.distance import cdist
 
 from .base import State
+from .line_search import residual_armijo_line_search
 from .mmd import MMD, MMDMatching
 from .reference_set import ReferenceSet
-from .utils import get_logger, precondition_hessian, set_bounds
-
-
-def Nd_vector_to_matrix(
-    x: np.ndarray, N: int, dim: int, dim_primal: int, active_indices: np.ndarray
-) -> np.ndarray:
-    if dim == dim_primal:  # the unconstrained case
-        return x.reshape(N, -1)
-    X = np.zeros((N, dim))  # Netwon steps
-    D = int(N * dim_primal)
-    a, b = x[:D].reshape(N, -1), x[D:]
-    idx = np.r_[0, np.cumsum([sum(k) - dim_primal for k in active_indices])]
-    b = [b[idx[i] : idx[i + 1]] for i in range(len(idx) - 1)]
-    for i, idx in enumerate(active_indices):
-        X[i, idx] = np.r_[a[i], b[i]]
-    return X
+from .utils import (
+    Nd_vector_to_matrix,
+    get_logger,
+    matrix_to_Nd_vector,
+    regularize_hessian,
+    set_bounds,
+)
 
 
 class MMDNewton:
@@ -48,14 +40,16 @@ class MMDNewton:
         N: int = 5,
         h: Callable = None,
         h_jac: callable = None,
+        h_hessian: callable = None,
         g: Callable = None,
         g_jac: Callable = None,
+        g_hessian: callable = None,
         X0: np.ndarray = None,
         max_iters: Union[int, str] = np.inf,
         xtol: float = 0,
         verbose: bool = True,
         metrics: Dict[str, Callable] = dict(),
-        preconditioning: bool = False,
+        regularization: bool = False,
         matching: bool = True,
         **kwargs,
     ):
@@ -97,7 +91,19 @@ class MMDNewton:
         self.ref: ReferenceSet = ref  # TODO: we should pass ref to the indicator directly
         self.matching: bool = matching
         self._check_constraints(h, g)
-        self.state = State(self.dim_p, self.n_eq, self.n_ieq, func, jac, h=h, h_jac=h_jac, g=g, g_jac=g_jac)
+        self.state = State(
+            self.dim_p,
+            self.n_eq,
+            self.n_ieq,
+            func,
+            jac,
+            h=h,
+            h_jac=h_jac,
+            h_hess=h_hessian,
+            g=g,
+            g_jac=g_jac,
+            g_hess=g_hessian,
+        )
         if self.matching:
             self.indicator = MMDMatching(
                 self.dim_p, self.n_obj, self.ref, func, jac, hessian, beta=0.25, **kwargs
@@ -111,7 +117,7 @@ class MMDNewton:
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
         self.stop_dict: Dict[str, float] = {}
         self.metrics: Dict[str, Callable] = metrics
-        self.preconditioning: bool = preconditioning
+        self.preconditioning: bool = regularization
 
     def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables
@@ -227,23 +233,22 @@ class MMDNewton:
             Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
                 (R, H, active_indices) -> the rooting-finding problem,
                 the Jacobian of the equality constraints, and
-                the indices of the active primal-dual variables
+                the indices of the active dual variables
         """
         primal_vars, dual_vars = state.primal, state.dual
         if grad is None:
             grad = self.indicator.compute_derivatives(
                 X=primal_vars, Y=state.Y, compute_hessian=False, jacobian=state.J
             )
-        R = grad  # the unconstrained case
-        dH, active_indices = None, np.array([[True] * state.n_var] * state.N)
+        R, dH, active_indices = grad, None, None
         if self._constrained:
             R = np.zeros((state.N, self.dim))  # the root-finding problem
             func = lambda g, dual, h: g + np.einsum("j,jk->k", dual, h)
-            cstr_value, idx, dH = state.cstr_value, state.active_indices, state.cstr_grad
-            dH = [dH[i, idx, :] for i, idx in enumerate(idx)]  # only take Jacobian of the active constraints
-            active_indices = np.c_[active_indices, idx]
+            cstr_value, active_indices, dH = state.cstr_value, state.active_indices, state.cstr_grad
+            dH = [dH[i, k, :] for i, k in enumerate(active_indices)]
             for i, k in enumerate(active_indices):
-                R[i, k] = np.r_[func(grad[i], dual_vars[i, idx[i]], dH[i]), cstr_value[i, idx[i]]]
+                R[i, : self.dim_p] = func(grad[i], dual_vars[i, k], dH[i])
+                R[i, self.dim_p :][k] = cstr_value[i, k]
         return R, dH, active_indices
 
     def _compute_netwon_step(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -251,16 +256,17 @@ class MMDNewton:
             X=self.state.primal, Y=self.state.Y, jacobian=self.state.J
         )
         if self.preconditioning:  # sometimes the Hessian is not PSD
-            Hessian = precondition_hessian(Hessian)
-        R, dH, active_indices = self._compute_R(self.state, grad=grad)
+            Hessian = regularize_hessian(Hessian)
+        R, dH, idx = self._compute_R(self.state, grad=grad)
         DR = Hessian
         if self._constrained:
             dH = block_diag(*dH)  # (N * p, N * dim), `p` is the number of active constraints
             Z = np.zeros((len(dH), len(dH)))
-            DR = np.r_[np.c_[DR, dH.T], np.c_[dH, Z]]
+            B = self.state.cstr_hess
+            S = block_diag(*[np.einsum("i...,i", B[i, k], self.state.dual[i, k]) for i, k in enumerate(idx)])
+            DR = np.r_[np.c_[DR + S, dH.T], np.c_[dH, Z]]
         # vectorize R
-        idx = active_indices[:, self.dim_p :]
-        R_ = np.r_[R[:, : self.dim_p].reshape(-1, 1), R[:, self.dim_p :][idx].reshape(-1, 1)]
+        R_ = matrix_to_Nd_vector(R, self.dim_p, idx)
         with warnings.catch_warnings():
             warnings.filterwarnings("error")
             try:
@@ -269,7 +275,7 @@ class MMDNewton:
             except:  # if DR is singular, then use the pseudoinverse
                 newton_step_ = -1 * np.linalg.lstsq(DR, R_, rcond=None)[0]
         # convert the vector-format of the newton step to matrix format
-        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), self.N, self.dim, self.dim_p, active_indices)
+        newton_step = Nd_vector_to_matrix(newton_step_.ravel(), self.N, self.dim, self.dim_p, idx)
         return newton_step, R
 
     def _shift_reference_set(self):
@@ -293,81 +299,64 @@ class MMDNewton:
     def _backtracking_line_search_global(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> float:
-        """backtracking line search with Armijo's condition. Global step-size control"""
-        c1 = 1e-6
-        if 11 < 2 or np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
-            return np.array([1])
+        """Apply the reusable residual-merit Armijo line search globally."""
+        if np.linalg.norm(step) <= np.finfo(float).eps:
+            return np.array([0.0])
 
-        def phi_func(alpha):
+        active_indices = self.state.active_indices.copy()
+
+        def evaluate(alpha):
             state_ = deepcopy(self.state)
-            state_.update(state_.X + alpha * step)
-            self.indicator.re_match = False
-            R_ = self._compute_R(state_)[0]
-            self.indicator.re_match = True
-            return np.linalg.norm(R_)
+            state_.update(state_.X + alpha * step, compute_hessian=False)
+            # Keep one smooth local model during the search. Matching and the
+            # active set are recomputed normally after the step is accepted.
+            trial_active_indices = state_.active_indices
+            state_.active_indices = active_indices
+            self.ref.re_match = False
+            try:
+                residual = self._compute_R(state_)[0]
+            finally:
+                self.ref.re_match = True
+                state_.active_indices = trial_active_indices
+            return residual
 
-        step_size = min(max_step_size) if max_step_size is not None else 1
-        phi = [np.linalg.norm(R)]
-        s = [0, step_size]
-        for _ in range(6):
-            phi.append(phi_func(s[-1]))
-            # Armijo–Goldstein condition
-            # when R norm is close to machine precision, it makes no sense to perform the line search
-            success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
-            if success:
-                break
-            else:
-                s.append(s[-1] * 0.5)
-        else:
-            self.logger.warn("backtracking line search failed")
-        step_size = s[-1]
-        return step_size
+        max_step = float(np.min(max_step_size)) if max_step_size is not None else 1.0
+        result = residual_armijo_line_search(R, evaluate, max_step=max_step)
+        if not result.converged:
+            self.logger.warning(
+                "backtracking line search did not satisfy Armijo; using the best improving trial"
+                if result.step_size > 0
+                else "backtracking line search rejected the Newton step"
+            )
+        return np.array([result.step_size])
 
     def _backtracking_line_search_individual(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> np.ndarray:
-        # TODO: use the backtracking line search in scipy
-        """backtracking line search with Armijo's condition"""
-        c1 = 1e-4
-        if 11 < 2 or np.all(np.isclose(step, 0)):
+        """Apply the reusable residual-merit search point by point."""
+        if np.linalg.norm(step) <= np.finfo(float).eps:
             return np.ones((self.N, 1))
 
-        def phi_func(alpha, i):
+        def evaluate(alpha, i):
             state = deepcopy(self.state)
             x = state.X[i].copy()
             x += alpha * step[i]
             state.update_one(x, i)
-            self.indicator.re_match = False
+            self.ref.re_match = False
             # this step takes too long since we compute the gradient at all points while only one changes
-            R_ = self._compute_R(state)[0][i]
-            self.indicator.re_match = True
-            self.state.n_jac_evals = state.n_jac_evals
-            return np.linalg.norm(R_)
+            try:
+                return self._compute_R(state)[0][i]
+            finally:
+                self.ref.re_match = True
 
         step_size = max_step_size if max_step_size is not None else np.ones(self.N)
         for i in range(self.N):
-            phi = [np.linalg.norm(R[i])]
-            s = [0, step_size[i]]
-            for _ in range(6):
-                phi.append(phi_func(s[-1], i))
-                # Armijo–Goldstein condition
-                # when R norm is close to machine precision, it makes no sense to perform the line search
-                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
-                if success:
-                    break
-                else:
-                    if 1 < 2:
-                        # cubic interpolation to compute the next step length
-                        d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
-                        d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
-                        s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
-                        s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
-                        s.append(s_)
-                    else:
-                        s.append(s[-1] / 2)
-            else:
-                self.logger.warn("backtracking line search failed")
-            step_size[i] = s[-1]
+            result = residual_armijo_line_search(
+                R[i],
+                lambda alpha, i=i: evaluate(alpha, i),
+                max_step=float(step_size[i]),
+            )
+            step_size[i] = result.step_size
         return step_size
 
     def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:

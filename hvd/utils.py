@@ -96,7 +96,7 @@ def compute_chim(Y: np.ndarray) -> np.ndarray:
     return n.ravel()
 
 
-def precondition_hessian(H: np.ndarray) -> np.ndarray:
+def regularize_hessian(H: np.ndarray) -> np.ndarray:
     """Precondition the Hessian matrix to make sure it is positive definite, implementing the procedure
     described algorithm 3.3 in section 3.4 from
     Nocedal, Jorge, and Stephen J. Wright, eds. Numerical optimization. New York, NY: Springer New York, 1999.

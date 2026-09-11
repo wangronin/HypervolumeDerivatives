@@ -58,6 +58,7 @@ opt = MMDNewton(
     hessian=problem.objective_hessian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
+    g_hessian=problem.ieq_hessian,
     N=N,
     X0=X0,
     xl=problem.xl,
@@ -65,7 +66,7 @@ opt = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     metrics=metrics,
-    preconditioning=False,
+    regularization=False,
 )
 opt.indicator.beta = 0.25
 # TODO: figure out how to determine when to bootstrap automatically
