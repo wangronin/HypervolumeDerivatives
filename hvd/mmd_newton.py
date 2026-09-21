@@ -9,7 +9,7 @@ from scipy.linalg import block_diag, solve
 from scipy.spatial.distance import cdist
 
 from .base import State
-from .mmd import MMD, MMDMatching
+from .mmd_vectorized import MMD, MMDMatching
 from .reference_set import ReferenceSet
 from .utils import Nd_vector_to_matrix, get_logger, matrix_to_Nd_vector, regularize_hessian, set_bounds
 

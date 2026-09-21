@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Dict, List, Tuple, Union
+from typing import Callable, Dict, List, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
@@ -27,19 +27,35 @@ class _VectorizedMMDBase:
         n_var: int,
         n_obj: int,
         ref: Union[np.ndarray, ReferenceSet],
-        func: callable = None,
-        jac: callable = None,
-        hessian: callable = None,
-        kernel: callable = rbf,
+        func: Callable = None,
+        jac: Callable = None,
+        hessian: Callable = None,
+        kernel: Callable = rbf,
         theta: float = 1.0,
     ) -> None:
-        if isinstance(ref, np.ndarray):
-            ref = ReferenceSet(ref)
-        self.func = func if func is not None else lambda x: x
-        self.jac = jac if jac is not None else lambda x: np.eye(len(x))
-        self.hessian = hessian if hessian is not None else lambda x: np.zeros((len(x), len(x), len(x)))
         self.n_var = int(n_var)
         self.n_obj = int(n_obj)
+        if self.n_var < 1 or self.n_obj < 1:
+            raise ValueError("n_var and n_obj must be positive")
+        if isinstance(ref, np.ndarray):
+            ref = ReferenceSet(ref)
+        reference_set = np.asarray(ref.reference_set)
+        if reference_set.ndim != 2 or reference_set.shape[1] != self.n_obj:
+            raise ValueError(
+                f"reference set must have shape (n_points, {self.n_obj}), "
+                f"got {reference_set.shape}"
+            )
+        if len(reference_set) == 0:
+            raise ValueError("reference set must contain at least one point")
+        if func is None and self.n_var != self.n_obj:
+            raise ValueError("the default identity objective requires n_var == n_obj")
+        self.func = func if func is not None else lambda x: x
+        self.jac = jac if jac is not None else lambda x: np.eye(self.n_obj, self.n_var)
+        self.hessian = (
+            hessian
+            if hessian is not None
+            else lambda x: np.zeros((self.n_obj, self.n_var, self.n_var))
+        )
         self.n_decision_var = self.n_var
         self.n_objective = self.n_obj
         self.theta = float(theta)
@@ -88,12 +104,19 @@ class _VectorizedMMDBase:
         X = self._check_X(X)
         if Y is None:
             Y = np.asarray([self.func(x) for x in X])
-        else:
-            Y = np.asarray(Y)
-        if Y.shape[1] != self.n_obj:
-            raise ValueError(f"expected {self.n_obj} objectives, got {Y.shape[1]}")
+        Y = self._check_Y(Y, n_points=len(X))
         YdX = np.asarray([self.jac(x) for x in X]) if jacobian is None else np.asarray(jacobian)
+        expected_jacobian_shape = (len(X), self.n_obj, self.n_var)
+        if YdX.shape != expected_jacobian_shape:
+            raise ValueError(
+                f"objective Jacobian must have shape {expected_jacobian_shape}, got {YdX.shape}"
+            )
         YdX2 = np.asarray([self.hessian(x) for x in X]) if compute_hessian else None
+        expected_hessian_shape = (len(X), self.n_obj, self.n_var, self.n_var)
+        if compute_hessian and YdX2.shape != expected_hessian_shape:
+            raise ValueError(
+                f"objective Hessian must have shape {expected_hessian_shape}, got {YdX2.shape}"
+            )
         return Y, YdX, YdX2
 
     def _decision_derivatives(self, MMDdY, MMDdY2_blocks, YdX, YdX2):
@@ -116,7 +139,19 @@ class _VectorizedMMDBase:
             X = X.T
         if X.shape[1] != self.n_var:
             raise ValueError(f"expected {self.n_var} decision variables, got shape {X.shape}")
+        if len(X) == 0:
+            raise ValueError("X must contain at least one point")
         return X
+
+    def _check_Y(self, Y: np.ndarray, n_points: int = None) -> np.ndarray:
+        Y = np.asarray(Y)
+        expected_rows = len(Y) if n_points is None else n_points
+        expected_shape = (expected_rows, self.n_obj)
+        if Y.ndim != 2 or Y.shape != expected_shape:
+            raise ValueError(f"Y must have shape {expected_shape}, got {Y.shape}")
+        if len(Y) == 0:
+            raise ValueError("Y must contain at least one point")
+        return Y
 
     @property
     def re_match(self) -> bool:
@@ -136,7 +171,7 @@ class MMD(_VectorizedMMDBase):
             if X is None:
                 raise ValueError("either X or Y must be provided")
             Y = np.asarray([self.func(x) for x in self._check_X(X)])
-        Y = jnp.asarray(Y)
+        Y = jnp.asarray(self._check_Y(Y))
         reference_set = jnp.asarray(self.ref.reference_set)
         value = (
             self._pairwise_k(reference_set, reference_set).mean()
@@ -216,7 +251,7 @@ class MMDMatching(_VectorizedMMDBase):
             if X is None:
                 raise ValueError("either X or Y must be provided")
             Y = np.asarray([self.func(x) for x in self._check_X(X)])
-        Y = jnp.asarray(Y)
+        Y = jnp.asarray(self._check_Y(Y))
         matched_reference_set = self._match(Y)
         squared_rkhs_distance = (
             self._diagonal_k(Y)
