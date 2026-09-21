@@ -20,7 +20,7 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 
-from hvd.mmd import MMD, rbf
+from hvd.mmd_vectorized import MMD, rbf
 
 np.random.seed(42)
 

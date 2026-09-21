@@ -9,8 +9,8 @@ from matplotlib import rcParams
 
 from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd import MMD
 from hvd.mmd_newton import MMDNewton
+from hvd.mmd_vectorized import MMD
 from hvd.newton import DpN
 from hvd.problems import DTLZ1
 from hvd.reference_set import ReferenceSet

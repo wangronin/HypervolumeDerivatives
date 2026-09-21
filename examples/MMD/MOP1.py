@@ -24,8 +24,8 @@ rcParams["ytick.major.width"] = 1
 
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd import MMD
 from hvd.mmd_newton import MMDNewton
+from hvd.mmd_vectorized import MMD
 from hvd.newton import DpN
 from hvd.reference_set import ReferenceSet
 

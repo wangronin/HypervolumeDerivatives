@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from hvd.mmd import laplace
 from hvd.mmd_newton import MMDNewton
+from hvd.mmd_vectorized import laplace
 from hvd.problems import IDTLZ1
 from hvd.reference_set import ReferenceSet
 

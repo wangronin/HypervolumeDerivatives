@@ -44,8 +44,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd import laplace, linear, rational_quadratic, rbf
 from hvd.mmd_newton import MMDNewton
+from hvd.mmd_vectorized import laplace, linear, rational_quadratic, rbf
 from hvd.problems import IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated

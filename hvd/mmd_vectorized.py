@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax import jacfwd, jacrev, jit, vmap
 
-from .mmd import laplace, linear, rational_quadratic, rbf
+from .mmd_legacy import laplace, linear, rational_quadratic, rbf
 from .reference_set import ReferenceSet
 
 
@@ -16,9 +16,7 @@ def _assemble_decision_hessian(MMDdY2, MMDdY, YdX, YdX2):
     diagonal = jnp.einsum("ma,maij->mij", MMDdY, YdX2)
     indices = jnp.arange(len(YdX))
     blocks = blocks.at[indices, indices].add(diagonal)
-    return blocks.transpose(0, 2, 1, 3).reshape(
-        len(YdX) * YdX.shape[2], len(YdX) * YdX.shape[2]
-    )
+    return blocks.transpose(0, 2, 1, 3).reshape(len(YdX) * YdX.shape[2], len(YdX) * YdX.shape[2])
 
 
 class _VectorizedMMDBase:
@@ -42,8 +40,7 @@ class _VectorizedMMDBase:
         reference_set = np.asarray(ref.reference_set)
         if reference_set.ndim != 2 or reference_set.shape[1] != self.n_obj:
             raise ValueError(
-                f"reference set must have shape (n_points, {self.n_obj}), "
-                f"got {reference_set.shape}"
+                f"reference set must have shape (n_points, {self.n_obj}), " f"got {reference_set.shape}"
             )
         if len(reference_set) == 0:
             raise ValueError("reference set must contain at least one point")
@@ -52,9 +49,7 @@ class _VectorizedMMDBase:
         self.func = func if func is not None else lambda x: x
         self.jac = jac if jac is not None else lambda x: np.eye(self.n_obj, self.n_var)
         self.hessian = (
-            hessian
-            if hessian is not None
-            else lambda x: np.zeros((self.n_obj, self.n_var, self.n_var))
+            hessian if hessian is not None else lambda x: np.zeros((self.n_obj, self.n_var, self.n_var))
         )
         self.n_decision_var = self.n_var
         self.n_objective = self.n_obj
@@ -108,15 +103,11 @@ class _VectorizedMMDBase:
         YdX = np.asarray([self.jac(x) for x in X]) if jacobian is None else np.asarray(jacobian)
         expected_jacobian_shape = (len(X), self.n_obj, self.n_var)
         if YdX.shape != expected_jacobian_shape:
-            raise ValueError(
-                f"objective Jacobian must have shape {expected_jacobian_shape}, got {YdX.shape}"
-            )
+            raise ValueError(f"objective Jacobian must have shape {expected_jacobian_shape}, got {YdX.shape}")
         YdX2 = np.asarray([self.hessian(x) for x in X]) if compute_hessian else None
         expected_hessian_shape = (len(X), self.n_obj, self.n_var, self.n_var)
         if compute_hessian and YdX2.shape != expected_hessian_shape:
-            raise ValueError(
-                f"objective Hessian must have shape {expected_hessian_shape}, got {YdX2.shape}"
-            )
+            raise ValueError(f"objective Hessian must have shape {expected_hessian_shape}, got {YdX2.shape}")
         return Y, YdX, YdX2
 
     def _decision_derivatives(self, MMDdY, MMDdY2_blocks, YdX, YdX2):
@@ -186,11 +177,7 @@ class MMD(_VectorizedMMDBase):
         yy_dx = self._pairwise_dx(Y, Y)
         yr_dx = self._pairwise_dx(Y, reference_set)
         nonself_dx = yy_dx.sum(axis=1) - yy_dx[indices, indices]
-        return (
-            2 * nonself_dx / N**2
-            + self._diagonal_dx(Y) / N**2
-            - 2 * yr_dx.sum(axis=1) / (N * M)
-        )
+        return 2 * nonself_dx / N**2 + self._diagonal_dx(Y) / N**2 - 2 * yr_dx.sum(axis=1) / (N * M)
 
     def _objective_hessian(self, Y, reference_set):
         N, M = len(Y), len(reference_set)
@@ -276,9 +263,7 @@ class MMDMatching(_VectorizedMMDBase):
         indices = jnp.arange(N)
         yy_dx2 = self._pairwise_dx2(Y, Y)
         diagonal_dx2 = self._diagonal_dx2(Y)
-        diagonal = self.beta * (
-            2 * (yy_dx2.sum(axis=1) - yy_dx2[indices, indices]) + diagonal_dx2
-        ) / N**2
+        diagonal = self.beta * (2 * (yy_dx2.sum(axis=1) - yy_dx2[indices, indices]) + diagonal_dx2) / N**2
         diagonal += (diagonal_dx2 - 2 * self._matched_dx2(Y, matched_reference_set)) / N
         blocks = 2 * self.beta * self._pairwise_dxdy(Y, Y) / N**2
         return blocks.at[indices, indices].set(diagonal)

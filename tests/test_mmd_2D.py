@@ -6,7 +6,7 @@ from jax import jacfwd, jacrev, jit
 
 sys.path.insert(0, "./")
 
-from hvd.mmd import MMD, MMDMatching, linear
+from hvd.mmd_vectorized import MMD, MMDMatching, linear
 
 np.random.seed(42)
 

@@ -5,11 +5,10 @@ import numpy as np
 import pytest
 from jax import jacfwd, jacrev, vmap
 
-from hvd.mmd import MMD as LegacyMMD
-from hvd.mmd import MMDMatching as LegacyMMDMatching
-from hvd.mmd import laplace, linear, rational_quadratic, rbf
+from hvd.mmd_legacy import MMD as LegacyMMD
+from hvd.mmd_legacy import MMDMatching as LegacyMMDMatching
+from hvd.mmd_legacy import laplace, linear, rational_quadratic, rbf
 from hvd.mmd_vectorized import MMD, MMDMatching
-
 
 KERNELS = [
     pytest.param(rbf, 0.7, id="rbf"),
@@ -111,12 +110,8 @@ class TestMMD:
 
         assert np.isclose(vectorized.compute(X=X), legacy.compute(X=X))
         if kernel is not laplace:
-            assert np.allclose(
-                vectorized_result["MMDdX"], legacy_result["MMDdX"], rtol=RTOL, atol=ATOL
-            )
-            assert np.allclose(
-                vectorized_result["MMDdX2"], legacy_result["MMDdX2"], rtol=RTOL, atol=ATOL
-            )
+            assert np.allclose(vectorized_result["MMDdX"], legacy_result["MMDdX"], rtol=RTOL, atol=ATOL)
+            assert np.allclose(vectorized_result["MMDdX2"], legacy_result["MMDdX2"], rtol=RTOL, atol=ATOL)
 
 
 class TestMMDMatching:
@@ -135,10 +130,7 @@ class TestMMDMatching:
                 + parameterized_kernel(r, r)
                 - 2 * parameterized_kernel(y, r)
             )(images, matched_reference_set)
-            return (
-                beta * pairwise(parameterized_kernel, images, images).mean()
-                + squared_rkhs_distance.mean()
-            )
+            return beta * pairwise(parameterized_kernel, images, images).mean() + squared_rkhs_distance.mean()
 
         expected_value = indicator_value(jnp.asarray(X))
         expected_gradient = jacrev(indicator_value)(jnp.asarray(X))
@@ -164,8 +156,6 @@ class TestMMDMatching:
             == derivatives_match
         )
         assert (
-            np.allclose(
-                vectorized_result["MMDdX2"], legacy_result["MMDdX2"], rtol=RTOL, atol=ATOL
-            )
+            np.allclose(vectorized_result["MMDdX2"], legacy_result["MMDdX2"], rtol=RTOL, atol=ATOL)
             == derivatives_match
         )

@@ -14,8 +14,8 @@ from sklearn_extra.cluster import KMedoids
 from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
-from hvd.mmd import MMD, laplace, linear, rbf
 from hvd.mmd_newton import MMDNewton
+from hvd.mmd_vectorized import MMD, laplace, linear, rbf
 from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, ZDT1, ZDT2, ZDT3, ZDT4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated

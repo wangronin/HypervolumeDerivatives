@@ -20,7 +20,7 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-from hvd.mmd import MMD, rational_quadratic, rbf
+from hvd.mmd_vectorized import MMD, rational_quadratic, rbf
 from hvd.utils import regularize_hessian
 
 np.random.seed(42)

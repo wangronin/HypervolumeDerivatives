@@ -23,7 +23,7 @@ rcParams["ytick.major.width"] = 1
 
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd import MMD, rational_quadratic, rbf
+from hvd.mmd_vectorized import MMD, rational_quadratic, rbf
 from hvd.utils import regularize_hessian
 
 np.random.seed(42)

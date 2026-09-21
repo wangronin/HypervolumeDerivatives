@@ -10,7 +10,7 @@ import numpy as np
 from matplotlib import rcParams
 from scipy.linalg import block_diag, solve
 
-from hvd.mmd import MMD, laplace, rbf
+from hvd.mmd_vectorized import MMD, laplace, rbf
 from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from hvd.reference_set import ReferenceSet
 from hvd.utils import regularize_hessian
