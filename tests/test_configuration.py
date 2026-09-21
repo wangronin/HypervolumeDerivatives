@@ -43,7 +43,7 @@ def test_jax_x64_configuration_is_centralized() -> None:
 @pytest.mark.parametrize("problem_type", [IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4])
 def test_mmd_reference_points_dominate_idtlz_pareto_front(problem_type) -> None:
     config = pd.read_csv(
-        Path(__file__).parents[1] / "scripts" / "benchmark_MMD_ref_point.csv",
+        Path(__file__).parents[1] / "scripts" / "ref_point.csv",
         index_col="problem",
     )
     reference_point = config.loc[problem_type.__name__].dropna().to_numpy(dtype=float)

@@ -13,7 +13,7 @@ from sklearn_extra.cluster import KMedoids
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
-from hvd.mmd import MMD, laplace, rbf
+from hvd.mmd import MMD, laplace, linear, rbf
 from hvd.mmd_newton import MMDNewton
 from hvd.problems import *
 from hvd.reference_set import ReferenceSet
@@ -23,7 +23,7 @@ from scripts.utils import plot, read_reference_set_data
 np.random.seed(66)
 
 # settings
-max_iters = 5
+max_iters = 10
 n_jobs = 30
 source_data_path = Path("./MMD_data/")
 csv_path = Path("./")
@@ -91,7 +91,7 @@ def execute(run: int) -> np.ndarray:
         verbose=True,
         metrics=metrics,
         matching=False,
-        regularization=False,
+        regularization=True,
         theta=theta,
         kernel=kernel,
     )
@@ -131,7 +131,6 @@ if 1 < 2:
     for i in run_id:
         print(i)
         data.append(execute(i))
-        breakpoint()
 else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 

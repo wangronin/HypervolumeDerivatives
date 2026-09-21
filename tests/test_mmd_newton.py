@@ -38,6 +38,7 @@ def test_idtlz1_runs_with_optional_boundary_constraints(boundary_constraints: bo
 
     expected_constraint_count = 2 * problem.n_var if boundary_constraints else 0
     assert optimizer.n_ieq == expected_constraint_count
+    assert np.all(optimizer.step_size > 0)
     assert X.shape == x0.shape
     assert Y.shape == (len(x0), problem.n_obj)
     assert np.all(np.isfinite(X))

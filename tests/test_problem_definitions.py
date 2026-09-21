@@ -104,7 +104,19 @@ def test_box_constraint_switch() -> None:
     with_bounds = UF1(boundary_constraints=True)
 
     assert without_bounds.n_ieq_constr == 0
+    assert without_bounds.ieq_constraint is None
+    assert without_bounds.ieq_constraint_batch is None
+    assert without_bounds.ieq_jacobian is None
+    assert without_bounds.ieq_jacobian_batch is None
+    assert without_bounds.ieq_hessian is None
+    assert without_bounds.ieq_hessian_batch is None
     assert with_bounds.n_ieq_constr == 2 * with_bounds.n_var
+    assert callable(with_bounds.ieq_constraint)
+    assert callable(with_bounds.ieq_constraint_batch)
+    assert callable(with_bounds.ieq_jacobian)
+    assert callable(with_bounds.ieq_jacobian_batch)
+    assert callable(with_bounds.ieq_hessian)
+    assert callable(with_bounds.ieq_hessian_batch)
 
 
 @pytest.mark.parametrize(("name", "value"), [("n_var", 0), ("n_var", True), ("n_obj", -1)])
