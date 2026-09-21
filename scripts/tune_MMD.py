@@ -564,7 +564,7 @@ def tune_problem(problem_name: str, args, optuna) -> dict:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("problems", nargs="+", choices=PROBLEMS)
-    parser.add_argument("--data-path", type=Path, default=ROOT / "MMD_data")
+    parser.add_argument("--data-path", type=Path, default="/home/wangh5/data/MMD_data")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "scripts" / "tuning_results")
     parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
     parser.add_argument("--generation", type=int, default=300)
