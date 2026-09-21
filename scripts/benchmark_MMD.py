@@ -4,11 +4,11 @@ sys.path.insert(0, "./")
 import re
 import time
 from glob import glob
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
-from sklearn.neighbors import LocalOutlierFactor
 from sklearn_extra.cluster import KMedoids
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
@@ -18,53 +18,37 @@ from hvd.mmd_newton import MMDNewton
 from hvd.problems import *
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
-from scripts.utils import plot_2d, plot_3d, read_reference_set_data
+from scripts.utils import plot, read_reference_set_data
 
 np.random.seed(66)
 
-ref_point = dict(
-    ZDT1=[11, 11],
-    ZDT2=[11, 11],
-    ZDT3=[11, 11],
-    ZDT4=[11, 11],
-    ZDT6=[11, 11],
-    DTLZ1=[2, 2, 2],
-    DTLZ2=[2, 2, 2],
-    DTLZ3=[2, 2, 2],
-    DTLZ4=[2, 2, 2],
-    DTLZ5=[2, 2, 2],
-    DTLZ6=[2, 2, 2],
-    DTLZ7=[2, 2, 10],
-    IDTLZ1=[2, 2, 2],
-)
-
+# settings
 max_iters = 5
 n_jobs = 30
+source_data_path = Path("./MMD_data/")
+csv_path = Path("./")
+plot_path = Path("./plots")
+moea = "NSGA-III"
+moea_gen = 300
+# get problem
 problem_name = sys.argv[1]
-boundary_constraints = False
-print(problem_name)
-
-if problem_name.startswith("DTLZ"):
-    n_var = 7 if problem_name == "DTLZ1" else 10
-    problem = globals()[problem_name](n_var=n_var, boundary_constraints=boundary_constraints)
-else:
-    problem = globals()[problem_name](boundary_constraints=boundary_constraints)
-
-path = "./MMD_data/"
-emoa = "NSGA-II"
-# emoa = "MOEAD"
-gen = 300
-# gen = 200 if emoa == "MOEAD" else 300
+boundary_constraints = True
+print(f"optimize {problem_name}")
+# create the problem instance
+problem_type = globals()[problem_name]
+problem = problem_type(boundary_constraints=boundary_constraints)
+# read the HV reference point
+ref_point = pd.read_csv("./scripts/ref_point.csv", index_col="problem").loc[problem_name].values
 # get hyperparameters
 params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
-params = params[(params.algorithm == emoa) & (params.problem == problem_name)]
+params = params[(params.algorithm == moea) & (params.problem == problem_name)]
 kernel_name, theta = params["kernel"].values[0], params["param"].values[0]
 kernel = locals()[kernel_name]
 
 
 def execute(run: int) -> np.ndarray:
     # read the reference set
-    ref, x0, y0, Y_index, eta = read_reference_set_data(path, problem_name, emoa, run, gen)
+    ref, x0, y0, Y_index, eta = read_reference_set_data(source_data_path, problem_name, moea, run, moea_gen)
     ref_list = np.vstack([r for r in ref.values()])
     N = len(x0)
     # create the algorithm
@@ -75,10 +59,11 @@ def execute(run: int) -> np.ndarray:
             pareto_front
         )
         pareto_front = pareto_front[km.medoid_indices_]
+
     mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=kernel)
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
-    hv_value0 = hypervolume(y0, ref=ref_point[problem_name])
+    hv_value0 = hypervolume(y0, ref=ref_point)
     gd_value0 = metrics["GD"].compute(Y=y0)
     igd_value0 = metrics["IGD"].compute(Y=y0)
     mmd_value0 = mmd.compute(Y=y0)
@@ -86,7 +71,7 @@ def execute(run: int) -> np.ndarray:
     print(f"initial GD: {gd_value0}")
     print(f"initial IGD: {igd_value0}")
     print(f"initial MMD: {mmd_value0}")
-    has_inequality_constraints = problem.n_ieq_constr > 0
+
     t0 = time.process_time_ns()
     opt = MMDNewton(
         n_var=problem.n_var,
@@ -95,9 +80,9 @@ def execute(run: int) -> np.ndarray:
         func=problem.objective,
         jac=problem.objective_jacobian,
         hessian=problem.objective_hessian,
-        g=problem.ieq_constraint if has_inequality_constraints else None,
-        g_jac=problem.ieq_jacobian if has_inequality_constraints else None,
-        g_hessian=problem.ieq_hessian if has_inequality_constraints else None,
+        g=problem.ieq_constraint,
+        g_jac=problem.ieq_jacobian,
+        g_hessian=problem.ieq_hessian,
         N=N,
         X0=x0,
         xl=problem.xl,
@@ -106,53 +91,25 @@ def execute(run: int) -> np.ndarray:
         verbose=True,
         metrics=metrics,
         matching=False,
-        regularization=True,
+        regularization=False,
         theta=theta,
         kernel=kernel,
     )
-    wall_clock_time = time.process_time_ns() - t0
-    # remove the dominated ones in the final solutions
     Y = opt.run()[1]
+    wall_clock_time = time.process_time_ns() - t0
+    Y = get_non_dominated(Y)  # remove the dominated ones in the final solutions
     print(opt.history_R_norm)
-    Y = get_non_dominated(Y)
-    # if problem.n_obj == 3:
-    # score = LocalOutlierFactor(n_neighbors=5).fit_predict(Y)
-    # Y = Y[score != -1]
     # plotting the final approximation set
-    if 11 < 2:
-        fig_name = f"./plots/{problem_name}_MMD_{emoa}_run{run}_{gen}.pdf"
-        if problem.n_obj == 2:
-            plot_2d(
-                y0,
-                Y,
-                ref_list,
-                pareto_front,
-                opt.history_Y,
-                opt.history_medoids,
-                opt.history_metrics,
-                opt.history_R_norm,
-                fig_name,
-            )
-        elif problem.n_obj == 3:
-            plot_3d(
-                y0,
-                Y,
-                ref_list,
-                pareto_front,
-                opt.history_Y,
-                opt.history_medoids,
-                opt.history_metrics,
-                opt.history_R_norm,
-                fig_name,
-            )
+    fig_name = plot_path / f"{problem_name}_MMD_{moea}_run{run}_{moea_gen}.pdf"
+    plot(y0, Y, ref_list, pareto_front, fig_name, opt)
     # save the final approximation set
     if 11 < 2:
         df = pd.DataFrame(Y, columns=[f"f{i}" for i in range(1, Y.shape[1] + 1)])
-        df.to_csv(f"{problem_name}_MMD_{emoa}_run{run}_{gen}_y.csv", index=False)
+        df.to_csv(csv_path / f"{problem_name}_MMD_{moea}_run{run}_{moea_gen}_y.csv", index=False)
         df_y0 = pd.DataFrame(y0, columns=[f"f{i}" for i in range(1, y0.shape[1] + 1)])
-        df_y0.to_csv(f"{problem_name}_MMD_{emoa}_run{run}_{gen}_y0.csv", index=False)
-
-    hv_value = hypervolume(Y, ref=ref_point[problem_name])
+        df_y0.to_csv(csv_path / f"{problem_name}_MMD_{moea}_run{run}_{moea_gen}_y0.csv", index=False)
+    # calculate the performance values
+    hv_value = hypervolume(Y, ref=ref_point)
     gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
     igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
     mmd_value = mmd.compute(Y=Y)
@@ -164,9 +121,9 @@ def execute(run: int) -> np.ndarray:
 # get all run IDs
 run_id = [
     int(re.findall(r"run_(\d+)_", s)[0])
-    for s in glob(f"{path}/{problem_name}_{emoa}_run_*_lastpopu_x_gen{gen}.csv")
+    for s in glob(f"{source_data_path}/{problem_name}_{moea}_run_*_lastpopu_x_gen{moea_gen}.csv")
 ]
-if problem_name == "DTLZ4" and emoa == "MOEAD":
+if problem_name == "DTLZ4" and moea == "MOEAD":
     run_id = list(set(run_id) - set([3]))
 
 if 1 < 2:
@@ -179,4 +136,4 @@ else:
     data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
 
 df = pd.DataFrame(np.array(data), columns=["HV", "IGD", "GD", "MMD", "Jac_calls", "wall_clock_time"])
-df.to_csv(f"results/{problem_name}-MMD-{emoa}-300.csv", index=False)
+df.to_csv(f"results/{problem_name}-MMD-{moea}-300.csv", index=False)

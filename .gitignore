@@ -9,6 +9,7 @@
 *.ipynb
 *.tex
 *.csv
+!scripts/ref_point.csv
 *.mat
 *.png
 *.txt

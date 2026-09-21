@@ -40,10 +40,8 @@ def test_DTLZ(F):
     problem.objective_jacobian(x)
     problem.objective_hessian(x)
     problem.get_pareto_front()
-    with pytest.raises(Exception):
-        problem.eq_constraint(x)
-    with pytest.raises(Exception):
-        problem.ieq_constraint(x)
+    assert problem.eq_constraint is None
+    assert problem.ieq_constraint is None
 
 
 @pytest.mark.parametrize("F", [DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7])
@@ -53,8 +51,7 @@ def test_DTLZ_with_boundary_constraints(F):
     problem.objective(x)
     problem.objective_jacobian(x)
     problem.objective_hessian(x)
-    with pytest.raises(Exception):
-        problem.eq_constraint(x)
+    assert problem.eq_constraint is None
     assert problem.n_eq_constr == 0
     assert problem.n_ieq_constr == problem.n_var * 2
     problem.ieq_constraint(x)
@@ -94,12 +91,10 @@ def test_IDTLZ(F):
     problem.objective(x)
     problem.objective_jacobian(x)
     problem.objective_hessian(x)
-    with pytest.raises(Exception):
-        problem.eq_constraint(x)
+    assert problem.eq_constraint is None
     assert problem.n_eq_constr == 0
     assert problem.n_ieq_constr == 0
-    with pytest.raises(Exception):
-        problem.ieq_constraint(x)
+    assert problem.ieq_constraint is None
     problem.get_pareto_front()
 
 

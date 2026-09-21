@@ -11,7 +11,6 @@ from hvd.reference_set import ReferenceSet
 def test_idtlz1_runs_with_optional_boundary_constraints(boundary_constraints: bool) -> None:
     problem = IDTLZ1(boundary_constraints=boundary_constraints)
     x0 = np.vstack([np.zeros(problem.n_var), np.full(problem.n_var, 0.5)])
-    has_inequality_constraints = problem.n_ieq_constr > 0
 
     optimizer = MMDNewton(
         n_var=problem.n_var,
@@ -20,9 +19,9 @@ def test_idtlz1_runs_with_optional_boundary_constraints(boundary_constraints: bo
         func=problem.objective,
         jac=problem.objective_jacobian,
         hessian=problem.objective_hessian,
-        g=problem.ieq_constraint if has_inequality_constraints else None,
-        g_jac=problem.ieq_jacobian if has_inequality_constraints else None,
-        g_hessian=problem.ieq_hessian if has_inequality_constraints else None,
+        g=problem.ieq_constraint,
+        g_jac=problem.ieq_jacobian,
+        g_hessian=problem.ieq_hessian,
         N=len(x0),
         X0=x0,
         xl=problem.xl,

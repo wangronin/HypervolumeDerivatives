@@ -60,6 +60,20 @@ class MOP:
     """Base contract for a differentiable multi-objective problem."""
 
     default_n_obj: ClassVar[int]
+    n_eq_constr = 0
+    n_ieq_constr = 0
+    eq_constraint = None
+    eq_constraint_batch = None
+    eq_jacobian = None
+    eq_jacobian_batch = None
+    eq_hessian = None
+    eq_hessian_batch = None
+    ieq_constraint = None
+    ieq_constraint_batch = None
+    ieq_jacobian = None
+    ieq_jacobian_batch = None
+    ieq_hessian = None
+    ieq_hessian_batch = None
 
     def __init__(self, n_var: int, n_obj: int, xl: ArrayLike, xu: ArrayLike) -> None:
         self.n_var: int = self._validate_dimension("n_var", n_var)
@@ -181,12 +195,26 @@ class CMOP(MOP):
             self._eq_batch = jit(vmap(self._eq))
             self._eq_jacobian_batch = jit(vmap(self._eq_jacobian))
             self._eq_hessian_batch = jit(vmap(self._eq_hessian))
+        else:
+            self.eq_constraint = None
+            self.eq_constraint_batch = None
+            self.eq_jacobian = None
+            self.eq_jacobian_batch = None
+            self.eq_hessian = None
+            self.eq_hessian_batch = None
         if self._ieq is not None:
             self._ieq_jacobian = jit(jacrev(self._ieq))
             self._ieq_hessian = hessian(self._ieq)
             self._ieq_batch = jit(vmap(self._ieq))
             self._ieq_jacobian_batch = jit(vmap(self._ieq_jacobian))
             self._ieq_hessian_batch = jit(vmap(self._ieq_hessian))
+        else:
+            self.ieq_constraint = None
+            self.ieq_constraint_batch = None
+            self.ieq_jacobian = None
+            self.ieq_jacobian_batch = None
+            self.ieq_hessian = None
+            self.ieq_hessian_batch = None
 
     def eq_constraint(self, x: np.ndarray) -> np.ndarray:
         return np.array(self._eq(x))

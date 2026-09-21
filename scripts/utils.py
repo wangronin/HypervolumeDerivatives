@@ -36,7 +36,7 @@ def read_reference_set_data(
         Tuple[Dict[int, np.ndarray], np.ndarray, np.ndarray, np.ndarray, Dict[int, np.ndarray]]: _description_
     """
     ref_label = pd.read_csv(
-        f"{path}/{problem_name}_{emoa}_run_{run}_component_id_gen{gen}.csv", header=None
+        path / f"{problem_name}_{emoa}_run_{run}_component_id_gen{gen}.csv", header=None
     ).values[0]
     n_cluster = len(np.unique(ref_label))
     ref = dict()
@@ -106,6 +106,31 @@ def read_reference_set_data(
             Y_label = Y_label[:n]
     Y_index = [np.nonzero(Y_label == i)[0] for i in np.unique(Y_label)]
     return ref, x0, y0, Y_index, eta
+
+
+def plot(
+    Y0: np.ndarray,
+    Y: np.ndarray,
+    ref: np.ndarray,
+    pareto_front: np.ndarray,
+    fig_name: str,
+    optimizer=None,
+    plot_trajectory: bool = False,
+):
+    ndim = Y0.shape[1]
+    plot_func = plot_2d if ndim == 2 else plot_3d
+    plot_func(
+        Y0=Y0,
+        Y=Y,
+        ref=ref,
+        pareto_front=pareto_front,
+        hist_Y=optimizer.history_Y,
+        history_medoids=optimizer.history_medoids,
+        history_metric=optimizer.history_metrics,
+        hist_R_norm=optimizer.history_R_norm,
+        fig_name=fig_name,
+        plot_trajectory=plot_trajectory,
+    )
 
 
 def plot_2d(
@@ -226,9 +251,6 @@ def plot_3d(
     fig = plt.figure(figsize=plt.figaspect(1 / 2.0))
     plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
     ax0 = fig.add_subplot(1, 2, 1, projection="3d")
-    # fig = plt.figure(figsize=plt.figaspect(1 / 1.0))
-    # plt.subplots_adjust(bottom=0.1, top=0.9, right=0.9, left=0.1)
-    # ax0 = fig.add_subplot(1, 1, 1, projection="3d")
     ax0.set_box_aspect((1, 1, 1))
     ax0.view_init(45, 45)
     ax0.plot(Y0[:, 0], Y0[:, 1], Y0[:, 2], "k+", ms=8, alpha=0.6)
@@ -245,13 +267,12 @@ def plot_3d(
         ms=5,
         alpha=0.8,
     )
-
     ax0.set_title("Initialization")
     ax0.set_xlabel("f1")
     ax0.set_ylabel("f2")
     ax0.set_zlabel("f3")
     lgnd = ax0.legend(
-        ["Y0", "reference set"],
+        ["Y0", "PF", "reference set", "medoids"],
         loc="lower center",
         bbox_to_anchor=(0.5, 0.1),
         ncol=2,
@@ -259,15 +280,6 @@ def plot_3d(
     )
     for handle in lgnd.legend_handles:
         handle.set_markersize(10)
-    # plt.savefig(fig_name + "_1.pdf", dpi=1000)
-
-    # for i in range(len(y0)):
-    # ax0.plot((medoids0[i, 0], y0[i, 0]), (medoids0[i, 1], y0[i, 1]), (medoids0[i, 2], y0[i, 2]), "k-")
-
-    # fig = plt.figure(figsize=plt.figaspect(1 / 1.0))
-    # # plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
-    # plt.subplots_adjust(bottom=0.1, top=0.9, right=0.9, left=0.1)
-    # ax1 = fig.add_subplot(1, 1, 1, projection="3d")
 
     ax1 = fig.add_subplot(1, 2, 2, projection="3d")
     ax1.set_box_aspect((1, 1, 1))
@@ -289,27 +301,13 @@ def plot_3d(
             )
 
     lines = []
-    # lines += ax1.plot(
-    #     pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.2
-    # )
-    shifts = []
-    # for i, M in enumerate(history_medoids):
-    #     c = colors[len(M) - 1]
-    #     for j, x in enumerate(M):
-    #         line = ax1.plot(x[0], x[1], x[2], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
-    #         if j == len(shifts):
-    #             shifts.append(line)
-
-    # lines += shifts
     lines += ax1.plot(Y0[:, 0], Y0[:, 1], Y0[:, 2], "k+", mfc="none", ms=6, alpha=0.9)
     lines += ax1.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r*", mfc="none", ms=8, alpha=0.9)
     lines += ax1.plot(
         pareto_front[:, 0], pareto_front[:, 1], pareto_front[:, 2], "g.", mec="none", ms=5, alpha=0.4
     )
-    # counts = np.unique([len(m) for m in history_medoids], return_counts=True)[1]
     lgnd = ax1.legend(
         handles=lines,
-        # labels=[f"{i + 1} shift(s): {k} medoids" for i, k in enumerate(counts)]  # ["Pareto front"]
         labels=["Y0", "Y-final", "Pareto front"],
         loc="lower center",
         bbox_to_anchor=(0.5, 0.1),

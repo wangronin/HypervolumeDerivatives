@@ -9,16 +9,9 @@ from scipy.linalg import block_diag, solve
 from scipy.spatial.distance import cdist
 
 from .base import State
-from .line_search import residual_armijo_line_search
 from .mmd import MMD, MMDMatching
 from .reference_set import ReferenceSet
-from .utils import (
-    Nd_vector_to_matrix,
-    get_logger,
-    matrix_to_Nd_vector,
-    regularize_hessian,
-    set_bounds,
-)
+from .utils import Nd_vector_to_matrix, get_logger, matrix_to_Nd_vector, regularize_hessian, set_bounds
 
 
 class MMDNewton:
@@ -291,7 +284,7 @@ class MMDNewton:
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_norm, 0))
 
         indices = np.nonzero(masks)[0]
-        self.ref.shift(0.08, indices)
+        self.ref.shift(0.1, indices)
         for k in indices:  # log the updated medoids
             self.history_medoids[k].append(self.ref.reference_set[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
@@ -299,64 +292,81 @@ class MMDNewton:
     def _backtracking_line_search_global(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> float:
-        """Apply the reusable residual-merit Armijo line search globally."""
-        if np.linalg.norm(step) <= np.finfo(float).eps:
-            return np.array([0.0])
+        """backtracking line search with Armijo's condition. Global step-size control"""
+        c1 = 1e-6
+        if 1 < 2 and np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
+            return np.array([1])
 
-        active_indices = self.state.active_indices.copy()
-
-        def evaluate(alpha):
+        def phi_func(alpha):
             state_ = deepcopy(self.state)
-            state_.update(state_.X + alpha * step, compute_hessian=False)
-            # Keep one smooth local model during the search. Matching and the
-            # active set are recomputed normally after the step is accepted.
-            trial_active_indices = state_.active_indices
-            state_.active_indices = active_indices
-            self.ref.re_match = False
-            try:
-                residual = self._compute_R(state_)[0]
-            finally:
-                self.ref.re_match = True
-                state_.active_indices = trial_active_indices
-            return residual
+            state_.update(state_.X + alpha * step)
+            self.indicator.re_match = False
+            R_ = self._compute_R(state_)[0]
+            self.indicator.re_match = True
+            return np.linalg.norm(R_)
 
-        max_step = float(np.min(max_step_size)) if max_step_size is not None else 1.0
-        result = residual_armijo_line_search(R, evaluate, max_step=max_step)
-        if not result.converged:
-            self.logger.warning(
-                "backtracking line search did not satisfy Armijo; using the best improving trial"
-                if result.step_size > 0
-                else "backtracking line search rejected the Newton step"
-            )
-        return np.array([result.step_size])
+        step_size = min(max_step_size) if max_step_size is not None else 1
+        phi = [np.linalg.norm(R)]
+        s = [0, step_size]
+        for _ in range(6):
+            phi.append(phi_func(s[-1]))
+            # Armijo–Goldstein condition
+            # when R norm is close to machine precision, it makes no sense to perform the line search
+            success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+            if success:
+                break
+            else:
+                s.append(s[-1] * 0.5)
+        else:
+            self.logger.warn("backtracking line search failed")
+        step_size = s[-1]
+        return step_size
 
     def _backtracking_line_search_individual(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> np.ndarray:
-        """Apply the reusable residual-merit search point by point."""
-        if np.linalg.norm(step) <= np.finfo(float).eps:
+        # TODO: use the backtracking line search in scipy
+        """backtracking line search with Armijo's condition"""
+        c1 = 1e-4
+        if 1 < 2 and np.all(np.isclose(step, 0)):
             return np.ones((self.N, 1))
 
-        def evaluate(alpha, i):
+        def phi_func(alpha, i):
             state = deepcopy(self.state)
             x = state.X[i].copy()
             x += alpha * step[i]
             state.update_one(x, i)
-            self.ref.re_match = False
+            self.indicator.re_match = False
             # this step takes too long since we compute the gradient at all points while only one changes
-            try:
-                return self._compute_R(state)[0][i]
-            finally:
-                self.ref.re_match = True
+            R_ = self._compute_R(state)[0][i]
+            self.indicator.re_match = True
+            self.state.n_jac_evals = state.n_jac_evals
+            return np.linalg.norm(R_)
 
         step_size = max_step_size if max_step_size is not None else np.ones(self.N)
         for i in range(self.N):
-            result = residual_armijo_line_search(
-                R[i],
-                lambda alpha, i=i: evaluate(alpha, i),
-                max_step=float(step_size[i]),
-            )
-            step_size[i] = result.step_size
+            phi = [np.linalg.norm(R[i])]
+            s = [0, step_size[i]]
+            for _ in range(6):
+                phi.append(phi_func(s[-1], i))
+                # Armijo–Goldstein condition
+                # when R norm is close to machine precision, it makes no sense to perform the line search
+                success = phi[-1] <= (1 - c1 * s[-1]) * phi[0] or np.isclose(phi[0], np.finfo(float).eps)
+                if success:
+                    break
+                else:
+                    if 11 < 2:
+                        # cubic interpolation to compute the next step length
+                        d1 = -phi[-2] - phi[-1] - 3 * (phi[-2] - phi[-1]) / (s[-2] - s[-1])
+                        d2 = np.sign(s[-1] - s[-2]) * np.sqrt(d1**2 - phi[-2] * phi[-1])
+                        s_ = s[-1] - (s[-1] - s[-2]) * (-phi[-1] + d2 - d1) / (-phi[-1] + phi[-2] + 2 * d2)
+                        s_ = s[-1] * 0.5 if np.isnan(s_) else np.clip(s_, 0.4 * s[-1], 0.6 * s[-1])
+                        s.append(s_)
+                    else:
+                        s.append(s[-1] / 2)
+            else:
+                self.logger.warn("backtracking line search failed")
+            step_size[i] = s[-1]
         return step_size
 
     def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
