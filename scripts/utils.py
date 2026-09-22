@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
+from scipy.spatial.distance import cdist
+from sklearn_extra.cluster import KMedoids
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 12
@@ -20,12 +22,29 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 
+def kernel_theta(multiplier: float, approximation: np.ndarray, reference: np.ndarray) -> float:
+    """Scale theta by the median nonzero squared distance to the reference."""
+    distances = cdist(approximation, reference, metric="sqeuclidean").ravel()
+    distances = distances[np.isfinite(distances) & (distances > np.finfo(float).eps)]
+    characteristic_distance = np.median(distances) if len(distances) else 1.0
+    return float(multiplier / characteristic_distance)
+
+
+def get_pareto_front(problem) -> np.ndarray:
+    pareto_front = np.asarray(problem.get_pareto_front())
+    if len(pareto_front) > 1000:
+        model = KMedoids(n_clusters=1000, method="alternate", random_state=0, init="k-medoids++")
+        model.fit(pareto_front)
+        pareto_front = pareto_front[model.medoid_indices_]
+    return pareto_front
+
+
 def read_reference_set_data(
-    path: str,
-    problem_name: str,
-    emoa: str,
+    data_path: str,
+    problem: str,
+    moea: str,
     run: int,
-    gen: int,
+    generation: int,
     matching: bool = True,
 ) -> Tuple[Dict[int, np.ndarray], np.ndarray, np.ndarray, np.ndarray, Dict[int, np.ndarray]]:
     """Load a reference set and the filtered final population of one run.
@@ -46,23 +65,25 @@ def read_reference_set_data(
         indices, and optional precomputed shift directions.
     """
     ref_label = pd.read_csv(
-        path / f"{problem_name}_{emoa}_run_{run}_component_id_gen{gen}.csv", header=None
+        data_path / f"{problem}_{moea}_run_{run}_component_id_gen{generation}.csv", header=None
     ).values[0]
-    n_cluster = len(np.unique(ref_label))
+    component_ids = np.unique(ref_label)
+    n_cluster = len(component_ids)
     ref = dict()
     eta = dict()
     # load the reference set
-    for i in range(n_cluster):
-        if 11 < 2 and problem_name in ["DTLZ6", "DTLZ7"]:
+    for component_id in component_ids:
+        i = len(ref)
+        if 11 < 2 and problem in ["DTLZ6", "DTLZ7"]:
             # for DTLZ7 we need to load the dense fillings of the reference set
             r = pd.read_csv(
-                f"{path}/{problem_name}_{emoa}_run_{run}_filling_comp{i+1}_gen{gen}.csv", header=None
+                f"{data_path}/{problem}_{moea}_run_{run}_filling_comp{i+1}_gen{generation}.csv", header=None
             ).values
         else:
             if n_cluster == 1:
-                ref_file = f"{path}/{problem_name}_{emoa}_run_{run}_ref_gen{gen}.csv"
+                ref_file = f"{data_path}/{problem}_{moea}_run_{run}_ref_gen{generation}.csv"
             else:
-                ref_file = f"{path}/{problem_name}_{emoa}_run_{run}_ref_{i+1}_gen{gen}.csv"
+                ref_file = f"{data_path}/{problem}_{moea}_run_{run}_ref_{component_id}_gen{generation}.csv"
             try:
                 r = pd.read_csv(ref_file, header=None).values
             except:
@@ -71,7 +92,7 @@ def read_reference_set_data(
         ref[i] = np.array(random.sample(r.tolist(), 3000)) if len(r) >= 3000 else r
         try:
             eta[i] = pd.read_csv(
-                f"{path}/{problem_name}_{emoa}_run_{run}_eta_{i+1}_gen{gen}.csv", header=None
+                f"{data_path}/{problem}_{moea}_run_{run}_eta_{component_id}_gen{generation}.csv", header=None
             ).values.ravel()
         except:
             if i > 0 and eta[i - 1] is not None:  # copy the shift direction from the last cluster
@@ -84,10 +105,14 @@ def read_reference_set_data(
         eta = None
 
     # the load the final population from an EMOA
-    x0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_x_gen{gen}.csv", header=None).values
-    y0 = pd.read_csv(f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_y_gen{gen}.csv", header=None).values
+    x0 = pd.read_csv(
+        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_x_gen{generation}.csv", header=None
+    ).values
+    y0 = pd.read_csv(
+        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_y_gen{generation}.csv", header=None
+    ).values
     Y_label = pd.read_csv(
-        f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_labels_gen{gen}.csv", header=None
+        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_labels_gen{generation}.csv", header=None
     ).values.ravel()
     Y_label = Y_label - 1  # index starts at 0
     if not matching:

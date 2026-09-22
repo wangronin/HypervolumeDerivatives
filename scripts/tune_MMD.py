@@ -45,7 +45,6 @@ jax_config.update("jax_enable_x64", True)
 
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import cdist
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -57,7 +56,7 @@ from hvd.mmd_vectorized import rational_quadratic, rbf
 from hvd.problems import IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
-from scripts.utils import read_reference_set_data
+from scripts.utils import get_pareto_front, kernel_theta, read_reference_set_data
 
 PROBLEMS = {
     "IDTLZ1": IDTLZ1,
@@ -121,18 +120,6 @@ def load_run(
         y_indices=y_indices,
         eta=eta,
     )
-
-
-def kernel_theta(
-    multiplier: float,
-    approximation: np.ndarray,
-    reference: np.ndarray,
-) -> float:
-    """Convert a scale-free multiplier to the kernel's inverse length scale."""
-    distances = cdist(approximation, reference, metric="sqeuclidean").ravel()
-    distances = distances[np.isfinite(distances) & (distances > np.finfo(float).eps)]
-    characteristic_distance = np.median(distances) if len(distances) else 1.0
-    return float(multiplier / characteristic_distance)
 
 
 def averaged_hausdorff(points: np.ndarray, pareto_front: np.ndarray) -> tuple[float, float, float]:
@@ -247,10 +234,6 @@ def config_from_params(params: dict, args) -> dict:
 
 def boolean_choices(value: str) -> list[bool]:
     return {"both": [False, True], "false": [False], "true": [True]}[value]
-
-
-def get_pareto_front(problem) -> np.ndarray:
-    return np.asarray(problem.get_pareto_front())
 
 
 def make_pruner(optuna, args, max_resource: int):

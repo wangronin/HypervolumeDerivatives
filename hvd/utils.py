@@ -167,9 +167,7 @@ def regularize_hessian_block(
         eigenvalues = np.linalg.eigvalsh(block)
         smallest, largest = eigenvalues[0], eigenvalues[-1]
         positive_definite_shift = min_eigenvalue - smallest
-        condition_shift = (
-            largest - max_condition_number * smallest
-        ) / (max_condition_number - 1)
+        condition_shift = (largest - max_condition_number * smallest) / (max_condition_number - 1)
         shift = max(0.0, positive_definite_shift, condition_shift)
         regularized[index, index] = block + shift * identity
     return regularized
