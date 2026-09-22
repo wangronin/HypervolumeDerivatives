@@ -69,7 +69,7 @@ def execute(run: int) -> np.ndarray:
         type="igd",
         verbose=True,
         metrics=metrics,
-        preconditioning=True,
+        regularization=True,
     )
     # remove the dominated ones in the final solutions
     Y = opt.run()[1]

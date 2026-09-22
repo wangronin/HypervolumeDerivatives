@@ -87,7 +87,7 @@ opt = DpN(
     metrics=metrics,
     type="igd",
     verbose=True,
-    preconditioning=True,
+    regularization=True,
 )
 X, Y, stop = opt.run()
 

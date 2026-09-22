@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 from matplotlib import rcParams
 
-from hvd.problems import CONV3
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
+from hvd.problems import CONV3
 from hvd.reference_set import ReferenceSet
 
 np.random.seed(42)
@@ -51,7 +51,7 @@ opt = DpN(
     xu=3,
     max_iters=max_iters,
     verbose=True,
-    preconditioning=True,
+    regularization=True,
     metrics=metrics,
     type="igd",
 )

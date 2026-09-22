@@ -63,7 +63,7 @@ opt = DpN(
     max_iters=max_iters,
     type="igd",
     verbose=True,
-    preconditioning=True,
+    regularization=True,
 )
 X, Y, stop = opt.run()
 

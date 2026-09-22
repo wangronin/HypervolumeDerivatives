@@ -51,7 +51,7 @@ opt = DpN(
     xu=3,
     max_iters=max_iters,
     verbose=True,
-    preconditioning=True,
+    regularization=True,
     metrics=metrics,
     type="igd",
 )

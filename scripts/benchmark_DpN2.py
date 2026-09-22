@@ -11,20 +11,7 @@ from sklearn_extra.cluster import KMedoids
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.newton import DpN
-from hvd.problems import (
-    DTLZ1,
-    DTLZ2,
-    DTLZ3,
-    DTLZ4,
-    DTLZ5,
-    DTLZ6,
-    DTLZ7,
-    ZDT1,
-    ZDT2,
-    ZDT3,
-    ZDT4,
-    ZDT6,
-)
+from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.utils import read_reference_set_data
@@ -96,7 +83,7 @@ def execute(emoa: str, run: int) -> np.ndarray:
             type="igd",
             verbose=True,
             metrics=metrics,
-            preconditioning=True,
+            regularization=True,
         )
         Y = opt.run()[1]
         Y = get_non_dominated(Y)

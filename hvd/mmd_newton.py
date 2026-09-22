@@ -11,13 +11,7 @@ from scipy.spatial.distance import cdist
 from .base import State
 from .mmd_vectorized import MMD, MMDMatching
 from .reference_set import ReferenceSet
-from .utils import (
-    Nd_vector_to_matrix,
-    get_logger,
-    matrix_to_Nd_vector,
-    regularize_hessian_block,
-    set_bounds,
-)
+from .utils import Nd_vector_to_matrix, get_logger, matrix_to_Nd_vector, regularize_hessian_block, set_bounds
 
 
 class MMDNewton:
@@ -293,7 +287,7 @@ class MMDNewton:
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_norm, 0))
 
         indices = np.nonzero(masks)[0]
-        self.ref.shift(0.002, indices)
+        self.ref.shift(0.08, indices)
         for k in indices:  # log the updated medoids
             self.history_medoids[k].append(self.ref.reference_set[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")

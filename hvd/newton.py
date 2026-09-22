@@ -187,9 +187,7 @@ class HVN:
             max_step_size = self._compute_max_step_size(self.state[idx].primal, self.step[idx, : self.dim_p])
             # backtracking line search with Armijo's condition for each layer
             phi_func = self._get_phi_func(self.state[idx], step)
-            result = residual_armijo_line_search(
-                R, phi_func, max_step=float(np.min(max_step_size))
-            )
+            result = residual_armijo_line_search(R, phi_func, max_step=float(np.min(max_step_size)))
             self.step_size[idx] = result.step_size
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))
@@ -354,7 +352,7 @@ class DpN:
         xtol: float = 0,
         verbose: bool = True,
         metrics: Dict[str, Callable] = dict(),
-        preconditioning: bool = False,
+        regularization: bool = False,
     ):
         """
         Args:
@@ -393,7 +391,7 @@ class DpN:
         self.N = N
         self.xl = xl
         self.xu = xu
-        self.preconditioning: bool = preconditioning
+        self.preconditioning: bool = regularization
         self._check_constraints(h, g)
         self.ref: ReferenceSet = ref
         self.state = State(
@@ -407,7 +405,7 @@ class DpN:
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
         self.stop_dict: Dict[str, float] = {}
         self.metrics = metrics
-        self.preconditioning: bool = preconditioning
+        self.preconditioning: bool = regularization
 
     def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables

@@ -52,7 +52,7 @@ opt = DpN(
     verbose=True,
     metrics=metrics,
     type="igd",
-    preconditioning=True,
+    regularization=True,
 )
 X, Y, stop = opt.run()
 # plotting

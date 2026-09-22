@@ -28,14 +28,14 @@ rcParams["ytick.major.width"] = 1
 
 np.random.seed(66)
 
-max_iters = 15
+max_iters = 20
 problem_name = "ZDT1"
 print(problem_name)
 f = locals()[problem_name](n_var=3)
 problem = f
 pareto_front = problem.get_pareto_front(1000)
 
-if 1 < 2:
+if 11 < 2:
     ref_ = pd.read_csv("./ZDT1/ZDT1_REF_Filling.csv", header=None).values
     medoids = pd.read_csv("./ZDT1/ZDT1_REF_Match_30points.csv", header=None).values
     # the load the final population from an EMOA
@@ -47,7 +47,7 @@ if 1 < 2:
     # emoa = "SMS-EMOA"
     # gen = 300
     # run = 1
-    # ref_, eta, X0, Y0, Y_idx = read_reference_set_data(path, problem_name, emoa, run, gen)
+    # ref_, X0, Y0, Y_idx, eta = read_reference_set_data(path, problem_name, emoa, run, gen)
 else:
     ref_ = problem.get_pareto_front(15)
     X0 = problem.get_pareto_set(15, kind="linear")
@@ -56,17 +56,26 @@ else:
     eta, Y_idx = {0: np.array([-0.70710678, -0.70710678])}, None
 
 N = len(X0)
-ref = ReferenceSet(ref=ref_, eta=eta, Y_idx=Y_idx)
+
+
+def make_reference_set() -> ReferenceSet:
+    """Give each optimizer an independent, mutable reference set."""
+    eta_copy = None if eta is None else {key: value.copy() for key, value in eta.items()}
+    indices_copy = None if Y_idx is None else [np.asarray(indices).copy() for indices in Y_idx]
+    return ReferenceSet(ref=ref_.copy(), eta=eta_copy, Y_idx=indices_copy)
+
+
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
 opt = MMDNewton(
     n_var=problem.n_var,
     n_obj=problem.n_obj,
-    ref=ref,
+    ref=make_reference_set(),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
+    g_hessian=problem.ieq_hessian,
     N=N,
     X0=X0,
     xl=problem.xl,
@@ -81,12 +90,13 @@ X, Y, _ = opt.run()
 opt2 = DpN(
     dim=problem.n_var,
     n_obj=problem.n_obj,
-    ref=ref_,
+    ref=make_reference_set(),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
+    g_hessian=problem.ieq_hessian,
     N=N,
     x0=X0,
     xl=problem.xl,
@@ -94,9 +104,8 @@ opt2 = DpN(
     max_iters=max_iters,
     verbose=True,
     type="igd",
-    eta=eta,
-    Y_label=None,
-    pareto_front=pareto_front,
+    metrics=metrics,
+    regularization=True,
 )
 X_DpN, Y_DpN, _ = opt2.run()
 
@@ -184,7 +193,7 @@ ax0.set_title("MMD-Newton")
 ax0.set_xlabel(r"$f_1$")
 ax0.set_ylabel(r"$f_2$")
 
-medoids = opt2._igd._medoids
+medoids = opt2.ref.reference_set
 for i, m in enumerate(medoids):
     ax1.plot((m[0], Y_DpN[i, 0]), (m[1], Y_DpN[i, 1]), "k--", alpha=0.5)
 
@@ -195,7 +204,7 @@ lines += ax1.plot(Y0[:, 0], Y0[:, 1], "k+", ms=12, alpha=0.9)
 colors = plt.get_cmap("tab20").colors
 colors = [colors[2], colors[12], colors[13]]
 shifts = []
-for i, M in enumerate(opt2.history_medoids):
+for i, M in opt2.history_medoids.items():
     c = colors[len(M) - 1]
     for j, x in enumerate(M):
         line = ax1.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
@@ -203,7 +212,7 @@ for i, M in enumerate(opt2.history_medoids):
             shifts.append(line)
 lines += shifts
 lines += ax1.plot(Y_DpN[:, 0], Y_DpN[:, 1], "k*", mec="none", ms=8, alpha=0.9)
-counts = np.unique([len(m) for m in opt2.history_medoids], return_counts=True)[1]
+counts = np.unique([len(m) for m in opt2.history_medoids.values()], return_counts=True)[1]
 lgnd = ax1.legend(
     lines,
     ["Pareto front", r"$Y_0$"]
@@ -227,12 +236,12 @@ ax2.legend()
 # ax32 = ax3.twinx()
 # ax3.semilogy(xticks, opt.history_indicator_value, "r-", label="MMD-matching")
 # for i, (name, values) in enumerate(opt.history_metrics.items()):
-# ax3.semilogy(xticks, values, color=colors[i], ls="solid", label=name)
+#     ax3.semilogy(xticks, values, color=colors[i], ls="solid", label=name)
 ax3.semilogy(xticks, opt.history_metrics["IGD"], color=colors[0], ls="solid", label="IGD-MMD")
 # ax32.semilogy(xticks, opt.history_metrics["IGD"], color=colors[1], ls="solid", label="IGD-MMD")
 
-ax3.semilogy(xticks, opt2.hist_IGD, color=colors[0], ls="dashed", label="IGD-DpN")
-# ax32.semilogy(xticks, opt2.hist_IGD, color=colors[1], ls="dashed", label="IGD-DpN")
+ax3.semilogy(xticks, opt2.history_metrics["IGD"], color=colors[0], ls="dashed", label="IGD-DpN")
+# ax32.semilogy(xticks, opt2.history_metrics["IGD"], color=colors[1], ls="dashed", label="IGD-DpN")
 ax3.set_title("Performance")
 # ax3.set_ylabel("GD")
 # ax32.set_ylabel("IGD")
