@@ -11,7 +11,14 @@ from scipy.spatial.distance import cdist
 from .base import State
 from .mmd_vectorized import MMD, MMDMatching
 from .reference_set import ReferenceSet
-from .utils import Nd_vector_to_matrix, get_logger, matrix_to_Nd_vector, regularize_hessian_block, set_bounds
+from .utils import (
+    Nd_vector_to_matrix,
+    get_logger,
+    matrix_to_Nd_vector,
+    project_box_step,
+    regularize_hessian_block,
+    set_bounds,
+)
 
 
 class MMDNewton:
@@ -45,6 +52,7 @@ class MMDNewton:
         regularization: bool = False,
         matching: bool = True,
         beta: float = 0.25,
+        project_box_constraints: bool = False,
         **kwargs,
     ):
         """
@@ -78,6 +86,9 @@ class MMDNewton:
             verbose (bool, optional): verbosity of the output. Defaults to True.
             beta (float, optional): weight of the MMD-Matching self-repulsion term.
                 Defaults to 0.25.
+            project_box_constraints (bool, optional): project outward search
+                directions and limit steps to remain inside the decision box.
+                Defaults to False.
         """
         self.dim_p: int = n_var
         self.n_obj: int = n_obj
@@ -114,6 +125,7 @@ class MMDNewton:
         self.stop_dict: Dict[str, float] = {}
         self.metrics: Dict[str, Callable] = metrics
         self.preconditioning: bool = regularization
+        self.project_box_constraints: bool = project_box_constraints
 
     def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables
@@ -189,8 +201,9 @@ class MMDNewton:
         self._shift_reference_set()
         # compute the Newton step
         self.step, self.R = self._compute_netwon_step()
-        # prevent the decision points from moving out of the decision space.
-        self.step, max_step_size = self._handle_box_constraint(self.step)
+        max_step_size = None
+        if self.project_box_constraints:
+            self.step, max_step_size = project_box_step(self.step, self.state.primal, self.xl, self.xu)
         # backtracking line search for the step size
         self.step_size = self._backtracking_line_search_individual(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
@@ -371,33 +384,3 @@ class MMDNewton:
                 self.logger.warn("backtracking line search failed")
             step_size[i] = s[-1]
         return step_size
-
-    def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Project outward boundary directions and compute feasible per-point step limits."""
-        step = np.asarray(step).copy()
-        primal_vars = self.state.primal
-        step_primal = step[:, : self.dim_p]
-        tolerance = 10 * np.finfo(float).eps
-
-        at_lower_bound = primal_vars <= self.xl + tolerance
-        at_upper_bound = primal_vars >= self.xu - tolerance
-        step_primal[at_lower_bound & (step_primal < 0)] = 0
-        step_primal[at_upper_bound & (step_primal > 0)] = 0
-        step[:, : self.dim_p] = step_primal
-
-        with np.errstate(divide="ignore", invalid="ignore"):
-            upper_limits = np.where(
-                step_primal > 0,
-                (self.xu - primal_vars) / step_primal,
-                np.inf,
-            )
-            lower_limits = np.where(
-                step_primal < 0,
-                (self.xl - primal_vars) / step_primal,
-                np.inf,
-            )
-        point_limits = np.min(np.minimum(upper_limits, lower_limits), axis=1)
-        fraction_to_boundary = 0.995
-        max_step_size = np.minimum(1.0, fraction_to_boundary * point_limits)
-        max_step_size = np.clip(max_step_size, 0.0, 1.0)
-        return step, max_step_size

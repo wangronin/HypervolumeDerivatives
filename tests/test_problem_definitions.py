@@ -99,9 +99,10 @@ def test_resolved_metadata_are_instance_annotations() -> None:
     assert {"n_obj", "n_var", "xl", "xu"} <= problem.__dict__.keys()
 
 
-def test_box_constraint_switch() -> None:
-    without_bounds = UF1()
-    with_bounds = UF1(boundary_constraints=True)
+@pytest.mark.parametrize("problem_type", [UF1, ZDT1])
+def test_box_constraint_switch(problem_type: type[CMOP]) -> None:
+    without_bounds = problem_type()
+    with_bounds = problem_type(boundary_constraints=True)
 
     assert without_bounds.n_ieq_constr == 0
     assert without_bounds.ieq_constraint is None

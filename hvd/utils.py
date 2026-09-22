@@ -175,6 +175,59 @@ def regularize_hessian_block(
     return regularized
 
 
+def project_box_step(
+    step: np.ndarray,
+    primal_vars: np.ndarray,
+    xl: np.ndarray,
+    xu: np.ndarray,
+    fraction_to_boundary: float = 0.995,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Project outward boundary directions and compute feasible step limits.
+
+    The operation is intentionally opt-in at the optimizer level.  It is useful
+    when objective or constraint callbacks are undefined outside the box, or
+    when every iterate must remain feasible with respect to the bounds.
+
+    Args:
+        step: Point-wise primal-dual search directions.
+        primal_vars: Current primal points with shape ``(N, n_var)``.
+        xl: Lower decision bounds.
+        xu: Upper decision bounds.
+        fraction_to_boundary: Fraction of the feasible distance allowed in one
+            step.  Must be in ``(0, 1]``.
+
+    Returns:
+        The projected directions and one maximum step size per point.
+    """
+    step = np.asarray(step, dtype=float).copy()
+    primal_vars = np.asarray(primal_vars, dtype=float)
+    if primal_vars.ndim != 2 or step.ndim != 2 or len(step) != len(primal_vars):
+        raise ValueError("step and primal_vars must be two-dimensional with the same number of rows")
+    n_var = primal_vars.shape[1]
+    if step.shape[1] < n_var:
+        raise ValueError("step must contain at least one column per primal variable")
+    if not 0 < fraction_to_boundary <= 1:
+        raise ValueError("fraction_to_boundary must be in (0, 1]")
+
+    xl = np.broadcast_to(np.asarray(xl, dtype=float), (n_var,))
+    xu = np.broadcast_to(np.asarray(xu, dtype=float), (n_var,))
+    step_primal = step[:, :n_var]
+    tolerance = 10 * np.finfo(float).eps * np.maximum(1.0, np.maximum(np.abs(xl), np.abs(xu)))
+
+    at_lower_bound = primal_vars <= xl + tolerance
+    at_upper_bound = primal_vars >= xu - tolerance
+    step_primal[at_lower_bound & (step_primal < 0)] = 0
+    step_primal[at_upper_bound & (step_primal > 0)] = 0
+    step[:, :n_var] = step_primal
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        upper_limits = np.where(step_primal > 0, (xu - primal_vars) / step_primal, np.inf)
+        lower_limits = np.where(step_primal < 0, (xl - primal_vars) / step_primal, np.inf)
+    point_limits = np.min(np.minimum(upper_limits, lower_limits), axis=1)
+    max_step_size = np.minimum(1.0, fraction_to_boundary * point_limits)
+    return step, np.clip(max_step_size, 0.0, 1.0)
+
+
 def preprocess_reference_set(X: np.ndarray) -> np.ndarray:
     """remove duplicated points and outliers"""
     N = len(X)

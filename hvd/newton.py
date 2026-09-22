@@ -20,7 +20,9 @@ from .utils import (
     get_logger,
     matrix_to_Nd_vector,
     non_domin_sort,
+    project_box_step,
     regularize_hessian,
+    regularize_hessian_block,
     set_bounds,
 )
 
@@ -353,6 +355,7 @@ class DpN:
         verbose: bool = True,
         metrics: Dict[str, Callable] = dict(),
         regularization: bool = False,
+        project_box_constraints: bool = False,
     ):
         """
         Args:
@@ -383,6 +386,9 @@ class DpN:
             xtol (float, optional): absolute distance in the approximation set between consecutive iterations
                 that is used to determine convergence. Defaults to 1e-3.
             verbose (bool, optional): verbosity of the output. Defaults to True.
+            project_box_constraints (bool, optional): project outward search
+                directions and limit steps to remain inside the decision box.
+                Defaults to False.
         """
         assert type in ["gd", "igd", "deltap"]
         self.type = type
@@ -406,6 +412,7 @@ class DpN:
         self.stop_dict: Dict[str, float] = {}
         self.metrics = metrics
         self.preconditioning: bool = regularization
+        self.project_box_constraints: bool = project_box_constraints
 
     def _check_constraints(self, h: Callable, g: Callable):
         # initialize dual variables
@@ -484,7 +491,9 @@ class DpN:
 
     @property
     def curr_indicator_value(self) -> float:
-        return max(self.GD_value, self.IGD_value)
+        if self.type == "deltap":
+            return max(self.GD_value, self.IGD_value)
+        return self.GD_value if self.type == "gd" else self.IGD_value
 
     def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
         while not self.terminate():
@@ -499,8 +508,9 @@ class DpN:
         self._shift_reference_set()
         # compute the Newton step
         self.step, self.R = self._compute_netwon_step(self.state)
-        # prevent the decision points from moving out of the decision space. Needed for CF7 with NSGA-III
-        self.step, max_step_size = self._handle_box_constraint(self.step)
+        max_step_size = None
+        if self.project_box_constraints:
+            self.step, max_step_size = project_box_step(self.step, self.state.primal, self.xl, self.xu)
         # backtracking line search for the step size
         self.step_size = self._backtracking_line_search(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
@@ -576,7 +586,7 @@ class DpN:
             Z = np.zeros((len(dh), len(dh)))
             # pre-condition indicator's Hessian if needed, e.g., on ZDT6, CF1, CF7
             if self.preconditioning:
-                Hessian[r] = regularize_hessian(Hessian[r])
+                Hessian[r] = regularize_hessian_block(Hessian[r], block_size=self.dim_p)
             # derivative of the root-finding problem
             DR = np.r_[np.c_[Hessian[r] + S[r], dh.T], np.c_[dh, Z]] if self._constrained else Hessian[r]
             R[r, c] = R_list[r]
@@ -657,35 +667,3 @@ class DpN:
                 # self.logger.info("backtracking line search failed")
             step_size[i] = s[-1]
         return step_size
-
-    def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """The box-constraint handler projects the Newton step onto the box boundary, preventing the
-        algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
-        """
-        # NOTE: for ZDT6, we have to project the gradient
-        if 11 < 2:
-            return step, np.ones(len(step))
-
-        primal_vars = self.state.primal
-        step_primal = step[:, : self.dim_p]
-        normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
-        # calculate the maximal step-size
-        dist = np.c_[
-            np.abs(primal_vars - self.xl),
-            np.abs(self.xu - primal_vars),
-        ]
-        v = step_primal @ normal_vectors
-        s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-        max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
-        # project Newton's direction onto the box boundary
-        idx = max_step_size == 0
-        if np.any(idx) > 0:
-            proj_dim = [np.argmin(_) for _ in s[idx]]
-            proj_axis = normal_vectors[:, proj_dim]
-            step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
-            step[:, : self.dim_p] = step_primal
-            # re-calculate the `max_step_size` for projected directions
-            v = step[:, : self.dim_p] @ normal_vectors
-            s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-            max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
-        return step, max_step_size

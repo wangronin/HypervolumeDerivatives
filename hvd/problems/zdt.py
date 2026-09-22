@@ -4,12 +4,12 @@ import jax.numpy as jnp
 import numpy as np
 from numpy.typing import ArrayLike
 
-from .base import MOP, fixed_n_obj
+from .base import CMOP, fixed_n_obj
 
 _EPS = 1e-12
 
 
-class ZDT(MOP):
+class ZDT(CMOP):
     default_n_obj = 2
 
     def __init__(
@@ -18,12 +18,14 @@ class ZDT(MOP):
         n_obj: int | None = None,
         xl: ArrayLike = 0.0,
         xu: ArrayLike = 1.0,
+        boundary_constraints: bool = False,
     ) -> None:
         super().__init__(
             n_var=n_var,
             n_obj=fixed_n_obj(n_obj, self.default_n_obj, type(self).__name__),
             xl=xl,
             xu=xu,
+            boundary_constraints=boundary_constraints,
         )
 
     def get_pareto_set(self, n_pareto_points: int = 100, kind: str = "linear") -> np.ndarray:
@@ -82,12 +84,14 @@ class ZDT4(ZDT1):
         n_obj: int | None = None,
         xl: ArrayLike | None = None,
         xu: ArrayLike | None = None,
+        boundary_constraints: bool = False,
     ) -> None:
         super().__init__(
             n_var,
             n_obj=n_obj,
             xl=np.r_[0.0, np.full(n_var - 1, -5.0)] if xl is None else xl,
             xu=np.r_[1.0, np.full(n_var - 1, 5.0)] if xu is None else xu,
+            boundary_constraints=boundary_constraints,
         )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -102,8 +106,15 @@ class ZDT6(ZDT):
         n_obj: int | None = None,
         xl: ArrayLike = 0.0,
         xu: ArrayLike = 1.0,
+        boundary_constraints: bool = False,
     ) -> None:
-        super().__init__(n_var, n_obj=n_obj, xl=xl, xu=xu)
+        super().__init__(
+            n_var,
+            n_obj=n_obj,
+            xl=xl,
+            xu=xu,
+            boundary_constraints=boundary_constraints,
+        )
 
     def _objective(self, x: jnp.ndarray) -> jnp.ndarray:
         f1 = 1 - jnp.exp(-4 * x[0]) * jnp.sin(6 * jnp.pi * x[0]) ** 6
