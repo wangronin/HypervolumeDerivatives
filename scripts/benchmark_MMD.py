@@ -1,138 +1,255 @@
-import sys
+from __future__ import annotations
 
-sys.path.insert(0, "./")
+import argparse
+import json
 import re
+import sys
 import time
 from glob import glob
 from pathlib import Path
 
+from jax import config as jax_config
+
+jax_config.update("jax_enable_x64", True)
+
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
+from scipy.spatial.distance import cdist
 from sklearn_extra.cluster import KMedoids
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import MMD, laplace, linear, rbf
-from hvd.problems import *
+from hvd.mmd_vectorized import MMDMatching, linear, rational_quadratic, rbf
+from hvd.problems import IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.utils import plot, read_reference_set_data
 
-np.random.seed(66)
-
-# settings
-max_iters = 10
-n_jobs = 30
-source_data_path = Path("./MMD_data/")
-csv_path = Path("./")
-plot_path = Path("./plots")
-moea = "NSGA-III"
-moea_gen = 300
-# get problem
-problem_name = sys.argv[1]
-boundary_constraints = True
-print(f"optimize {problem_name}")
-# create the problem instance
-problem_type = globals()[problem_name]
-problem = problem_type(boundary_constraints=boundary_constraints)
-# read the HV reference point
-ref_point = pd.read_csv("./scripts/ref_point.csv", index_col="problem").loc[problem_name].values
-# get hyperparameters
-params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
-params = params[(params.algorithm == moea) & (params.problem == problem_name)]
-kernel_name, theta = params["kernel"].values[0], params["param"].values[0]
-kernel = locals()[kernel_name]
+PROBLEMS = {
+    "IDTLZ1": IDTLZ1,
+    "IDTLZ2": IDTLZ2,
+    "IDTLZ3": IDTLZ3,
+    "IDTLZ4": IDTLZ4,
+}
+KERNELS = {
+    "rbf": rbf,
+    "rational_quadratic": rational_quadratic,
+    "linear": linear,
+}
 
 
-def execute(run: int) -> np.ndarray:
-    # read the reference set
-    ref, x0, y0, Y_index, eta = read_reference_set_data(source_data_path, problem_name, moea, run, moea_gen)
-    ref_list = np.vstack([r for r in ref.values()])
-    N = len(x0)
-    # create the algorithm
-    pareto_front = problem.get_pareto_front(1000) if problem.n_obj == 2 else problem.get_pareto_front()
-    # TODO: move this part to the problems
-    if len(pareto_front) > 1000:
-        km = KMedoids(n_clusters=1000, method="alternate", random_state=0, init="k-medoids++").fit(
-            pareto_front
+def kernel_theta(
+    kernel_name: str,
+    multiplier: float,
+    approximation: np.ndarray,
+    reference: np.ndarray,
+) -> float:
+    """Convert a scale-free multiplier to the kernel's inverse length scale."""
+    if kernel_name == "linear":
+        return 1.0
+    distances = cdist(approximation, reference, metric="sqeuclidean").ravel()
+    distances = distances[np.isfinite(distances) & (distances > np.finfo(float).eps)]
+    characteristic_distance = np.median(distances) if len(distances) else 1.0
+    return float(multiplier / characteristic_distance)
+
+
+def find_best_result(args) -> tuple[Path, dict]:
+    if args.best_config is not None:
+        candidates = [args.best_config.expanduser().resolve()]
+    else:
+        suffix = None
+        if args.boundary_constraints is not None:
+            suffix = "bounds" if args.boundary_constraints else "no_bounds"
+        name = f"MMDNewton-MMDMatching-{args.problem}-{args.algorithm}"
+        pattern = f"{name}-{suffix}-best.json" if suffix else f"{name}-*-best.json"
+        candidates = sorted(args.tuning_dir.expanduser().glob(pattern))
+
+    if not candidates:
+        raise FileNotFoundError(
+            "No matching tuning result was found. Pass --best-config explicitly or check --tuning-dir."
         )
-        pareto_front = pareto_front[km.medoid_indices_]
+    if len(candidates) > 1:
+        paths = "\n".join(f"  {path}" for path in candidates)
+        raise ValueError(f"Multiple tuning results match; select one with --best-config:\n{paths}")
 
-    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=kernel)
-    metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
-    # compute the initial performance metrics
-    hv_value0 = hypervolume(y0, ref=ref_point)
-    gd_value0 = metrics["GD"].compute(Y=y0)
-    igd_value0 = metrics["IGD"].compute(Y=y0)
-    mmd_value0 = mmd.compute(Y=y0)
-    print(f"initial HV: {hv_value0}")
-    print(f"initial GD: {gd_value0}")
-    print(f"initial IGD: {igd_value0}")
-    print(f"initial MMD: {mmd_value0}")
+    path = candidates[0]
+    with path.open() as stream:
+        result = json.load(stream)
+    if result.get("problem") != args.problem:
+        raise ValueError(f"{path} contains results for {result.get('problem')}, not {args.problem}")
+    if result.get("algorithm") != args.algorithm:
+        raise ValueError(f"{path} contains results for {result.get('algorithm')}, not {args.algorithm}")
+    if result.get("indicator") != "MMDMatching":
+        raise ValueError(f"{path} is not an MMDMatching tuning result")
+    required = {"kernel", "beta", "regularization", "theta_multiplier"}
+    missing = required - result.get("best_config", {}).keys()
+    if missing:
+        raise ValueError(f"{path} is missing tuned parameters: {sorted(missing)}")
+    if result["best_config"]["kernel"] not in KERNELS:
+        raise ValueError(f"{path} contains an unsupported kernel: {result['best_config']['kernel']}")
+    return path, result
 
-    t0 = time.process_time_ns()
-    opt = MMDNewton(
-        n_var=problem.n_var,
-        n_obj=problem.n_obj,
-        ref=ReferenceSet(ref=ref, eta=eta, Y_idx=Y_index),
-        func=problem.objective,
-        jac=problem.objective_jacobian,
-        hessian=problem.objective_hessian,
-        g=problem.ieq_constraint,
-        g_jac=problem.ieq_jacobian,
-        g_hessian=problem.ieq_hessian,
-        N=N,
-        X0=x0,
-        xl=problem.xl,
-        xu=problem.xu,
-        max_iters=max_iters,
-        verbose=True,
-        metrics=metrics,
-        matching=False,
-        regularization=True,
-        theta=theta,
-        kernel=kernel,
+
+def get_pareto_front(problem) -> np.ndarray:
+    pareto_front = np.asarray(problem.get_pareto_front())
+    if len(pareto_front) > 1000:
+        model = KMedoids(
+            n_clusters=1000,
+            method="alternate",
+            random_state=0,
+            init="k-medoids++",
+        ).fit(pareto_front)
+        pareto_front = pareto_front[model.medoid_indices_]
+    return pareto_front
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Benchmark tuned MMD-Matching Newton on IDTLZ.")
+    parser.add_argument("problem", choices=PROBLEMS)
+    parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
+    parser.add_argument("--data-path", type=Path, default=ROOT / "MMD_data")
+    parser.add_argument("--tuning-dir", type=Path, default=Path.home() / "data" / "mmd-tuning")
+    parser.add_argument("--best-config", type=Path, default=None)
+    parser.add_argument("--generation", type=int, default=None)
+    parser.add_argument("--max-iters", type=int, default=None)
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=30,
+        help="number of benchmark runs executed concurrently; use 1 for sequential execution",
     )
-    Y = opt.run()[1]
-    wall_clock_time = time.process_time_ns() - t0
-    Y = get_non_dominated(Y)  # remove the dominated ones in the final solutions
-    print(opt.history_R_norm)
-    # plotting the final approximation set
-    fig_name = plot_path / f"{problem_name}_MMD_{moea}_run{run}_{moea_gen}.pdf"
-    plot(y0, Y, ref_list, pareto_front, fig_name, opt)
-    # save the final approximation set
-    if 11 < 2:
-        df = pd.DataFrame(Y, columns=[f"f{i}" for i in range(1, Y.shape[1] + 1)])
-        df.to_csv(csv_path / f"{problem_name}_MMD_{moea}_run{run}_{moea_gen}_y.csv", index=False)
-        df_y0 = pd.DataFrame(y0, columns=[f"f{i}" for i in range(1, y0.shape[1] + 1)])
-        df_y0.to_csv(csv_path / f"{problem_name}_MMD_{moea}_run{run}_{moea_gen}_y0.csv", index=False)
-    # calculate the performance values
-    hv_value = hypervolume(Y, ref=ref_point)
-    gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
-    igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
-    mmd_value = mmd.compute(Y=Y)
-    return np.array(
-        [hv_value, igd_value, gd_value, mmd_value, opt.state.n_jac_evals, wall_clock_time / 1000.0]
+    parser.add_argument(
+        "--boundary-constraints",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="filter automatic configuration discovery; otherwise read this setting from the result",
     )
+    parser.add_argument("--plot-dir", type=Path, default=ROOT / "plots")
+    parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
+    return parser
 
 
-# get all run IDs
-run_id = [
-    int(re.findall(r"run_(\d+)_", s)[0])
-    for s in glob(f"{source_data_path}/{problem_name}_{moea}_run_*_lastpopu_x_gen{moea_gen}.csv")
-]
-if problem_name == "DTLZ4" and moea == "MOEAD":
-    run_id = list(set(run_id) - set([3]))
+def main() -> None:
+    args = build_parser().parse_args()
+    if args.n_jobs == 0:
+        raise ValueError("n-jobs must not be zero")
+    best_path, tuning_result = find_best_result(args)
+    config = tuning_result["best_config"]
+    boundary_constraints = bool(tuning_result["boundary_constraints"])
+    if args.boundary_constraints is not None and args.boundary_constraints != boundary_constraints:
+        raise ValueError("the selected tuning result uses a different boundary-constraint setting")
 
-if 1 < 2:
-    data = []
-    for i in run_id:
-        print(i)
-        data.append(execute(i))
-else:
-    data = Parallel(n_jobs=n_jobs)(delayed(execute)(run=i) for i in run_id)
+    generation = args.generation or int(tuning_result.get("generation", 300))
+    max_iters = args.max_iters or int(tuning_result.get("max_iters", 5))
+    kernel_name = config["kernel"]
+    kernel = KERNELS[kernel_name]
+    beta = float(config["beta"])
+    theta_multiplier = float(config.get("theta_multiplier", 1.0))
+    regularization = bool(config["regularization"])
 
-df = pd.DataFrame(np.array(data), columns=["HV", "IGD", "GD", "MMD", "Jac_calls", "wall_clock_time"])
-df.to_csv(f"results/{problem_name}-MMD-{moea}-300.csv", index=False)
+    problem = PROBLEMS[args.problem](boundary_constraints=boundary_constraints)
+    pareto_front = get_pareto_front(problem)
+    ref_point = pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem").loc[
+        args.problem
+    ].values
+    args.plot_dir.mkdir(parents=True, exist_ok=True)
+    args.results_dir.mkdir(parents=True, exist_ok=True)
+    print(f"optimize {args.problem}")
+    print(f"tuning result: {best_path}")
+    print(f"configuration: {json.dumps(config, sort_keys=True)}")
+    print(f"JAX 64-bit enabled: {jax_config.jax_enable_x64}")
+    print(f"parallel benchmark workers: {args.n_jobs}")
+
+    def execute(run: int) -> np.ndarray:
+        ref, x0, y0, y_indices, eta = read_reference_set_data(
+            args.data_path,
+            args.problem,
+            args.algorithm,
+            run,
+            generation,
+        )
+        reference = np.vstack(list(ref.values()))
+        theta = kernel_theta(kernel_name, theta_multiplier, y0, reference)
+        metric = MMDMatching(
+            n_var=problem.n_obj,
+            n_obj=problem.n_obj,
+            ref=pareto_front.copy(),
+            kernel=kernel,
+            theta=theta,
+            beta=beta,
+        )
+        metrics = {
+            "GD": GenerationalDistance(pareto_front),
+            "IGD": InvertedGenerationalDistance(pareto_front),
+        }
+        print(f"run {run}: theta={theta}, precomputed eta={eta is not None}")
+        print(f"initial HV: {hypervolume(y0, ref=ref_point)}")
+        print(f"initial GD: {metrics['GD'].compute(Y=y0)}")
+        print(f"initial IGD: {metrics['IGD'].compute(Y=y0)}")
+        print(f"initial MMD-Matching: {metric.compute(Y=y0)}")
+
+        started = time.perf_counter_ns()
+        optimizer = MMDNewton(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            ref=ReferenceSet(ref=ref, eta=eta, Y_idx=y_indices),
+            func=problem.objective,
+            jac=problem.objective_jacobian,
+            hessian=problem.objective_hessian,
+            g=problem.ieq_constraint,
+            g_jac=problem.ieq_jacobian,
+            g_hessian=problem.ieq_hessian,
+            N=len(x0),
+            X0=x0,
+            xl=problem.xl,
+            xu=problem.xu,
+            max_iters=max_iters,
+            verbose=True,
+            metrics=metrics,
+            matching=True,
+            beta=beta,
+            regularization=regularization,
+            theta=theta,
+            kernel=kernel,
+        )
+        Y = get_non_dominated(optimizer.run()[1])
+        elapsed_microseconds = (time.perf_counter_ns() - started) / 1000.0
+        print(optimizer.history_R_norm)
+
+        figure = args.plot_dir / f"{args.problem}_MMDMatching_{args.algorithm}_run{run}_{generation}.pdf"
+        plot(y0, Y, reference, pareto_front, figure, optimizer)
+        hv_value = hypervolume(Y, ref=ref_point)
+        igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
+        gd_value = GenerationalDistance(pareto_front).compute(Y=Y)
+        mmd_value = metric.compute(Y=Y)
+        return np.array(
+            [hv_value, igd_value, gd_value, mmd_value, optimizer.state.n_jac_evals, elapsed_microseconds]
+        )
+
+    run_ids = sorted(
+        int(re.findall(r"run_(\d+)_", path)[0])
+        for path in glob(
+            str(
+                args.data_path
+                / f"{args.problem}_{args.algorithm}_run_*_lastpopu_x_gen{generation}.csv"
+            )
+        )
+    )
+    if args.n_jobs == 1:
+        data = [execute(run) for run in run_ids]
+    else:
+        data = Parallel(n_jobs=args.n_jobs)(delayed(execute)(run=run) for run in run_ids)
+    columns = ["HV", "IGD", "GD", "MMDMatching", "Jac_calls", "wall_clock_time"]
+    output = args.results_dir / f"{args.problem}-MMDMatching-{args.algorithm}-{generation}.csv"
+    pd.DataFrame(np.asarray(data), columns=columns).to_csv(output, index=False)
+
+
+if __name__ == "__main__":
+    np.random.seed(66)
+    main()

@@ -67,16 +67,6 @@ def plot_reference_set_matching(matched_medoids: np.ndarray, Y: np.ndarray) -> N
     for i, Y_ in enumerate(Y):
         ax0.plot(Y_[:, 0], Y_[:, 1], Y_[:, 2], mfc=colors[i], ls="none", marker=".", ms=10, alpha=0.8)
 
-    # for i, p in enumerate(Y_old):
-    #     ax0.plot(
-    #         (p[0], matched_medoids[i, 0]),
-    #         (p[1], matched_medoids[i, 1]),
-    #         zs=(p[2], matched_medoids[i, 2]),
-    #         ls="dashed",
-    #         color="k",
-    #         ms=5,
-    #         alpha=0.5,
-    #     )
     ax0.set_title("reference set")
     ax0.set_xlabel(r"$f_1$")
     ax0.set_ylabel(r"$f_2$")
@@ -125,6 +115,64 @@ def regularize_hessian(H: np.ndarray) -> np.ndarray:
             print("Pre-conditioning the HV Hessian failed")
             return H + tau * I
     return L @ (L.T)
+
+
+def regularize_hessian_block(
+    H: np.ndarray,
+    block_size: int,
+    min_eigenvalue: float = 1e-6,
+    max_condition_number: float = 1e8,
+) -> np.ndarray:
+    """Regularize each diagonal point block of a coupled Hessian independently.
+
+    The off-diagonal blocks, which encode interactions between approximation
+    points, are preserved.  For every diagonal block, the smallest scalar
+    shift is added that makes its eigenvalues positive and limits its spectral
+    condition number.  Consequently, an unstable point can receive stronger
+    damping without applying the same shift to the entire population.
+
+    Args:
+        H: Square Hessian with point-major variable ordering.
+        block_size: Number of primal variables belonging to each point.
+        min_eigenvalue: Required lower bound for every diagonal-block eigenvalue.
+        max_condition_number: Maximum allowed spectral condition number per block.
+
+    Returns:
+        A symmetric copy of ``H`` with independently regularized diagonal blocks.
+
+    Note:
+        Positive-definite diagonal blocks do not imply that the complete coupled
+        Hessian is positive definite.  The line search still decides whether the
+        resulting coupled Newton direction is acceptable.
+    """
+    H = np.asarray(H, dtype=float)
+    if H.ndim != 2 or H.shape[0] != H.shape[1]:
+        raise ValueError("H must be a square matrix")
+    if not isinstance(block_size, (int, np.integer)) or block_size <= 0:
+        raise ValueError("block_size must be a positive integer")
+    if H.shape[0] % block_size != 0:
+        raise ValueError("H size must be divisible by block_size")
+    if min_eigenvalue <= 0:
+        raise ValueError("min_eigenvalue must be positive")
+    if max_condition_number <= 1:
+        raise ValueError("max_condition_number must be greater than one")
+    if not np.all(np.isfinite(H)):
+        raise ValueError("H must contain only finite values")
+
+    regularized = (H + H.T) / 2
+    identity = np.eye(block_size)
+    for start in range(0, len(H), block_size):
+        index = slice(start, start + block_size)
+        block = regularized[index, index]
+        eigenvalues = np.linalg.eigvalsh(block)
+        smallest, largest = eigenvalues[0], eigenvalues[-1]
+        positive_definite_shift = min_eigenvalue - smallest
+        condition_shift = (
+            largest - max_condition_number * smallest
+        ) / (max_condition_number - 1)
+        shift = max(0.0, positive_definite_shift, condition_shift)
+        regularized[index, index] = block + shift * identity
+    return regularized
 
 
 def preprocess_reference_set(X: np.ndarray) -> np.ndarray:

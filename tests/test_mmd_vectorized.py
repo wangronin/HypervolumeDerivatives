@@ -34,8 +34,8 @@ REFERENCE_SET = np.array(
     ]
 )
 
-# JAX uses float32 in this project. Vectorized reductions and the legacy Python
-# loops sum terms in a different order, so agreement at a few ulps is expected.
+# Vectorized reductions and the legacy Python loops sum terms in a different
+# order, so allow small backend-dependent rounding differences.
 RTOL = 2e-6
 ATOL = 3e-7
 

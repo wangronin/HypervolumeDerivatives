@@ -17,7 +17,7 @@ def test_direct_submodule_import_enables_jax_x64() -> None:
         [
             sys.executable,
             "-c",
-            "import hvd.mmd; import jax; "
+            "import hvd.mmd_vectorized; import jax; "
             "print(jax.config.jax_enable_x64, jax.numpy.ones(1).dtype)",
         ],
         check=True,

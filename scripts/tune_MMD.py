@@ -1,8 +1,7 @@
 """Tune MMD Newton on the IDTLZ benchmark problems.
 
-The tuner deliberately lives outside the optimizer implementation. It tunes
-only the plain vectorized MMD indicator, while keeping ``hvd.mmd`` and
-``hvd.mmd_newton`` unchanged. Install Optuna to run a study::
+The tuner uses the vectorized MMD-Matching indicator with the per-run reference
+shift directions stored in the MMD data. Install Optuna to run a study::
 
     python -m pip install optuna
     python scripts/tune_MMD.py IDTLZ1 --workers 15
@@ -35,6 +34,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 
+from jax import config as jax_config
+
+jax_config.update("jax_enable_x64", True)
+
 import numpy as np
 import pandas as pd
 from scipy.spatial.distance import cdist
@@ -45,7 +48,7 @@ if str(ROOT) not in sys.path:
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import laplace, linear, rational_quadratic, rbf
+from hvd.mmd_vectorized import linear, rational_quadratic, rbf
 from hvd.problems import IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
@@ -60,7 +63,6 @@ PROBLEMS = {
 KERNELS = {
     "rbf": rbf,
     "rational_quadratic": rational_quadratic,
-    "laplace": laplace,
     "linear": linear,
 }
 
@@ -72,22 +74,6 @@ class RunData:
     y0: np.ndarray
     y_indices: list[np.ndarray] | None
     eta: dict[int, np.ndarray] | None
-
-
-class TunableMMDNewton(MMDNewton):
-    """Use plain vectorized MMD and select a line-search policy externally."""
-
-    def __init__(self, *args, line_search: str = "global", **kwargs):
-        if line_search not in {"global", "individual"}:
-            raise ValueError("line_search must be 'global' or 'individual'")
-        kwargs["matching"] = False
-        super().__init__(*args, **kwargs)
-        self.line_search = line_search
-
-    def _backtracking_line_search_global(self, step, residual, max_step_size=None):
-        if self.line_search == "individual":
-            return super()._backtracking_line_search_individual(step, residual, max_step_size)
-        return super()._backtracking_line_search_global(step, residual, max_step_size)
 
 
 def parse_runs(specification: str) -> list[int]:
@@ -198,8 +184,7 @@ def kernel_theta(
     """Convert a scale-free multiplier to the kernel's inverse length scale."""
     if kernel_name == "linear":
         return 1.0
-    metric = "cityblock" if kernel_name == "laplace" else "sqeuclidean"
-    distances = cdist(approximation, reference, metric=metric).ravel()
+    distances = cdist(approximation, reference, metric="sqeuclidean").ravel()
     distances = distances[np.isfinite(distances) & (distances > np.finfo(float).eps)]
     characteristic_distance = np.median(distances) if len(distances) else 1.0
     return float(multiplier / characteristic_distance)
@@ -233,7 +218,7 @@ def evaluate_configuration(
         data = load_run(data_path, problem_name, algorithm, run, generation, population_size)
         reference = np.vstack(list(data.ref.values()))
         theta = kernel_theta(config["kernel"], config.get("theta_multiplier", 1.0), data.y0, reference)
-        optimizer = TunableMMDNewton(
+        optimizer = MMDNewton(
             n_var=problem.n_var,
             n_obj=problem.n_obj,
             ref=ReferenceSet(ref=data.ref, eta=data.eta, Y_idx=data.y_indices),
@@ -249,10 +234,11 @@ def evaluate_configuration(
             xu=problem.xu,
             max_iters=max_iters,
             verbose=False,
+            matching=True,
+            beta=config["beta"],
             regularization=config["regularization"],
             theta=theta,
             kernel=KERNELS[config["kernel"]],
-            line_search=config["line_search"],
         )
 
         started = time.perf_counter()
@@ -279,6 +265,7 @@ def evaluate_configuration(
                 "igd": igd,
                 "seconds": time.perf_counter() - started,
                 "n_points": len(data.x0),
+                "precomputed_shift_direction": data.eta is not None,
             }
         )
     return float(np.mean(completed_scores)), records
@@ -292,8 +279,8 @@ def sample_configuration(trial, args) -> dict:
     kernel_name = choice(trial, "kernel", args.kernels)
     config = {
         "kernel": kernel_name,
+        "beta": trial.suggest_float("beta", args.beta_min, args.beta_max, log=True),
         "regularization": choice(trial, "regularization", args.regularization_choices),
-        "line_search": choice(trial, "line_search", args.line_searches),
     }
     if kernel_name != "linear":
         config["theta_multiplier"] = trial.suggest_float(
@@ -305,8 +292,8 @@ def sample_configuration(trial, args) -> dict:
 def config_from_params(params: dict, args) -> dict:
     return {
         "kernel": params.get("kernel", args.kernels[0]),
+        "beta": params.get("beta", args.beta_min),
         "regularization": params.get("regularization", args.regularization_choices[0]),
-        "line_search": params.get("line_search", args.line_searches[0]),
         "theta_multiplier": params.get("theta_multiplier", 1.0),
     }
 
@@ -336,7 +323,7 @@ def make_pruner(optuna, args, max_resource: int):
 
 def study_name(problem_name: str, args) -> str:
     suffix = "bounds" if args.boundary_constraints else "no_bounds"
-    return f"MMDNewton-MMD-{problem_name}-{args.algorithm}-{suffix}"
+    return f"MMDNewton-MMDMatching-{problem_name}-{args.algorithm}-{suffix}"
 
 
 def storage_specification(problem_name: str, args) -> str:
@@ -533,6 +520,10 @@ def tune_problem(problem_name: str, args, optuna) -> dict:
     )
     result = {
         "problem": problem_name,
+        "algorithm": args.algorithm,
+        "generation": args.generation,
+        "max_iters": args.max_iters,
+        "indicator": "MMDMatching",
         "boundary_constraints": args.boundary_constraints,
         "best_tuning_ahd": study.best_value,
         "validation_ahd": validation_score,
@@ -586,7 +577,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--trials",
         type=int,
-        default=300,
+        default=150,
         help="total trials added by this invocation, divided across all workers",
     )
     parser.add_argument("--timeout", type=float, default=None, help="study timeout in seconds")
@@ -608,13 +599,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kernels", nargs="+", choices=KERNELS, default=list(KERNELS))
     parser.add_argument("--theta-min", type=float, default=1e-3)
     parser.add_argument("--theta-max", type=float, default=1e4)
+    parser.add_argument("--beta-min", type=float, default=1e-4)
+    parser.add_argument("--beta-max", type=float, default=1.0)
     parser.add_argument("--regularization", choices=["both", "true", "false"], default="both")
-    parser.add_argument(
-        "--line-searches",
-        nargs="+",
-        choices=["global", "individual"],
-        default=["global", "individual"],
-    )
     parser.add_argument("--boundary-constraints", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--failure-value", type=float, default=1e12)
     return parser
@@ -626,6 +613,8 @@ def main() -> None:
         raise ValueError("max-iters, trials, and workers must all be positive")
     if not 0 < args.theta_min < args.theta_max:
         raise ValueError("theta bounds must satisfy 0 < theta-min < theta-max")
+    if not 0 < args.beta_min < args.beta_max:
+        raise ValueError("beta bounds must satisfy 0 < beta-min < beta-max")
     args.regularization_choices = boolean_choices(args.regularization)
     random.seed(args.seed)
     np.random.seed(args.seed)

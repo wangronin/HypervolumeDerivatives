@@ -11,7 +11,13 @@ from scipy.spatial.distance import cdist
 from .base import State
 from .mmd_vectorized import MMD, MMDMatching
 from .reference_set import ReferenceSet
-from .utils import Nd_vector_to_matrix, get_logger, matrix_to_Nd_vector, regularize_hessian, set_bounds
+from .utils import (
+    Nd_vector_to_matrix,
+    get_logger,
+    matrix_to_Nd_vector,
+    regularize_hessian_block,
+    set_bounds,
+)
 
 
 class MMDNewton:
@@ -44,6 +50,7 @@ class MMDNewton:
         metrics: Dict[str, Callable] = dict(),
         regularization: bool = False,
         matching: bool = True,
+        beta: float = 0.25,
         **kwargs,
     ):
         """
@@ -75,6 +82,8 @@ class MMDNewton:
             xtol (float, optional): absolute distance in the approximation set between consecutive iterations
                 that is used to determine convergence. Defaults to 1e-3.
             verbose (bool, optional): verbosity of the output. Defaults to True.
+            beta (float, optional): weight of the MMD-Matching self-repulsion term.
+                Defaults to 0.25.
         """
         self.dim_p: int = n_var
         self.n_obj: int = n_obj
@@ -99,7 +108,7 @@ class MMDNewton:
         )
         if self.matching:
             self.indicator = MMDMatching(
-                self.dim_p, self.n_obj, self.ref, func, jac, hessian, beta=0.25, **kwargs
+                self.dim_p, self.n_obj, self.ref, func, jac, hessian, beta=beta, **kwargs
             )
         else:
             self.indicator = MMD(self.dim_p, self.n_obj, self.ref, func, jac, hessian, **kwargs)
@@ -189,7 +198,7 @@ class MMDNewton:
         # prevent the decision points from moving out of the decision space.
         self.step, max_step_size = self._handle_box_constraint(self.step)
         # backtracking line search for the step size
-        self.step_size = self._backtracking_line_search_global(self.step, self.R, max_step_size)
+        self.step_size = self._backtracking_line_search_individual(self.step, self.R, max_step_size)
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step_size.reshape(-1, 1) * self.step)
         self.iter_count += 1
@@ -249,7 +258,7 @@ class MMDNewton:
             X=self.state.primal, Y=self.state.Y, jacobian=self.state.J
         )
         if self.preconditioning:  # sometimes the Hessian is not PSD
-            Hessian = regularize_hessian(Hessian)
+            Hessian = regularize_hessian_block(Hessian, block_size=self.dim_p)
         R, dH, idx = self._compute_R(self.state, grad=grad)
         DR = Hessian
         if self._constrained:
@@ -284,7 +293,7 @@ class MMDNewton:
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_norm, 0))
 
         indices = np.nonzero(masks)[0]
-        self.ref.shift(0.1, indices)
+        self.ref.shift(0.002, indices)
         for k in indices:  # log the updated medoids
             self.history_medoids[k].append(self.ref.reference_set[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
@@ -370,33 +379,31 @@ class MMDNewton:
         return step_size
 
     def _handle_box_constraint(self, step: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """The box-constraint handler projects the Newton step onto the box boundary, preventing the
-        algorithm from leaving the box. It is needed when the test function is not well-defined out of the box.
-        NOTE: this function is experimental
-        """
-        if 1 < 2:
-            return step, np.ones(len(step))
-
+        """Project outward boundary directions and compute feasible per-point step limits."""
+        step = np.asarray(step).copy()
         primal_vars = self.state.primal
         step_primal = step[:, : self.dim_p]
-        normal_vectors = np.c_[np.eye(self.dim_p), -1 * np.eye(self.dim_p)]
-        # calculate the maximal step-size
-        dist = np.c_[
-            np.abs(primal_vars - self.xl),
-            np.abs(self.xu - primal_vars),
-        ]
-        v = step_primal @ normal_vectors
-        s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-        max_step_size = np.array([min(1.0, np.nanmin(_)) for _ in s])
-        # project Newton's direction onto the box boundary
-        idx = max_step_size == 0
-        if np.any(idx) > 0:
-            proj_dim = [np.argmin(_) for _ in s[idx]]
-            proj_axis = normal_vectors[:, proj_dim]
-            step_primal[idx] -= (np.einsum("ij,ji->i", step_primal[idx], proj_axis) * proj_axis).T
-            step[:, : self.dim_p] = step_primal
-            # re-calculate the `max_step_size` for projected directions
-            v = step[:, : self.dim_p] @ normal_vectors
-            s = np.array([dist[i] / np.abs(np.minimum(0, vv)) for i, vv in enumerate(v)])
-            max_step_size = np.array([min(1, np.nanmin(_)) for _ in s])
+        tolerance = 10 * np.finfo(float).eps
+
+        at_lower_bound = primal_vars <= self.xl + tolerance
+        at_upper_bound = primal_vars >= self.xu - tolerance
+        step_primal[at_lower_bound & (step_primal < 0)] = 0
+        step_primal[at_upper_bound & (step_primal > 0)] = 0
+        step[:, : self.dim_p] = step_primal
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            upper_limits = np.where(
+                step_primal > 0,
+                (self.xu - primal_vars) / step_primal,
+                np.inf,
+            )
+            lower_limits = np.where(
+                step_primal < 0,
+                (self.xl - primal_vars) / step_primal,
+                np.inf,
+            )
+        point_limits = np.min(np.minimum(upper_limits, lower_limits), axis=1)
+        fraction_to_boundary = 0.995
+        max_step_size = np.minimum(1.0, fraction_to_boundary * point_limits)
+        max_step_size = np.clip(max_step_size, 0.0, 1.0)
         return step, max_step_size

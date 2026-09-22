@@ -140,11 +140,13 @@ def test_mmd_matching_derivatives_with_linear_kernel():
 
     expected_gradient = np.array(
         [
-            2 * beta * theta * Y.sum(axis=0) / N**2 - 2 * theta * matched / N
-            for matched in mmd.ref.reference_set
+            2 * beta * theta * Y.sum(axis=0) / N**2
+            + 2 * theta * (point - matched) / N
+            for point, matched in zip(Y, mmd.ref.reference_set)
         ]
     )
     expected_hessian = np.kron(np.ones((N, N)), 2 * beta * theta * np.eye(2) / N**2)
+    expected_hessian += np.kron(np.eye(N), 2 * theta * np.eye(2) / N)
 
     assert np.allclose(result["MMDdY"], expected_gradient)
     assert np.allclose(result["MMDdY2"], expected_hessian)

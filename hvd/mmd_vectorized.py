@@ -44,8 +44,8 @@ class _VectorizedMMDBase:
             )
         if len(reference_set) == 0:
             raise ValueError("reference set must contain at least one point")
-        if func is None and self.n_var != self.n_obj:
-            raise ValueError("the default identity objective requires n_var == n_obj")
+        # if func is None and self.n_var != self.n_obj:
+        # raise ValueError("the default identity objective requires n_var == n_obj")
         self.func = func if func is not None else lambda x: x
         self.jac = jac if jac is not None else lambda x: np.eye(self.n_obj, self.n_var)
         self.hessian = (
