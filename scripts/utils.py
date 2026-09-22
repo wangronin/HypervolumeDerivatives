@@ -21,9 +21,14 @@ rcParams["ytick.major.width"] = 1
 
 
 def read_reference_set_data(
-    path: str, problem_name: str, emoa: str, run: int, gen: int
+    path: str,
+    problem_name: str,
+    emoa: str,
+    run: int,
+    gen: int,
+    matching: bool = True,
 ) -> Tuple[Dict[int, np.ndarray], np.ndarray, np.ndarray, np.ndarray, Dict[int, np.ndarray]]:
-    """_summary_
+    """Load a reference set and the filtered final population of one run.
 
     Args:
         path (str): path to the data folder
@@ -31,9 +36,14 @@ def read_reference_set_data(
         emoa (str): EMOA algorithm name
         run (int): run ID
         gen (int): the stopping generation of EMOA
+        matching (bool): whether the consumer requires one reference point
+            per approximation point. Original MMD does not, so
+            ``matching=False`` preserves the complete population and ignores
+            matching-only component labels.
 
     Returns:
-        Tuple[Dict[int, np.ndarray], np.ndarray, np.ndarray, np.ndarray, Dict[int, np.ndarray]]: _description_
+        Reference components, decision points, objective points, component
+        indices, and optional precomputed shift directions.
     """
     ref_label = pd.read_csv(
         path / f"{problem_name}_{emoa}_run_{run}_component_id_gen{gen}.csv", header=None
@@ -80,6 +90,9 @@ def read_reference_set_data(
         f"{path}/{problem_name}_{emoa}_run_{run}_lastpopu_labels_gen{gen}.csv", header=None
     ).values.ravel()
     Y_label = Y_label - 1  # index starts at 0
+    if not matching:
+        return ref, x0, y0, None, eta
+
     # removing the outliers in `Y`
     idx = (Y_label != -2) & (Y_label != -1)
     x0 = x0[idx]
@@ -91,16 +104,18 @@ def read_reference_set_data(
     # the maximal number of points in `y0` clusters, then we merge all clusters
     min_point_ref_cluster = np.min([len(r) for r in ref.values()])
     max_point_y_cluster = np.max(np.unique(Y_label, return_counts=True)[1])
-    # if the number of clusters of `Y` is more than that of the reference set
-    # NOTE: for simple MMD, we always merge the clusters of the reference set
-    if (len(np.unique(Y_label)) > len(ref)) or (max_point_y_cluster > min_point_ref_cluster):
-        # if len(ref) > 1 or (len(np.unique(Y_label)) > len(ref)) or (max_point_y_cluster > min_point_ref_cluster):
+    # Matching requires each approximation cluster to have enough reference
+    # points. Original MMD uses the concatenated reference measure directly and
+    # therefore needs neither component merging nor population truncation.
+    insufficient_matching_reference = (len(np.unique(Y_label)) > len(ref)) or (
+        max_point_y_cluster > min_point_ref_cluster
+    )
+    if matching and insufficient_matching_reference:
         ref = {0: np.vstack([r for r in ref.values()])}
         Y_label = np.zeros(len(y0), dtype=int)
         eta = None
-        # ensure the number of approximation points is less than the number of reference points
         if len(ref[0]) < len(y0):
-            n = len(ref)
+            n = len(ref[0])
             x0 = x0[:n]
             y0 = y0[:n]
             Y_label = Y_label[:n]

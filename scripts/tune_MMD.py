@@ -1,4 +1,4 @@
-"""Tune MMD Newton on the IDTLZ benchmark problems.
+"""Tune MMD Newton without matching on the IDTLZ benchmark problems.
 
 The tuner uses the vectorized original MMD indicator, without point matching,
 and the per-run reference shift directions stored in the MMD data. IDTLZ box
@@ -17,9 +17,12 @@ Each finished trial is appended to ``<study>-progress.log`` in the output
 directory. The default ``<study>.journal`` file is Optuna's durable study
 storage and allows interrupted studies to resume.
 
+Use ``tune_MMD_matching.py`` for the separate MMD-Matching study.
+
 The objective is the mean averaged Hausdorff distance over the tuning runs,
 where averaged Hausdorff distance is ``max(GD, IGD)``.  Validation runs are
-never shown to the tuner.
+never shown to the tuner. Every run uses its complete initial population;
+population subsampling is intentionally unsupported.
 """
 
 from __future__ import annotations
@@ -50,7 +53,7 @@ if str(ROOT) not in sys.path:
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import linear, rational_quadratic, rbf
+from hvd.mmd_vectorized import rational_quadratic, rbf
 from hvd.problems import IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
@@ -65,7 +68,6 @@ PROBLEMS = {
 KERNELS = {
     "rbf": rbf,
     "rational_quadratic": rational_quadratic,
-    "linear": linear,
 }
 BOUNDARY_CONSTRAINTS = True
 
@@ -96,97 +98,37 @@ def parse_runs(specification: str) -> list[int]:
     return list(dict.fromkeys(runs))
 
 
-def representative_indices(points: np.ndarray, size: int | None) -> np.ndarray:
-    """Deterministic farthest-point subset in normalized objective space."""
-    points = np.asarray(points)
-    if size is None or size <= 0 or size >= len(points):
-        return np.arange(len(points))
-
-    scale = np.ptp(points, axis=0)
-    scale[scale == 0] = 1
-    normalized = (points - points.min(axis=0)) / scale
-    center = normalized.mean(axis=0)
-    selected = [int(np.argmax(np.linalg.norm(normalized - center, axis=1)))]
-    min_distance = np.linalg.norm(normalized - normalized[selected[0]], axis=1)
-    min_distance[selected[0]] = -np.inf
-    while len(selected) < size:
-        index = int(np.argmax(min_distance))
-        selected.append(index)
-        distance = np.linalg.norm(normalized - normalized[index], axis=1)
-        min_distance = np.minimum(min_distance, distance)
-        min_distance[selected] = -np.inf
-    return np.sort(np.asarray(selected))
-
-
-def subset_partitions(y_indices: list[np.ndarray] | None, selected: np.ndarray) -> list[np.ndarray] | None:
-    if y_indices is None or len(y_indices) <= 1:
-        return None
-    labels = np.full(max(max(indices) for indices in y_indices) + 1, -1, dtype=int)
-    for label, indices in enumerate(y_indices):
-        labels[indices] = label
-    selected_labels = labels[selected]
-    return [np.flatnonzero(selected_labels == label) for label in np.unique(selected_labels)]
-
-
 def load_run(
     data_path: Path,
     problem_name: str,
     algorithm: str,
     run: int,
     generation: int,
-    population_size: int | None,
+    matching: bool = False,
 ) -> RunData:
-    ref, x0, y0, y_indices, eta = read_reference_set_data(data_path, problem_name, algorithm, run, generation)
-
-    # ``read_reference_set_data`` has a legacy corner case: when a merged
-    # reference contains fewer points than the population, it truncates to the
-    # number of components rather than to the number of reference points.  Do
-    # the intended truncation locally so the existing helper remains untouched.
-    raw_x = pd.read_csv(
-        data_path / f"{problem_name}_{algorithm}_run_{run}_lastpopu_x_gen{generation}.csv",
-        header=None,
-    ).values
-    raw_y = pd.read_csv(
-        data_path / f"{problem_name}_{algorithm}_run_{run}_lastpopu_y_gen{generation}.csv",
-        header=None,
-    ).values
-    raw_labels = (
-        pd.read_csv(
-            data_path / f"{problem_name}_{algorithm}_run_{run}_lastpopu_labels_gen{generation}.csv",
-            header=None,
-        ).values.ravel()
-        - 1
+    ref, x0, y0, y_indices, eta = read_reference_set_data(
+        data_path,
+        problem_name,
+        algorithm,
+        run,
+        generation,
+        matching=matching,
     )
-    keep = (raw_labels != -2) & (raw_labels != -1)
-    raw_x, raw_y, raw_labels = raw_x[keep], raw_y[keep], raw_labels[keep]
-    intended_size = min(len(raw_x), sum(len(component) for component in ref.values()))
-    if len(x0) != intended_size:
-        x0, y0, raw_labels = raw_x[:intended_size], raw_y[:intended_size], raw_labels[:intended_size]
-        y_indices = (
-            None
-            if len(ref) == 1
-            else [np.flatnonzero(raw_labels == label) for label in np.unique(raw_labels)]
-        )
-
-    selected = representative_indices(y0, population_size)
     return RunData(
         ref=ref,
-        x0=x0[selected],
-        y0=y0[selected],
-        y_indices=subset_partitions(y_indices, selected),
+        x0=x0,
+        y0=y0,
+        y_indices=y_indices,
         eta=eta,
     )
 
 
 def kernel_theta(
-    kernel_name: str,
     multiplier: float,
     approximation: np.ndarray,
     reference: np.ndarray,
 ) -> float:
     """Convert a scale-free multiplier to the kernel's inverse length scale."""
-    if kernel_name == "linear":
-        return 1.0
     distances = cdist(approximation, reference, metric="sqeuclidean").ravel()
     distances = distances[np.isfinite(distances) & (distances > np.finfo(float).eps)]
     characteristic_distance = np.median(distances) if len(distances) else 1.0
@@ -211,16 +153,16 @@ def evaluate_configuration(
     algorithm: str,
     generation: int,
     max_iters: int,
-    population_size: int | None,
+    matching: bool = False,
     report: Callable[[float, int], None] | None = None,
 ) -> tuple[float, list[dict]]:
     records: list[dict] = []
     completed_scores: list[float] = []
     run_ids = list(run_ids)
     for run_index, run in enumerate(run_ids):
-        data = load_run(data_path, problem_name, algorithm, run, generation, population_size)
+        data = load_run(data_path, problem_name, algorithm, run, generation, matching=matching)
         reference = np.vstack(list(data.ref.values()))
-        theta = kernel_theta(config["kernel"], config.get("theta_multiplier", 1.0), data.y0, reference)
+        theta = kernel_theta(config["theta_multiplier"], data.y0, reference)
         optimizer = MMDNewton(
             n_var=problem.n_var,
             n_obj=problem.n_obj,
@@ -237,7 +179,8 @@ def evaluate_configuration(
             xu=problem.xu,
             max_iters=max_iters,
             verbose=False,
-            matching=False,
+            matching=matching,
+            beta=config.get("beta", 0.25),
             regularization=config["regularization"],
             theta=theta,
             kernel=KERNELS[config["kernel"]],
@@ -283,28 +226,31 @@ def sample_configuration(trial, args) -> dict:
         "kernel": kernel_name,
         "regularization": choice(trial, "regularization", args.regularization_choices),
     }
-    if kernel_name != "linear":
-        config["theta_multiplier"] = trial.suggest_float(
-            "theta_multiplier", args.theta_min, args.theta_max, log=True
-        )
+    if args.matching:
+        config["beta"] = trial.suggest_float("beta", args.beta_min, args.beta_max, log=True)
+    config["theta_multiplier"] = trial.suggest_float(
+        "theta_multiplier", args.theta_min, args.theta_max, log=True
+    )
     return config
 
 
 def config_from_params(params: dict, args) -> dict:
-    return {
+    config = {
         "kernel": params.get("kernel", args.kernels[0]),
         "regularization": params.get("regularization", args.regularization_choices[0]),
-        "theta_multiplier": params.get("theta_multiplier", 1.0),
+        "theta_multiplier": params["theta_multiplier"],
     }
+    if args.matching:
+        config["beta"] = params["beta"]
+    return config
 
 
 def boolean_choices(value: str) -> list[bool]:
     return {"both": [False, True], "false": [False], "true": [True]}[value]
 
 
-def get_pareto_front(problem, max_points: int = 1000) -> np.ndarray:
-    pareto_front = np.asarray(problem.get_pareto_front())
-    return pareto_front[representative_indices(pareto_front, max_points)]
+def get_pareto_front(problem) -> np.ndarray:
+    return np.asarray(problem.get_pareto_front())
 
 
 def make_pruner(optuna, args, max_resource: int):
@@ -322,7 +268,8 @@ def make_pruner(optuna, args, max_resource: int):
 
 
 def study_name(problem_name: str, args) -> str:
-    return f"MMDNewton-MMD-{problem_name}-{args.algorithm}-bounds"
+    indicator = "MMDMatching" if args.matching else "MMD"
+    return f"MMDNewton-{indicator}-{problem_name}-{args.algorithm}-bounds"
 
 
 def storage_specification(problem_name: str, args) -> str:
@@ -423,7 +370,7 @@ def make_objective(problem_name: str, args, optuna):
                 algorithm=args.algorithm,
                 generation=args.generation,
                 max_iters=args.max_iters,
-                population_size=args.tune_points,
+                matching=args.matching,
                 report=report,
             )
         except optuna.TrialPruned:
@@ -515,14 +462,14 @@ def tune_problem(problem_name: str, args, optuna) -> dict:
         algorithm=args.algorithm,
         generation=args.generation,
         max_iters=args.max_iters,
-        population_size=args.validation_points,
+        matching=args.matching,
     )
     result = {
         "problem": problem_name,
         "algorithm": args.algorithm,
         "generation": args.generation,
         "max_iters": args.max_iters,
-        "indicator": "MMD",
+        "indicator": "MMDMatching" if args.matching else "MMD",
         "boundary_constraints": BOUNDARY_CONSTRAINTS,
         "best_tuning_ahd": study.best_value,
         "validation_ahd": validation_score,
@@ -551,8 +498,13 @@ def tune_problem(problem_name: str, args, optuna) -> dict:
     return result
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+def build_parser(matching: bool = False) -> argparse.ArgumentParser:
+    description = (
+        "Tune MMD-Matching Newton on IDTLZ with the prepared, outlier-filtered population."
+        if matching
+        else __doc__
+    )
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("problems", nargs="+", choices=PROBLEMS)
     parser.add_argument("--data-path", type=Path, default="/home/wangh5/data/MMD_data")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "scripts" / "tuning_results")
@@ -561,18 +513,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-runs", default="1-20")
     parser.add_argument("--validation-runs", default="21-30")
     parser.add_argument("--max-iters", type=int, default=5)
-    parser.add_argument(
-        "--tune-points",
-        type=int,
-        default=0,
-        help="representative population size during tuning; 0 keeps every point",
-    )
-    parser.add_argument(
-        "--validation-points",
-        type=int,
-        default=0,
-        help="representative validation population size; 0 keeps every point",
-    )
     parser.add_argument(
         "--trials",
         type=int,
@@ -598,17 +538,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kernels", nargs="+", choices=KERNELS, default=list(KERNELS))
     parser.add_argument("--theta-min", type=float, default=1e-3)
     parser.add_argument("--theta-max", type=float, default=1e4)
+    if matching:
+        parser.add_argument("--beta-min", type=float, default=1e-3)
+        parser.add_argument("--beta-max", type=float, default=1.0)
     parser.add_argument("--regularization", choices=["both", "true", "false"], default="both")
     parser.add_argument("--failure-value", type=float, default=1e12)
     return parser
 
 
-def main() -> None:
-    args = build_parser().parse_args()
+def main(matching: bool = False) -> None:
+    args = build_parser(matching=matching).parse_args()
+    args.matching = matching
     if args.max_iters < 1 or args.trials < 1 or args.workers < 1:
         raise ValueError("max-iters, trials, and workers must all be positive")
     if not 0 < args.theta_min < args.theta_max:
         raise ValueError("theta bounds must satisfy 0 < theta-min < theta-max")
+    if matching and not 0 < args.beta_min < args.beta_max:
+        raise ValueError("beta bounds must satisfy 0 < beta-min < beta-max")
     args.regularization_choices = boolean_choices(args.regularization)
     random.seed(args.seed)
     np.random.seed(args.seed)

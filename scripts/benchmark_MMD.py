@@ -98,12 +98,8 @@ def find_best_result(args) -> tuple[Path, dict]:
 def get_pareto_front(problem) -> np.ndarray:
     pareto_front = np.asarray(problem.get_pareto_front())
     if len(pareto_front) > 1000:
-        model = KMedoids(
-            n_clusters=1000,
-            method="alternate",
-            random_state=0,
-            init="k-medoids++",
-        ).fit(pareto_front)
+        model = KMedoids(n_clusters=1000, method="alternate", random_state=0, init="k-medoids++")
+        model.fit(pareto_front)
         pareto_front = pareto_front[model.medoid_indices_]
     return pareto_front
 
@@ -144,9 +140,7 @@ def main() -> None:
 
     problem = PROBLEMS[args.problem](boundary_constraints=BOUNDARY_CONSTRAINTS)
     pareto_front = get_pareto_front(problem)
-    ref_point = pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem").loc[
-        args.problem
-    ].values
+    ref_point = pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem").loc[args.problem].values
     args.plot_dir.mkdir(parents=True, exist_ok=True)
     args.results_dir.mkdir(parents=True, exist_ok=True)
     print(f"optimize {args.problem}")
@@ -162,6 +156,7 @@ def main() -> None:
             args.algorithm,
             run,
             generation,
+            matching=False,
         )
         reference = np.vstack(list(ref.values()))
         theta = kernel_theta(kernel_name, theta_multiplier, y0, reference)
@@ -222,10 +217,7 @@ def main() -> None:
     run_ids = sorted(
         int(re.findall(r"run_(\d+)_", path)[0])
         for path in glob(
-            str(
-                args.data_path
-                / f"{args.problem}_{args.algorithm}_run_*_lastpopu_x_gen{generation}.csv"
-            )
+            str(args.data_path / f"{args.problem}_{args.algorithm}_run_*_lastpopu_x_gen{generation}.csv")
         )
     )
     if args.n_jobs == 1:

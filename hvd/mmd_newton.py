@@ -300,7 +300,7 @@ class MMDNewton:
             masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_norm, 0))
 
         indices = np.nonzero(masks)[0]
-        self.ref.shift(0.08, indices)
+        self.ref.shift(0.04, indices)
         for k in indices:  # log the updated medoids
             self.history_medoids[k].append(self.ref.reference_set[k].copy())
         self.logger.info(f"{len(indices)} target points are shifted")
@@ -381,6 +381,8 @@ class MMDNewton:
                     else:
                         s.append(s[-1] / 2)
             else:
-                self.logger.warn("backtracking line search failed")
+                self.logger.warning("backtracking line search failed")
+                step_size[i] = 0.0
+                continue
             step_size[i] = s[-1]
         return step_size

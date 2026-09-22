@@ -52,8 +52,8 @@ def h_Hessian(x):
     return 2 * np.eye(2)
 
 
-max_iters = 15
-mu = 10
+max_iters = 30
+mu = 20
 
 # Same linear initialization as examples/HVN/2D_example.py.
 p = np.linspace(0, 2, mu)
@@ -73,7 +73,7 @@ reference_parameter = (reference_parameter - reference_parameter[0]) / (
 )
 reference_f1 = f1_min + (f1_max - f1_min) * reference_parameter
 reference = np.c_[reference_f1, 6 - reference_f1]
-shift_direction = {0: -1.6 * np.ones(2) / np.sqrt(2)}
+shift_direction = {0: -np.ones(2) / np.sqrt(2)}
 metrics = {
     "GD": GenerationalDistance(ref=pareto_front),
     "IGD": InvertedGenerationalDistance(ref=pareto_front),
@@ -98,7 +98,7 @@ optimizer = MMDNewton(
     regularization=True,
     matching=False,
     beta=10,
-    theta=2.0,
+    theta=5.0,
     metrics=metrics,
 )
 X, Y, _ = optimizer.run()

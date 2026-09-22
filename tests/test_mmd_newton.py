@@ -1,3 +1,6 @@
+import logging
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -42,7 +45,7 @@ def test_idtlz1_runs_with_optional_boundary_constraints(boundary_constraints: bo
     expected_constraint_count = 2 * problem.n_var if boundary_constraints else 0
     assert optimizer.n_ieq == expected_constraint_count
     assert optimizer.indicator.beta == pytest.approx(0.37)
-    assert np.all(optimizer.step_size > 0)
+    assert np.all(optimizer.step_size >= 0)
     assert optimizer.step_size.shape == (len(x0),)
     assert X.shape == x0.shape
     assert Y.shape == (len(x0), problem.n_obj)
@@ -68,3 +71,34 @@ def test_fraction_to_boundary_is_computed_per_point() -> None:
     candidate = x0 + maximum[:, None] * feasible_step[:, : problem.n_var]
     assert np.all(candidate >= problem.xl)
     assert np.all(candidate <= problem.xu)
+
+
+def test_individual_line_search_does_not_take_an_untested_step() -> None:
+    class TrialState:
+        def __init__(self):
+            self.X = np.zeros((2, 1))
+            self.n_jac_evals = 0
+
+        def update_one(self, x, i):
+            self.X[i] = x
+
+    optimizer = MMDNewton.__new__(MMDNewton)
+    optimizer.N = 2
+    optimizer.state = TrialState()
+    optimizer.indicator = SimpleNamespace(re_match=True)
+    optimizer.logger = logging.getLogger(__name__)
+    tested = []
+
+    def residual(state):
+        tested.append(state.X.copy())
+        first = 2.0 if state.X[0, 0] > 0.5 else 0.1
+        return (np.array([[first], [2.0]]),)
+
+    optimizer._compute_R = residual
+    step_size = optimizer._backtracking_line_search_individual(
+        np.ones((2, 1)), np.ones((2, 1))
+    )
+
+    assert step_size == pytest.approx([0.5, 0.0])
+    assert len(tested) == 8  # 2 trials for point 0, 6 for point 1
+    assert optimizer.indicator.re_match

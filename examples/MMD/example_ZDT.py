@@ -24,7 +24,7 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-np.random.seed(66)
+np.random.seed(42)
 
 max_iters = 10
 problem_name = "ZDT1"
