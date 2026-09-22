@@ -37,6 +37,5 @@ srun --ntasks=1 --cpus-per-task="${workers}" --cpu-bind=cores \
     --workers "${workers}" \
     --tune-points 0 \
     --validation-points 0 \
-    --boundary-constraints \
     --output-dir "${HOME}/data/mmd-tuning" \
     "$@"

@@ -25,7 +25,7 @@ if str(ROOT) not in sys.path:
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
 from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import MMDMatching, linear, rational_quadratic, rbf
+from hvd.mmd_vectorized import MMD, linear, rational_quadratic, rbf
 from hvd.problems import IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
@@ -42,6 +42,7 @@ KERNELS = {
     "rational_quadratic": rational_quadratic,
     "linear": linear,
 }
+BOUNDARY_CONSTRAINTS = True
 
 
 def kernel_theta(
@@ -63,12 +64,8 @@ def find_best_result(args) -> tuple[Path, dict]:
     if args.best_config is not None:
         candidates = [args.best_config.expanduser().resolve()]
     else:
-        suffix = None
-        if args.boundary_constraints is not None:
-            suffix = "bounds" if args.boundary_constraints else "no_bounds"
-        name = f"MMDNewton-MMDMatching-{args.problem}-{args.algorithm}"
-        pattern = f"{name}-{suffix}-best.json" if suffix else f"{name}-*-best.json"
-        candidates = sorted(args.tuning_dir.expanduser().glob(pattern))
+        name = f"MMDNewton-MMD-{args.problem}-{args.algorithm}-bounds-best.json"
+        candidates = sorted(args.tuning_dir.expanduser().glob(name))
 
     if not candidates:
         raise FileNotFoundError(
@@ -85,9 +82,11 @@ def find_best_result(args) -> tuple[Path, dict]:
         raise ValueError(f"{path} contains results for {result.get('problem')}, not {args.problem}")
     if result.get("algorithm") != args.algorithm:
         raise ValueError(f"{path} contains results for {result.get('algorithm')}, not {args.algorithm}")
-    if result.get("indicator") != "MMDMatching":
-        raise ValueError(f"{path} is not an MMDMatching tuning result")
-    required = {"kernel", "beta", "regularization", "theta_multiplier"}
+    if result.get("indicator") != "MMD":
+        raise ValueError(f"{path} is not an MMD tuning result")
+    if result.get("boundary_constraints") != BOUNDARY_CONSTRAINTS:
+        raise ValueError(f"{path} was not tuned with boundary constraints")
+    required = {"kernel", "regularization", "theta_multiplier"}
     missing = required - result.get("best_config", {}).keys()
     if missing:
         raise ValueError(f"{path} is missing tuned parameters: {sorted(missing)}")
@@ -110,7 +109,7 @@ def get_pareto_front(problem) -> np.ndarray:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Benchmark tuned MMD-Matching Newton on IDTLZ.")
+    parser = argparse.ArgumentParser(description="Benchmark tuned MMD Newton on IDTLZ.")
     parser.add_argument("problem", choices=PROBLEMS)
     parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
     parser.add_argument("--data-path", type=Path, default=ROOT / "MMD_data")
@@ -124,12 +123,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=30,
         help="number of benchmark runs executed concurrently; use 1 for sequential execution",
     )
-    parser.add_argument(
-        "--boundary-constraints",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="filter automatic configuration discovery; otherwise read this setting from the result",
-    )
     parser.add_argument("--plot-dir", type=Path, default=ROOT / "plots")
     parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
     return parser
@@ -141,19 +134,15 @@ def main() -> None:
         raise ValueError("n-jobs must not be zero")
     best_path, tuning_result = find_best_result(args)
     config = tuning_result["best_config"]
-    boundary_constraints = bool(tuning_result["boundary_constraints"])
-    if args.boundary_constraints is not None and args.boundary_constraints != boundary_constraints:
-        raise ValueError("the selected tuning result uses a different boundary-constraint setting")
 
     generation = args.generation or int(tuning_result.get("generation", 300))
     max_iters = args.max_iters or int(tuning_result.get("max_iters", 5))
     kernel_name = config["kernel"]
     kernel = KERNELS[kernel_name]
-    beta = float(config["beta"])
     theta_multiplier = float(config.get("theta_multiplier", 1.0))
     regularization = bool(config["regularization"])
 
-    problem = PROBLEMS[args.problem](boundary_constraints=boundary_constraints)
+    problem = PROBLEMS[args.problem](boundary_constraints=BOUNDARY_CONSTRAINTS)
     pareto_front = get_pareto_front(problem)
     ref_point = pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem").loc[
         args.problem
@@ -176,13 +165,12 @@ def main() -> None:
         )
         reference = np.vstack(list(ref.values()))
         theta = kernel_theta(kernel_name, theta_multiplier, y0, reference)
-        metric = MMDMatching(
+        metric = MMD(
             n_var=problem.n_obj,
             n_obj=problem.n_obj,
             ref=pareto_front.copy(),
             kernel=kernel,
             theta=theta,
-            beta=beta,
         )
         metrics = {
             "GD": GenerationalDistance(pareto_front),
@@ -192,7 +180,7 @@ def main() -> None:
         print(f"initial HV: {hypervolume(y0, ref=ref_point)}")
         print(f"initial GD: {metrics['GD'].compute(Y=y0)}")
         print(f"initial IGD: {metrics['IGD'].compute(Y=y0)}")
-        print(f"initial MMD-Matching: {metric.compute(Y=y0)}")
+        print(f"initial MMD: {metric.compute(Y=y0)}")
 
         started = time.perf_counter_ns()
         optimizer = MMDNewton(
@@ -212,8 +200,7 @@ def main() -> None:
             max_iters=max_iters,
             verbose=True,
             metrics=metrics,
-            matching=True,
-            beta=beta,
+            matching=False,
             regularization=regularization,
             theta=theta,
             kernel=kernel,
@@ -222,7 +209,7 @@ def main() -> None:
         elapsed_microseconds = (time.perf_counter_ns() - started) / 1000.0
         print(optimizer.history_R_norm)
 
-        figure = args.plot_dir / f"{args.problem}_MMDMatching_{args.algorithm}_run{run}_{generation}.pdf"
+        figure = args.plot_dir / f"{args.problem}_MMD_{args.algorithm}_run{run}_{generation}.pdf"
         plot(y0, Y, reference, pareto_front, figure, optimizer)
         hv_value = hypervolume(Y, ref=ref_point)
         igd_value = InvertedGenerationalDistance(pareto_front).compute(Y=Y)
@@ -245,8 +232,8 @@ def main() -> None:
         data = [execute(run) for run in run_ids]
     else:
         data = Parallel(n_jobs=args.n_jobs)(delayed(execute)(run=run) for run in run_ids)
-    columns = ["HV", "IGD", "GD", "MMDMatching", "Jac_calls", "wall_clock_time"]
-    output = args.results_dir / f"{args.problem}-MMDMatching-{args.algorithm}-{generation}.csv"
+    columns = ["HV", "IGD", "GD", "MMD", "Jac_calls", "wall_clock_time"]
+    output = args.results_dir / f"{args.problem}-MMD-{args.algorithm}-{generation}.csv"
     pd.DataFrame(np.asarray(data), columns=columns).to_csv(output, index=False)
 
 

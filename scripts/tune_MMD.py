@@ -1,7 +1,9 @@
 """Tune MMD Newton on the IDTLZ benchmark problems.
 
-The tuner uses the vectorized MMD-Matching indicator with the per-run reference
-shift directions stored in the MMD data. Install Optuna to run a study::
+The tuner uses the vectorized original MMD indicator, without point matching,
+and the per-run reference shift directions stored in the MMD data. IDTLZ box
+bounds are always included as inequality constraints. Install Optuna to run a
+study::
 
     python -m pip install optuna
     python scripts/tune_MMD.py IDTLZ1 --workers 15
@@ -65,6 +67,7 @@ KERNELS = {
     "rational_quadratic": rational_quadratic,
     "linear": linear,
 }
+BOUNDARY_CONSTRAINTS = True
 
 
 @dataclass(frozen=True)
@@ -234,8 +237,7 @@ def evaluate_configuration(
             xu=problem.xu,
             max_iters=max_iters,
             verbose=False,
-            matching=True,
-            beta=config["beta"],
+            matching=False,
             regularization=config["regularization"],
             theta=theta,
             kernel=KERNELS[config["kernel"]],
@@ -279,7 +281,6 @@ def sample_configuration(trial, args) -> dict:
     kernel_name = choice(trial, "kernel", args.kernels)
     config = {
         "kernel": kernel_name,
-        "beta": trial.suggest_float("beta", args.beta_min, args.beta_max, log=True),
         "regularization": choice(trial, "regularization", args.regularization_choices),
     }
     if kernel_name != "linear":
@@ -292,7 +293,6 @@ def sample_configuration(trial, args) -> dict:
 def config_from_params(params: dict, args) -> dict:
     return {
         "kernel": params.get("kernel", args.kernels[0]),
-        "beta": params.get("beta", args.beta_min),
         "regularization": params.get("regularization", args.regularization_choices[0]),
         "theta_multiplier": params.get("theta_multiplier", 1.0),
     }
@@ -322,8 +322,7 @@ def make_pruner(optuna, args, max_resource: int):
 
 
 def study_name(problem_name: str, args) -> str:
-    suffix = "bounds" if args.boundary_constraints else "no_bounds"
-    return f"MMDNewton-MMDMatching-{problem_name}-{args.algorithm}-{suffix}"
+    return f"MMDNewton-MMD-{problem_name}-{args.algorithm}-bounds"
 
 
 def storage_specification(problem_name: str, args) -> str:
@@ -400,7 +399,7 @@ def create_study(problem_name: str, args, optuna, worker_id: int = 0):
 
 
 def make_objective(problem_name: str, args, optuna):
-    problem = PROBLEMS[problem_name](boundary_constraints=args.boundary_constraints)
+    problem = PROBLEMS[problem_name](boundary_constraints=BOUNDARY_CONSTRAINTS)
     pareto_front = get_pareto_front(problem)
     train_runs = parse_runs(args.train_runs)
 
@@ -503,7 +502,7 @@ def tune_problem(problem_name: str, args, optuna) -> dict:
     name = study_name(problem_name, args)
     study.trials_dataframe().to_csv(output_dir / f"{name}-trials.csv", index=False)
 
-    problem = PROBLEMS[problem_name](boundary_constraints=args.boundary_constraints)
+    problem = PROBLEMS[problem_name](boundary_constraints=BOUNDARY_CONSTRAINTS)
     pareto_front = get_pareto_front(problem)
     best_config = config_from_params(study.best_trial.params, args)
     validation_score, validation_records = evaluate_configuration(
@@ -523,8 +522,8 @@ def tune_problem(problem_name: str, args, optuna) -> dict:
         "algorithm": args.algorithm,
         "generation": args.generation,
         "max_iters": args.max_iters,
-        "indicator": "MMDMatching",
-        "boundary_constraints": args.boundary_constraints,
+        "indicator": "MMD",
+        "boundary_constraints": BOUNDARY_CONSTRAINTS,
         "best_tuning_ahd": study.best_value,
         "validation_ahd": validation_score,
         "best_config": best_config,
@@ -599,10 +598,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--kernels", nargs="+", choices=KERNELS, default=list(KERNELS))
     parser.add_argument("--theta-min", type=float, default=1e-3)
     parser.add_argument("--theta-max", type=float, default=1e4)
-    parser.add_argument("--beta-min", type=float, default=1e-4)
-    parser.add_argument("--beta-max", type=float, default=1.0)
     parser.add_argument("--regularization", choices=["both", "true", "false"], default="both")
-    parser.add_argument("--boundary-constraints", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--failure-value", type=float, default=1e12)
     return parser
 
@@ -613,8 +609,6 @@ def main() -> None:
         raise ValueError("max-iters, trials, and workers must all be positive")
     if not 0 < args.theta_min < args.theta_max:
         raise ValueError("theta bounds must satisfy 0 < theta-min < theta-max")
-    if not 0 < args.beta_min < args.beta_max:
-        raise ValueError("beta bounds must satisfy 0 < beta-min < beta-max")
     args.regularization_choices = boolean_choices(args.regularization)
     random.seed(args.seed)
     np.random.seed(args.seed)

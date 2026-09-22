@@ -66,7 +66,9 @@ opt_mmd = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     metrics=metrics,
-    beta=0.2,
+    matching=True,
+    theta=1.0,
+    beta=0.25,
     regularization=True,
 )
 X, Y, _ = opt_mmd.run()

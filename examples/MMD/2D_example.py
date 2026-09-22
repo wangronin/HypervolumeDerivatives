@@ -147,21 +147,14 @@ if 1 < 2:
 ax0.legend()
 
 ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "r--", label="Pareto front")
-ax1.plot(
-    reference[:, 0],
-    reference[:, 1],
-    "r.",
-    ms=4,
-    label="non-uniform reference",
-)
-ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=8, label=r"$Y_0$")
+ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=10, label=r"$Y_0$")
 ax1.plot(
     optimizer.ref.reference_set[:, 0],
     optimizer.ref.reference_set[:, 1],
     "^",
     color="tab:orange",
-    ms=5,
-    label="shifted targets",
+    ms=7,
+    label="reference",
 )
 ax1.plot(Y[:, 0], Y[:, 1], "g*", label=r"$Y_{\mathrm{MMD}}$")
 
