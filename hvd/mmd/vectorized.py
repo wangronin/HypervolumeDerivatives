@@ -35,22 +35,13 @@ class _VectorizedMMDBase:
         self.n_obj = int(n_obj)
         if self.n_var < 1 or self.n_obj < 1:
             raise ValueError("n_var and n_obj must be positive")
-
         if isinstance(ref, np.ndarray):
             ref = ReferenceSet(ref)
-        reference_set = np.asarray(ref.reference_set)
-
-        if reference_set.ndim != 2 or reference_set.shape[1] != self.n_obj:
-            raise ValueError(
-                f"reference set must have shape (n_points, {self.n_obj}), " f"got {reference_set.shape}"
-            )
-        if len(reference_set) == 0:
-            raise ValueError("reference set must contain at least one point")
 
         self.func = func if func is not None else lambda x: x
-        self.jac = jac if jac is not None else lambda x: np.eye(self.n_obj, self.n_var)
+        self.jac = jac if jac is not None else lambda _: np.eye(self.n_obj, self.n_var)
         self.hessian = (
-            hessian if hessian is not None else lambda x: np.zeros((self.n_obj, self.n_var, self.n_var))
+            hessian if hessian is not None else lambda _: np.zeros((self.n_obj, self.n_var, self.n_var))
         )
         self.n_decision_var = self.n_var
         self.n_objective = self.n_obj

@@ -1,4 +1,5 @@
 import random
+from pathlib import Path
 from typing import Dict, List, NotRequired, Tuple, TypedDict
 
 import matplotlib.pyplot as plt
@@ -22,19 +23,18 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 
-class MMDConfig(TypedDict):
-    kernel: str
-    theta_multiplier: float
-    regularization: bool
-    beta: NotRequired[float]
-
-
 def kernel_theta(multiplier: float, approximation: np.ndarray, reference: np.ndarray) -> float:
     """Scale theta by the median nonzero squared distance to the reference."""
     distances = cdist(approximation, reference, metric="sqeuclidean").ravel()
     distances = distances[np.isfinite(distances) & (distances > np.finfo(float).eps)]
     characteristic_distance = np.median(distances) if len(distances) else 1.0
     return float(multiplier / characteristic_distance)
+
+
+def get_run_instances(problem: str, algorithm: str, generation: int, data_path: Path) -> list[int]:
+    """Return the available run IDs in numerical order for one dataset."""
+    file_name = f"{problem}_{algorithm}_run_*_lastpopu_x_gen{generation}.csv"
+    return sorted(int(path.name.split("_run_")[1].split("_")[0]) for path in data_path.glob(file_name))
 
 
 def get_pareto_front(problem) -> np.ndarray:
@@ -160,19 +160,24 @@ def plot(
     Y: np.ndarray,
     ref: np.ndarray,
     pareto_front: np.ndarray,
-    fig_name: str,
+    fig_name: str | Path,
     optimizer=None,
     plot_trajectory: bool = False,
-):
+) -> None:
     ndim = Y0.shape[1]
-    plot_func = plot_2d if ndim == 2 else plot_3d
+    plot_func = {2: plot_2d, 3: plot_3d, 4: plot_4d}[ndim]
+    # DpN records medoid shifts; MMD indicators own their reference history.
+    reference_history = (
+        optimizer.history_medoids if hasattr(optimizer, "history_medoids")
+        else optimizer.indicator.history_reference_set
+    )
     plot_func(
         Y0=Y0,
         Y=Y,
         ref=ref,
         pareto_front=pareto_front,
         hist_Y=optimizer.history_Y,
-        history_medoids=optimizer.indicator.history_reference_set,
+        history_medoids=reference_history,
         history_metric=optimizer.history_metrics,
         hist_R_norm=optimizer.history_R_norm,
         fig_name=fig_name,
@@ -244,7 +249,7 @@ def plot_2d(
     lines += ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "g.", mec="none", ms=5, alpha=0.3)
     shifts = []
     for i, M in history_medoids.items():
-        c = colors[len(M) - 1]
+        c = colors[(len(M) - 1) % n_colors]
         for j, x in enumerate(M):
             line = ax1.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
             if j == len(shifts):
@@ -293,7 +298,7 @@ def plot_3d(
 ) -> None:
     colors = plt.get_cmap("tab20").colors
     colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
-    medoids0 = np.array([h[0] for h in history_medoids.values()])
+    medoids0 = np.array([h[0] for h in history_medoids.values()]).reshape(-1, Y0.shape[1])
 
     fig = plt.figure(figsize=plt.figaspect(1 / 2.0))
     plt.subplots_adjust(bottom=0.05, top=0.95, right=0.93, left=0.05)
@@ -370,4 +375,52 @@ def plot_3d(
     ax1.set_ylabel("f3")
     plt.tight_layout()
     plt.savefig(fig_name, dpi=1000)
+    plt.close(fig)
+
+
+def plot_4d(
+    Y0: np.ndarray,
+    Y: np.ndarray,
+    ref: np.ndarray,
+    pareto_front: np.ndarray,
+    hist_Y: List[np.ndarray],
+    history_medoids: Dict[int, List[np.ndarray]],
+    history_metric: Dict[str, List[float]],
+    hist_R_norm: List[float],
+    fig_name: str | Path,
+    plot_trajectory: bool = False,
+) -> None:
+    """Show all four objectives as parallel coordinates, alongside convergence.
+
+    Each polyline represents one objective vector; no objective is projected
+    away. Initial and final populations use the same objective-value scale.
+    """
+    fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(20, 6.5))
+    objectives = np.arange(1, 5)
+    for ax, population, title in ((ax0, Y0, "Initialization"), (ax1, Y, "Final population")):
+        for values, color, label in (
+            (pareto_front, "green", "Pareto front"),
+            (ref, "blue", "Reference set"),
+            (population, "black" if ax is ax0 else "red", "Population"),
+        ):
+            lines = ax.plot(objectives, values.T, color=color, alpha=0.25)
+            lines[0].set_label(label)
+        ax.set_xticks(objectives, [f"f{i}" for i in objectives])
+        ax.set_ylabel("Objective value")
+        ax.set_title(title)
+        ax.legend()
+    if plot_trajectory:
+        for population in hist_Y:
+            ax1.plot(objectives, population.T, color="red", alpha=0.05)
+    limits = (min(ax0.get_ylim()[0], ax1.get_ylim()[0]), max(ax0.get_ylim()[1], ax1.get_ylim()[1]))
+    ax0.set_ylim(limits)
+    ax1.set_ylim(limits)
+    for name, values in history_metric.items():
+        ax2.semilogy(range(1, len(values) + 1), values, label=name)
+    ax2.set_title("Performance")
+    ax2.set_xlabel("Iteration")
+    ax2.set_xticks(range(1, len(hist_R_norm) + 1))
+    ax2.legend()
+    fig.tight_layout()
+    fig.savefig(fig_name)
     plt.close(fig)

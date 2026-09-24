@@ -38,7 +38,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import TYPE_CHECKING, Any, Callable, Iterable, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Iterable, NotRequired, TypedDict, TypeVar
 
 if TYPE_CHECKING:
     from optuna import Study, Trial
@@ -57,14 +57,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
+from hvd.delta_p import averaged_hausdorff
 from hvd.mmd import MMD, MMDMatching
 from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
 from hvd.problems import CMOP, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
-from hvd.utils import get_non_dominated
-from scripts.utils import MMDConfig, get_pareto_front, kernel_theta, read_reference_set_data
+from scripts.utils import get_pareto_front, kernel_theta, read_reference_set_data
 
 PROBLEMS = {
     "IDTLZ1": IDTLZ1,
@@ -87,6 +86,13 @@ class RunData:
     y0: np.ndarray
     y_indices: list[np.ndarray] | None
     eta: dict[int, np.ndarray] | None
+
+
+class MMDConfig(TypedDict):
+    kernel: str
+    theta_multiplier: float
+    regularization: bool
+    beta: NotRequired[float]
 
 
 def parse_runs(specification: str) -> list[int]:
@@ -129,13 +135,6 @@ def load_run(
         y_indices=y_indices,
         eta=eta,
     )
-
-
-def averaged_hausdorff(points: np.ndarray, pareto_front: np.ndarray) -> tuple[float, float, float]:
-    points = get_non_dominated(np.asarray(points))
-    gd = GenerationalDistance(pareto_front).compute(Y=points)
-    igd = InvertedGenerationalDistance(pareto_front).compute(Y=points)
-    return float(max(gd, igd)), float(gd), float(igd)
 
 
 def evaluate_configuration(
@@ -487,6 +486,7 @@ def tune_problem(problem_name: str, args: argparse.Namespace, optuna: ModuleType
     }
     with (output_dir / f"{name}-best.json").open("w") as stream:
         json.dump(result, stream, indent=2)
+
     pd.DataFrame(
         [
             {
@@ -510,8 +510,8 @@ def build_parser(matching: bool = False) -> argparse.ArgumentParser:
     )
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("problems", nargs="+", choices=PROBLEMS)
-    parser.add_argument("--data-path", type=Path, default="/home/wangh5/data/MMD_data")
-    parser.add_argument("--output-dir", type=Path, default=ROOT / "scripts" / "tuning_results")
+    parser.add_argument("--data-path", type=Path, default="/home/wangh5/data/mmd_data")
+    parser.add_argument("--output-dir", type=Path, default="/home/wangh5/data/mmd_tuning_results")
     parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
     parser.add_argument("--generation", type=int, default=300)
     parser.add_argument("--train-runs", default="1-20")

@@ -26,7 +26,8 @@ from hvd.mmd_newton import MMDN
 from hvd.problems import CMOP, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
-from scripts.utils import MMDConfig, get_pareto_front, kernel_theta, plot, read_reference_set_data
+from scripts.tune_MMD import MMDConfig
+from scripts.utils import get_pareto_front, get_run_instances, kernel_theta, plot, read_reference_set_data
 
 PROBLEMS = {
     "IDTLZ1": IDTLZ1,
@@ -42,11 +43,6 @@ BOUNDARY_CONSTRAINTS = True
 DEFAULT_CONFIG: MMDConfig = {"kernel": "rbf", "theta_multiplier": 1.0, "regularization": False}
 DEFAULT_MAX_ITERS = 5
 DEFAULT_GENERATION = 300
-
-
-def get_run_instances(problem: str, algorithm: str, generation: int, data_path: Path) -> list[int]:
-    file_name = f"{problem}_{algorithm}_run_*_lastpopu_x_gen{generation}.csv"
-    return sorted(int(path.name.split("_run_")[1].split("_")[0]) for path in data_path.glob(file_name))
 
 
 def get_config(args: argparse.Namespace) -> tuple[MMDConfig, argparse.Namespace]:
@@ -69,8 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Benchmark MMD Newton on IDTLZ.")
     parser.add_argument("problem", choices=PROBLEMS)
     parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
-    parser.add_argument("--data-path", type=Path, default=ROOT / "MMD_data")
-    parser.add_argument("--tuning-dir", type=Path, default=Path.home() / "mmd-tuning")
+    parser.add_argument("--data-path", type=Path, default=ROOT / "mmd_data")
+    parser.add_argument("--tuning-dir", type=Path, default=Path.home() / "mmd_tuning_results")
     parser.add_argument("--generation", type=int, default=None)
     parser.add_argument("--max-iters", type=int, default=None)
     parser.add_argument("--matching", action="store_true", dest="matching")
@@ -150,7 +146,10 @@ def main() -> None:
     problem = PROBLEMS[args.problem](boundary_constraints=BOUNDARY_CONSTRAINTS)
     pareto_front = get_pareto_front(problem)
     instances = get_run_instances(args.problem, args.algorithm, args.generation, args.data_path)
-    ref_point = pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem").loc[args.problem].values
+    ref_point = (
+        pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem")
+        .loc[args.problem].dropna().to_numpy(dtype=float)
+    )
 
     # make the plot and result folder
     args.plot_dir.mkdir(parents=True, exist_ok=True)

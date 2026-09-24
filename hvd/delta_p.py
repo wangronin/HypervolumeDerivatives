@@ -4,6 +4,15 @@ import numpy as np
 from scipy.spatial.distance import cdist
 
 from .reference_set import ReferenceSet
+from .utils import get_non_dominated
+
+
+def averaged_hausdorff(points: np.ndarray, pareto_front: np.ndarray) -> tuple[float, float, float]:
+    """Return (max(GD, IGD), GD, IGD) using the nondominated objective points."""
+    points = get_non_dominated(np.asarray(points))
+    gd = GenerationalDistance(pareto_front).compute(Y=points)
+    igd = InvertedGenerationalDistance(pareto_front).compute(Y=points)
+    return float(max(gd, igd)), float(gd), float(igd)
 
 
 class GenerationalDistance:

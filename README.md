@@ -201,6 +201,29 @@ their constraint count is zero.
 Custom callbacks passed to optimizers must follow the same point-or-population
 convention: `State` passes the input directly to the callback.
 
+## DpN benchmarks
+
+`scripts/benchmark_DpN.py` is the common runner for CF1–CF10, ZDT1–ZDT4/ZDT6,
+DTLZ1–DTLZ7, IDTLZ1–IDTLZ4, and CONV4_2F. It replaces the separate CF, CONV4,
+DTLZ, and DpN2 benchmark scripts and follows the MMD runner's command-line
+structure. DpN uses fixed IGD and Hessian regularization settings; no tuning
+configuration is loaded.
+
+```shell
+python scripts/benchmark_DpN.py IDTLZ1 --n-jobs 15
+python scripts/benchmark_DpN.py CF1 --algorithm SMS-EMOA --data-path data-reference/CF --max-iters 6
+python scripts/benchmark_DpN.py CONV4_2F --data-path data-reference/CONV4_2F --generation 400
+```
+
+Defaults are NSGA-III, `mmd_data`, generation 300, and five Newton iterations.
+The decision dimension comes from the stored population, and box bounds are
+included as inequality constraints. Every discovered run is processed; the
+old hard-coded run exclusions are removed, and execution errors propagate.
+`--results-dir` receives a summary CSV with run IDs, HV, IGD, GD, Jacobian
+counts, and wall-clock time in microseconds, plus initial/final objective
+populations. `--plot-dir` receives one PDF per run, including parallel-coordinate
+plots for four-objective problems.
+
 ## Brief Explanation of the Analytical Computation
 
 The **hypervolume indicator** (HV) of a set of points is the m-dimensional Lebesgue measure of the space that is jointly dominated by a set of objective function vectors in $\mathbb{R}^m$ and bound from above by a reference point. HV is widely investigated in solving _multi-objective optimization problems_ (MOPs), where it is often used as a performance indicator for assessing the quality of _Evolutionay Multi-objective Optimization Algorithms_ (EMOAs), or employed to solve MOPs directly, e.g., [Hypervolume Indicator Gradient Algorithm](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Pz9c6XwAAAAJ&citation_for_view=Pz9c6XwAAAAJ:5nxA0vEk-isC) and [Hypervolume Indicator Netwon Method](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Pz9c6XwAAAAJ&citation_for_view=Pz9c6XwAAAAJ:QIV2ME_5wuYC).
