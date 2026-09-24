@@ -10,7 +10,6 @@ from sklearn_extra.cluster import KMedoids
 
 from .problems import MOP
 from .reference_set import ReferenceSet
-from .rsg import RSG
 from .utils import compute_chim, get_non_dominated
 
 plt.style.use("ggplot")
@@ -112,7 +111,7 @@ def bootstrap_reference_set(
     N: int = optimizer.N
     alpha: float = 0.05
     Y0: np.ndarray = optimizer.state.Y.copy()
-    ref0: np.ndarray = optimizer.ref.reference_set.copy()
+    ref0: np.ndarray = optimizer.indicator.ref.reference_set.copy()
     ref_list: list = []
     X_list: list = []
     Y_list: list = []
@@ -153,6 +152,8 @@ def bootstrap_reference_set(
             # indices = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
             # Y = Y[indices == 1]
             if with_rsg:  # call the RSG method written in Matlab to fill the reference set
+                from .rsg import RSG
+
                 ref = RSG(Py=Y, Nf=N)
                 # pd.DataFrame(Y).to_csv("./RSG/MMD_boostrap.csv", index=False, header=False)
                 # ref = np.array(eng.RSG())
@@ -176,7 +177,7 @@ def bootstrap_reference_set(
             eta = compute_chim(ref)
             ref += 0.05 * eta
             ref = ReferenceSet(ref=ref, eta={0: eta}, Y_idx=None)
-            optimizer.indicator.ref = optimizer.ref = ref
+            optimizer.indicator.ref = ref
             optimizer.indicator.compute(Y=optimizer.state.Y)
             # discount the weight of the spread term to reduce spread effect in the following iterations
             optimizer.indicator.beta = optimizer.indicator.beta * 0.8

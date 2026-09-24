@@ -1,5 +1,6 @@
 import math
 from collections.abc import Iterator
+
 import numpy as np
 
 
@@ -10,9 +11,8 @@ def get_ref_dirs(n_obj: int, n_points: int | None = None, n_partitions: int | No
         n_partitions = 1
         while math.comb(n_partitions + n_obj - 1, n_obj - 1) < target:
             n_partitions += 1
-    def compositions(
-        total: int, parts: int, prefix: tuple[int, ...] = ()
-    ) -> Iterator[tuple[int, ...]]:
+
+    def compositions(total: int, parts: int, prefix: tuple[int, ...] = ()) -> Iterator[tuple[int, ...]]:
         if parts == 1:
             yield prefix + (total,)
             return

@@ -1,12 +1,13 @@
-from functools import partial
-from typing import Callable, Dict, List, Tuple, Union
+from collections import defaultdict
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from typing import Callable, Dict, Iterator, List, Tuple, Union
 
 import jax.numpy as jnp
 import numpy as np
-from jax import jacfwd, jacrev, jit, vmap
+from jax import jit
 
-from .mmd_legacy import laplace, linear, rational_quadratic, rbf
-from .reference_set import ReferenceSet
+from ..reference_set import ReferenceSet
+from .kernels import RBF, CallableKernel, Kernel, KernelFunction
 
 
 @jit
@@ -28,24 +29,24 @@ class _VectorizedMMDBase:
         func: Callable = None,
         jac: Callable = None,
         hessian: Callable = None,
-        kernel: Callable = rbf,
-        theta: float = 1.0,
+        kernel: KernelFunction = RBF(),
     ) -> None:
         self.n_var = int(n_var)
         self.n_obj = int(n_obj)
         if self.n_var < 1 or self.n_obj < 1:
             raise ValueError("n_var and n_obj must be positive")
+
         if isinstance(ref, np.ndarray):
             ref = ReferenceSet(ref)
         reference_set = np.asarray(ref.reference_set)
+
         if reference_set.ndim != 2 or reference_set.shape[1] != self.n_obj:
             raise ValueError(
                 f"reference set must have shape (n_points, {self.n_obj}), " f"got {reference_set.shape}"
             )
         if len(reference_set) == 0:
             raise ValueError("reference set must contain at least one point")
-        # if func is None and self.n_var != self.n_obj:
-        # raise ValueError("the default identity objective requires n_var == n_obj")
+
         self.func = func if func is not None else lambda x: x
         self.jac = jac if jac is not None else lambda x: np.eye(self.n_obj, self.n_var)
         self.hessian = (
@@ -53,29 +54,18 @@ class _VectorizedMMDBase:
         )
         self.n_decision_var = self.n_var
         self.n_objective = self.n_obj
-        self.theta = float(theta)
         self.ref = ref
         self.N = self.ref.N
-        self.kernel = kernel
-        self.k = partial(kernel, theta=self.theta)
+        self.kernel = kernel if isinstance(kernel, Kernel) else CallableKernel(kernel)
+        self.history_reference_set: Dict[int, List[np.ndarray]] = defaultdict(list)
 
-        self.k_dx = jit(jacrev(self.k))
-        self.k_dx2 = jit(jacfwd(jacrev(self.k)))
-        self.k_dxdy = jit(jacfwd(jacrev(self.k), argnums=1))
-        self.k_diag = jit(lambda x: self.k(x, x))
-        self.k_diag_dx = jit(jacrev(self.k_diag))
-        self.k_diag_dx2 = jit(jacfwd(jacrev(self.k_diag)))
+    def trial_evaluation(self) -> AbstractContextManager[None]:
+        """Keep the indicator's evaluation state fixed during a trial step.
 
-        self._pairwise_k = jit(vmap(vmap(self.k, in_axes=(None, 0)), in_axes=(0, None)))
-        self._pairwise_dx = jit(vmap(vmap(self.k_dx, in_axes=(None, 0)), in_axes=(0, None)))
-        self._pairwise_dx2 = jit(vmap(vmap(self.k_dx2, in_axes=(None, 0)), in_axes=(0, None)))
-        self._pairwise_dxdy = jit(vmap(vmap(self.k_dxdy, in_axes=(None, 0)), in_axes=(0, None)))
-        self._diagonal_k = jit(vmap(self.k_diag))
-        self._diagonal_dx = jit(vmap(self.k_diag_dx))
-        self._diagonal_dx2 = jit(vmap(self.k_diag_dx2))
-        self._matched_k = jit(vmap(self.k))
-        self._matched_dx = jit(vmap(self.k_dx))
-        self._matched_dx2 = jit(vmap(self.k_dx2))
+        Ordinary MMD has no temporary evaluation state. Stateful indicators
+        override this context to preserve the model used for the Newton step.
+        """
+        return nullcontext()
 
     def compute_derivatives(
         self,
@@ -88,6 +78,24 @@ class _VectorizedMMDBase:
             out = self.compute_hessian(X, Y, jacobian)
             return out["MMDdX"], out["MMDdX2"]
         return self.compute_gradient(X, Y, jacobian)["MMDdX"]
+
+    def shift_reference_set(self, c: float = 0.04, indices: np.ndarray | None = None) -> None:
+        """Shift the selected reference points and record their new positions.
+
+        MMD selects original reference points; MMDMatching selects matched medoids.
+        None shifts all current targets; an empty selection leaves them unchanged.
+        The scale c multiplies each target's component shift direction.
+        """
+        if indices is None:
+            indices = np.arange(self.ref.N)
+        self.ref.shift(c, indices)
+        self._record_reference_shift(indices)
+
+    def _record_reference_shift(self, indices: np.ndarray) -> None:
+        """Save copies of shifted targets so later shifts cannot change their history."""
+        reference_set = self.ref.reference_set
+        for k in indices:
+            self.history_reference_set[k].append(reference_set[k].copy())
 
     def _compute_objective_derivatives(
         self,
@@ -144,15 +152,6 @@ class _VectorizedMMDBase:
             raise ValueError("Y must contain at least one point")
         return Y
 
-    @property
-    def re_match(self) -> bool:
-        """Expose the matching switch expected by ``MMDNewton``."""
-        return self.ref.re_match
-
-    @re_match.setter
-    def re_match(self, value: bool) -> None:
-        self.ref.re_match = value
-
 
 class MMD(_VectorizedMMDBase):
     """Vectorized biased squared maximum mean discrepancy."""
@@ -165,32 +164,11 @@ class MMD(_VectorizedMMDBase):
         Y = jnp.asarray(self._check_Y(Y))
         reference_set = jnp.asarray(self.ref.reference_set)
         value = (
-            self._pairwise_k(reference_set, reference_set).mean()
-            + self._pairwise_k(Y, Y).mean()
-            - 2 * self._pairwise_k(Y, reference_set).mean()
+            self.kernel.pairwise(reference_set, reference_set).mean()
+            + self.kernel.pairwise(Y, Y).mean()
+            - 2 * self.kernel.pairwise(Y, reference_set).mean()
         )
         return float(value)
-
-    def _objective_gradient(self, Y, reference_set):
-        N, M = len(Y), len(reference_set)
-        indices = jnp.arange(N)
-        yy_dx = self._pairwise_dx(Y, Y)
-        yr_dx = self._pairwise_dx(Y, reference_set)
-        nonself_dx = yy_dx.sum(axis=1) - yy_dx[indices, indices]
-        return 2 * nonself_dx / N**2 + self._diagonal_dx(Y) / N**2 - 2 * yr_dx.sum(axis=1) / (N * M)
-
-    def _objective_hessian(self, Y, reference_set):
-        N, M = len(Y), len(reference_set)
-        indices = jnp.arange(N)
-        yy_dx2 = self._pairwise_dx2(Y, Y)
-        yr_dx2 = self._pairwise_dx2(Y, reference_set)
-        diagonal = (
-            2 * (yy_dx2.sum(axis=1) - yy_dx2[indices, indices]) / N**2
-            + self._diagonal_dx2(Y) / N**2
-            - 2 * yr_dx2.sum(axis=1) / (N * M)
-        )
-        blocks = 2 * self._pairwise_dxdy(Y, Y) / N**2
-        return blocks.at[indices, indices].set(diagonal)
 
     def compute_gradient(
         self, X: np.ndarray, Y: np.ndarray = None, jacobian: np.ndarray = None
@@ -221,6 +199,31 @@ class MMD(_VectorizedMMDBase):
             YdX2=YdX2,
         )
 
+    def _objective_gradient(self, Y, reference_set):
+        N, M = len(Y), len(reference_set)
+        indices = jnp.arange(N)
+        yy_dx = self.kernel.pairwise_gradient(Y, Y)
+        yr_dx = self.kernel.pairwise_gradient(Y, reference_set)
+        nonself_dx = yy_dx.sum(axis=1) - yy_dx[indices, indices]
+        return (
+            2 * nonself_dx / N**2
+            + self.kernel.diagonal_gradient_batch(Y) / N**2
+            - 2 * yr_dx.sum(axis=1) / (N * M)
+        )
+
+    def _objective_hessian(self, Y, reference_set):
+        N, M = len(Y), len(reference_set)
+        indices = jnp.arange(N)
+        yy_dx2 = self.kernel.pairwise_hessian(Y, Y)
+        yr_dx2 = self.kernel.pairwise_hessian(Y, reference_set)
+        diagonal = (
+            2 * (yy_dx2.sum(axis=1) - yy_dx2[indices, indices]) / N**2
+            + self.kernel.diagonal_hessian_batch(Y) / N**2
+            - 2 * yr_dx2.sum(axis=1) / (N * M)
+        )
+        blocks = 2 * self.kernel.pairwise_mixed_hessian(Y, Y) / N**2
+        return blocks.at[indices, indices].set(diagonal)
+
 
 class MMDMatching(_VectorizedMMDBase):
     """Vectorized matched MMD surrogate with a general RKHS distance term."""
@@ -228,6 +231,28 @@ class MMDMatching(_VectorizedMMDBase):
     def __init__(self, *args, beta: float = 0.5, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.beta = float(beta)
+
+    @property
+    def re_match(self) -> bool:
+        """Whether evaluations recompute an existing point-to-reference matching."""
+        return self.ref.re_match
+
+    @re_match.setter
+    def re_match(self, value: bool) -> None:
+        self.ref.re_match = value
+
+    @contextmanager
+    def trial_evaluation(self) -> Iterator[None]:
+        """Reuse the current point matching while evaluating a trial step.
+
+        A line search must evaluate the surrogate used for the Newton step.
+        Always re-enable matching on exit, including when evaluation raises.
+        """
+        self.re_match = False
+        try:
+            yield
+        finally:
+            self.re_match = True
 
     def _match(self, Y):
         self.ref.match(np.asarray(Y))
@@ -241,32 +266,12 @@ class MMDMatching(_VectorizedMMDBase):
         Y = jnp.asarray(self._check_Y(Y))
         matched_reference_set = self._match(Y)
         squared_rkhs_distance = (
-            self._diagonal_k(Y)
-            + self._diagonal_k(matched_reference_set)
-            - 2 * self._matched_k(Y, matched_reference_set)
+            self.kernel.diagonal_batch(Y)
+            + self.kernel.diagonal_batch(matched_reference_set)
+            - 2 * self.kernel.matched(Y, matched_reference_set)
         )
-        value = self.beta * self._pairwise_k(Y, Y).mean() + squared_rkhs_distance.mean()
+        value = self.beta * self.kernel.pairwise(Y, Y).mean() + squared_rkhs_distance.mean()
         return float(value)
-
-    def _objective_gradient(self, Y, matched_reference_set):
-        N = len(Y)
-        indices = jnp.arange(N)
-        yy_dx = self._pairwise_dx(Y, Y)
-        nonself_dx = yy_dx.sum(axis=1) - yy_dx[indices, indices]
-        diagonal_dx = self._diagonal_dx(Y)
-        spread = self.beta * (2 * nonself_dx + diagonal_dx) / N**2
-        attraction = (diagonal_dx - 2 * self._matched_dx(Y, matched_reference_set)) / N
-        return spread + attraction
-
-    def _objective_hessian(self, Y, matched_reference_set):
-        N = len(Y)
-        indices = jnp.arange(N)
-        yy_dx2 = self._pairwise_dx2(Y, Y)
-        diagonal_dx2 = self._diagonal_dx2(Y)
-        diagonal = self.beta * (2 * (yy_dx2.sum(axis=1) - yy_dx2[indices, indices]) + diagonal_dx2) / N**2
-        diagonal += (diagonal_dx2 - 2 * self._matched_dx2(Y, matched_reference_set)) / N
-        blocks = 2 * self.beta * self._pairwise_dxdy(Y, Y) / N**2
-        return blocks.at[indices, indices].set(diagonal)
 
     def compute_gradient(
         self, X: np.ndarray, Y: np.ndarray = None, jacobian: np.ndarray = None
@@ -297,3 +302,23 @@ class MMDMatching(_VectorizedMMDBase):
             YdX=YdX,
             YdX2=YdX2,
         )
+
+    def _objective_gradient(self, Y, matched_reference_set):
+        N = len(Y)
+        indices = jnp.arange(N)
+        yy_dx = self.kernel.pairwise_gradient(Y, Y)
+        nonself_dx = yy_dx.sum(axis=1) - yy_dx[indices, indices]
+        diagonal_dx = self.kernel.diagonal_gradient_batch(Y)
+        spread = self.beta * (2 * nonself_dx + diagonal_dx) / N**2
+        attraction = (diagonal_dx - 2 * self.kernel.matched_gradient(Y, matched_reference_set)) / N
+        return spread + attraction
+
+    def _objective_hessian(self, Y, matched_reference_set):
+        N = len(Y)
+        indices = jnp.arange(N)
+        yy_dx2 = self.kernel.pairwise_hessian(Y, Y)
+        diagonal_dx2 = self.kernel.diagonal_hessian_batch(Y)
+        diagonal = self.beta * (2 * (yy_dx2.sum(axis=1) - yy_dx2[indices, indices]) + diagonal_dx2) / N**2
+        diagonal += (diagonal_dx2 - 2 * self.kernel.matched_hessian(Y, matched_reference_set)) / N
+        blocks = 2 * self.beta * self.kernel.pairwise_mixed_hessian(Y, Y) / N**2
+        return blocks.at[indices, indices].set(diagonal)

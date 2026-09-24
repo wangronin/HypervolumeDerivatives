@@ -9,8 +9,7 @@ from scipy.linalg import block_diag, solve
 from scipy.spatial.distance import cdist
 
 from .base import State
-from .mmd_vectorized import MMD, MMDMatching
-from .reference_set import ReferenceSet
+from .mmd import MMD, MMDMatching
 from .utils import (
     Nd_vector_to_matrix,
     get_logger,
@@ -21,10 +20,10 @@ from .utils import (
 )
 
 
-class MMDNewton:
+class MMDN:
     """MMD Newton method
 
-    Newton-Raphson method to minimize the modified MMD indicator
+    Newton-Raphson method driven by an MMD indicator and its derivatives.
     """
 
     def __init__(
@@ -33,10 +32,9 @@ class MMDNewton:
         n_obj: int,
         func: callable,
         jac: callable,
-        hessian: callable,
-        ref: ReferenceSet,
         xl: Union[List[float], np.ndarray],
         xu: Union[List[float], np.ndarray],
+        indicator: MMD | MMDMatching,
         N: int = 5,
         h: Callable = None,
         h_jac: callable = None,
@@ -50,23 +48,17 @@ class MMDNewton:
         verbose: bool = True,
         metrics: Dict[str, Callable] = dict(),
         regularization: bool = False,
-        matching: bool = True,
-        beta: float = 0.25,
         project_box_constraints: bool = False,
-        **kwargs,
-    ):
+    ) -> None:
         """
         Args:
-            dim (int): dimensionality of the search space.
-            n_objective (int): number of objectives
+            n_var (int): dimensionality of the search space.
+            n_obj (int): number of objectives.
             func (callable): the objective function to be minimized.
             jac (callable): the Jacobian of objectives, should return a matrix of size (n_objective, dim)
-            hessian (callable): the Hessian of objectives,
-                should return a Tensor of size (n_objective, dim, dim)
-            ref (Union[List[float], np.ndarray]): the reference set, of shape (n_point, n_objective)
-            lower_bounds (Union[List[float], np.ndarray], optional): the lower bound of search variables.
+            xl (Union[List[float], np.ndarray]): the lower bound of search variables.
                 When it is not a `float`, it must have shape (dim, ).
-            upper_bounds (Union[List[float], np.ndarray], optional): The upper bound of search variables.
+            xu (Union[List[float], np.ndarray]): the upper bound of search variables.
                 When it is not a `float`, it must have must have shape (dim, ).
             N (int, optional): the approximation set size. Defaults to 5.
             h (Callable, optional): the equality constraint function, should return a vector of shape
@@ -84,19 +76,18 @@ class MMDNewton:
             xtol (float, optional): absolute distance in the approximation set between consecutive iterations
                 that is used to determine convergence. Defaults to 1e-3.
             verbose (bool, optional): verbosity of the output. Defaults to True.
-            beta (float, optional): weight of the MMD-Matching self-repulsion term.
-                Defaults to 0.25.
             project_box_constraints (bool, optional): project outward search
                 directions and limit steps to remain inside the decision box.
                 Defaults to False.
+            indicator (MMD or MMDMatching): an indicator configured for this problem,
+                including its objective callbacks, reference set, and kernel.
         """
         self.dim_p: int = n_var
         self.n_obj: int = n_obj
         self.N: int = N
         self.xl: np.ndarray = xl
         self.xu: np.ndarray = xu
-        self.ref: ReferenceSet = ref  # TODO: we should pass ref to the indicator directly
-        self.matching: bool = matching
+        self.indicator = indicator
         self._check_constraints(h, g)
         self.state = State(
             self.dim_p,
@@ -111,12 +102,6 @@ class MMDNewton:
             g_jac=g_jac,
             g_hess=g_hessian,
         )
-        if self.matching:
-            self.indicator = MMDMatching(
-                self.dim_p, self.n_obj, self.ref, func, jac, hessian, beta=beta, **kwargs
-            )
-        else:
-            self.indicator = MMD(self.dim_p, self.n_obj, self.ref, func, jac, hessian, **kwargs)
         self._initialize(X0)
         self._set_logging(verbose)
         # parameters of the stop criteria
@@ -124,22 +109,19 @@ class MMDNewton:
         self.max_iters: int = self.N * 10 if max_iters is None else max_iters
         self.stop_dict: Dict[str, float] = {}
         self.metrics: Dict[str, Callable] = metrics
-        self.preconditioning: bool = regularization
+        self.regularization: bool = regularization
         self.project_box_constraints: bool = project_box_constraints
 
-    def _check_constraints(self, h: Callable, g: Callable):
-        # initialize dual variables
-        self.n_eq, self.n_ieq = 0, 0
-        self._constrained = h is not None or g is not None
+    def _check_constraints(self, h: Callable | None, g: Callable | None) -> None:
+        # An absent family is either an omitted callback or a None result.
         x = np.random.rand(self.dim_p) * (self.xu - self.xl) + self.xl
-        if h is not None:
-            v = h(x)
-            self.n_eq = 1 if isinstance(v, (int, float)) else len(v)
-        if g is not None:
-            v = g(x)
-            self.n_ieq = 1 if isinstance(v, (int, float)) else len(v)
+        H = None if h is None else h(x)
+        G = None if g is None else g(x)
+        self.n_eq = 0 if H is None else np.size(H)
+        self.n_ieq = 0 if G is None else np.size(G)
         self.dim_d = self.n_eq + self.n_ieq
         self.dim = self.dim_p + self.dim_d
+        self._constrained = self.dim_d > 0
 
     def _initialize(self, X0: np.ndarray):
         if X0 is not None:
@@ -169,7 +151,6 @@ class MMDNewton:
         self.history_indicator_value: List[float] = []
         self.history_R_norm: List[float] = []
         self.history_metrics: Dict[str, List] = defaultdict(list)
-        self.history_medoids: Dict[int, List] = defaultdict(list)
         self.logger: logging.Logger = get_logger(logger_id=f"{self.__class__.__name__}", console=self.verbose)
 
     @property
@@ -195,9 +176,9 @@ class MMDNewton:
         return self.state.primal, self.state.Y, self.stop_dict
 
     def newton_iteration(self):
-        # compute the initial indicator values. The first clustering and matching is executed here.
-        self._compute_indicator_value(self.state.Y)
-        # shift the reference set if needed
+        # evaluate first so matching indicators establish their current targets
+        self.curr_indicator_value = self.indicator.compute(Y=self.state.Y)
+        # initial shifting of reference point or if the reference is very close to the approximation point
         self._shift_reference_set()
         # compute the Newton step
         self.step, self.R = self._compute_netwon_step()
@@ -231,8 +212,20 @@ class MMDNewton:
             self.stop_dict["iter_count"] = self.iter_count
         return bool(self.stop_dict)
 
-    def _compute_indicator_value(self, Y: np.ndarray):
-        self.curr_indicator_value = self.indicator.compute(Y=Y)
+    def _shift_reference_set(self) -> None:
+        """Request a shift initially, then for points that reach a target and stop moving.
+
+        Newton controls the trigger using its previous primal step and the
+        indicator's current targets. The indicator performs and records the shift.
+        """
+        if self.iter_count == 0:
+            indices = np.arange(self.N)
+        else:
+            distance = np.min(cdist(self.state.Y, self.indicator.ref.reference_set), axis=1)
+            step_norm = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
+            indices = np.flatnonzero(np.isclose(distance, 0) & np.isclose(step_norm, 0))
+        if len(indices):
+            self.indicator.shift_reference_set(indices=indices)
 
     def _compute_R(
         self, state: State, grad: np.ndarray = None
@@ -264,7 +257,7 @@ class MMDNewton:
         grad, Hessian = self.indicator.compute_derivatives(
             X=self.state.primal, Y=self.state.Y, jacobian=self.state.J
         )
-        if self.preconditioning:  # sometimes the Hessian is not PSD
+        if self.regularization:  # sometimes the Hessian is not PSD
             Hessian = regularize_hessian_block(Hessian, block_size=self.dim_p)
         R, dH, idx = self._compute_R(self.state, grad=grad)
         DR = Hessian
@@ -287,24 +280,6 @@ class MMDNewton:
         newton_step = Nd_vector_to_matrix(newton_step_.ravel(), self.N, self.dim, self.dim_p, idx)
         return newton_step, R
 
-    def _shift_reference_set(self):
-        """shift the reference set when the following conditions are True:
-        1. always shift the first reference set (`self.iter_count == 0`); Otherwise, weird matching can happen
-        2. if at least one approximation point is close to its matched target and the Newton step is not zero.
-        """
-        if self.iter_count == 0:  # TODO: maybe do not perform the initial shift here..
-            masks = np.array([True] * self.N)
-        else:
-            distance = np.min(cdist(self.state.Y, self.ref.reference_set), axis=1)
-            step_norm = np.linalg.norm(self.step[:, : self.dim_p], axis=1)
-            masks = np.bitwise_and(np.isclose(distance, 0), np.isclose(step_norm, 0))
-
-        indices = np.nonzero(masks)[0]
-        self.ref.shift(0.04, indices)
-        for k in indices:  # log the updated medoids
-            self.history_medoids[k].append(self.ref.reference_set[k].copy())
-        self.logger.info(f"{len(indices)} target points are shifted")
-
     def _backtracking_line_search_global(
         self, step: np.ndarray, R: np.ndarray, max_step_size: np.ndarray = None
     ) -> float:
@@ -316,9 +291,8 @@ class MMDNewton:
         def phi_func(alpha):
             state_ = deepcopy(self.state)
             state_.update(state_.X + alpha * step)
-            self.indicator.re_match = False
-            R_ = self._compute_R(state_)[0]
-            self.indicator.re_match = True
+            with self.indicator.trial_evaluation():
+                R_ = self._compute_R(state_)[0]
             return np.linalg.norm(R_)
 
         step_size = min(max_step_size) if max_step_size is not None else 1
@@ -352,10 +326,9 @@ class MMDNewton:
             x = state.X[i].copy()
             x += alpha * step[i]
             state.update_one(x, i)
-            self.indicator.re_match = False
             # this step takes too long since we compute the gradient at all points while only one changes
-            R_ = self._compute_R(state)[0][i]
-            self.indicator.re_match = True
+            with self.indicator.trial_evaluation():
+                R_ = self._compute_R(state)[0][i]
             self.state.n_jac_evals = state.n_jac_evals
             return np.linalg.norm(R_)
 

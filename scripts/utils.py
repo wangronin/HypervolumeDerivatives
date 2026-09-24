@@ -1,5 +1,5 @@
 import random
-from typing import Dict, List, Tuple
+from typing import Dict, List, NotRequired, Tuple, TypedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,6 +20,13 @@ rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
+
+
+class MMDConfig(TypedDict):
+    kernel: str
+    theta_multiplier: float
+    regularization: bool
+    beta: NotRequired[float]
 
 
 def kernel_theta(multiplier: float, approximation: np.ndarray, reference: np.ndarray) -> float:
@@ -165,7 +172,7 @@ def plot(
         ref=ref,
         pareto_front=pareto_front,
         hist_Y=optimizer.history_Y,
-        history_medoids=optimizer.history_medoids,
+        history_medoids=optimizer.indicator.history_reference_set,
         history_metric=optimizer.history_metrics,
         hist_R_norm=optimizer.history_R_norm,
         fig_name=fig_name,

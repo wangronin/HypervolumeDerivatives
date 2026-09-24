@@ -6,7 +6,9 @@ import numpy as np
 from matplotlib import rcParams
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton
+from hvd.mmd import MMD
+from hvd.mmd.kernels import RBF
+from hvd.mmd_newton import MMDN
 from hvd.reference_set import ReferenceSet
 
 plt.style.use("ggplot")
@@ -79,13 +81,21 @@ metrics = {
     "IGD": InvertedGenerationalDistance(ref=pareto_front),
 }
 
-optimizer = MMDNewton(
+indicator = MMD(
     n_var=2,
     n_obj=2,
     ref=ReferenceSet(reference, eta=shift_direction),
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
+    kernel=RBF(theta=5.0),
+)
+optimizer = MMDN(
+    n_var=2,
+    n_obj=2,
+    indicator=indicator,
+    func=MOP1,
+    jac=MOP1_Jacobian,
     h=h,
     h_jac=h_Jacobian,
     h_hessian=h_Hessian,
@@ -96,9 +106,6 @@ optimizer = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     regularization=True,
-    matching=False,
-    beta=10,
-    theta=5.0,
     metrics=metrics,
 )
 X, Y, _ = optimizer.run()
@@ -149,8 +156,8 @@ ax0.legend()
 ax1.plot(pareto_front[:, 0], pareto_front[:, 1], "r--", label="Pareto front")
 ax1.plot(y0[:, 0], y0[:, 1], "g.", ms=10, label=r"$Y_0$")
 ax1.plot(
-    optimizer.ref.reference_set[:, 0],
-    optimizer.ref.reference_set[:, 1],
+    optimizer.indicator.ref.reference_set[:, 0],
+    optimizer.indicator.ref.reference_set[:, 1],
     "^",
     color="tab:orange",
     ms=7,

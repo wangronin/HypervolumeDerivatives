@@ -1,14 +1,25 @@
 import numpy as np
+from numpy.typing import ArrayLike
 
 __author__ = "Simon Wessing"
 
 
-def hypervolume(pointset, ref):
+def hypervolume(pointset: ArrayLike, ref: ArrayLike) -> float:
     """Compute the absolute hypervolume of a *pointset* according to the
     reference point *ref*.
     """
     hv = HyperVolume(ref)
     return hv.compute(pointset)
+
+
+class HV:
+    """Hypervolume metric with the common ``compute(Y=...)`` interface."""
+
+    def __init__(self, ref_point: ArrayLike) -> None:
+        self.ref_point = np.asarray(ref_point, dtype=float)
+
+    def compute(self, Y: ArrayLike) -> float:
+        return float(hypervolume(Y, ref=self.ref_point))
 
 
 class HyperVolume:

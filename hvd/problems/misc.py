@@ -195,33 +195,3 @@ class DisConnected(CMOP):
 
     def get_pareto_front(self, N: int = 1000) -> np.ndarray:
         pass
-
-
-# TODO:  decide what to do with it
-class ModifiedObjective(PymooProblem):
-    """Modified objective function based on the following paper:
-
-    Ishibuchi, H.; Matsumoto, T.; Masuyama, N.; Nojima, Y.
-    Effects of dominance resistant solutions on the performance of evolutionary multi-objective
-    and many-objective algorithms. In Proceedings of the Genetic and Evolutionary Computation
-    Conference (GECCO '20), Cancún, Mexico, 8-12 July 2020.
-    """
-
-    def __init__(self, problem: PymooProblem) -> None:
-        self._problem = problem
-        self._alpha = 0.02
-        super().__init__(
-            n_var=problem.n_var,
-            n_obj=problem.n_obj,
-            xl=problem.xl,
-            xu=problem.xu,
-            n_ieq_constr=self._problem.n_ieq_constr if hasattr(self._problem, "n_ieq_constr") else 0,
-            n_eq_constr=self._problem.n_eq_constr if hasattr(self._problem, "n_eq_constr") else 0,
-        )
-
-    def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
-        self._problem._evaluate(x, out, *args, **kwargs)
-        F = out["F"]
-        out["F"] = (1 - self._alpha) * F + self._alpha * np.tile(
-            F.sum(axis=1).reshape(-1, 1), (1, self.n_obj)
-        ) / self.n_obj

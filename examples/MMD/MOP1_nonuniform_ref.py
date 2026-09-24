@@ -23,7 +23,8 @@ rcParams["ytick.major.width"] = 1
 
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_vectorized import MMD, rational_quadratic, rbf
+from hvd.mmd import MMD
+from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.utils import regularize_hessian
 
 np.random.seed(42)
@@ -59,14 +60,14 @@ Y = np.array([MOP1(_) for _ in X])
 dim = Y.shape[1]
 
 theta = 1 / mu
-kernel = rational_quadratic
-mmd = MMD(2, 2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian, kernel=kernel, theta=theta)
+kernel = RationalQuadratic
+mmd = MMD(2, 2, ref=ref, func=MOP1, jac=MOP1_Jacobian, hessian=MOP1_Hessian, kernel=kernel(theta=theta))
 # generate a fine grained Pareto front for measuring the final metrics
 p = np.linspace(-1, 1, 500)
 pareto_set = np.c_[p, p]
 pareto_front = np.array([MOP1(_) for _ in pareto_set])
 # performance indicator
-mmd_metric = MMD(2, 2, ref=pareto_front, func=MOP1, kernel=kernel, theta=theta)
+mmd_metric = MMD(2, 2, ref=pareto_front, func=MOP1, kernel=kernel(theta=theta))
 gd_metric = GenerationalDistance(ref=pareto_front)
 igd_metric = InvertedGenerationalDistance(ref=pareto_front, matching=False)
 angel_best = mmd_metric.compute(best_from_angel)

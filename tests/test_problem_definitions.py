@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from numpy.typing import ArrayLike
 
-from hvd.problems import CF1, CMOP, DTLZ1, MOP, UF1, UF8, ZDT1
+from hvd.problems import CF1, CMOP, DTLZ1, Eq1DTLZ1, MOP, UF1, UF8, ZDT1
 from hvd.problems.misc import CONV3, DENT
 
 
@@ -99,25 +99,55 @@ def test_resolved_metadata_are_instance_annotations() -> None:
     assert {"n_obj", "n_var", "xl", "xu"} <= problem.__dict__.keys()
 
 
+def test_unconstrained_mop_has_no_constraint_interface() -> None:
+    problem = _ToyMOP()
+    for name in (
+        "n_eq_constr", "n_ieq_constr",
+        "eq_constraint", "ieq_constraint", "eq_constraint_batch", "ieq_constraint_batch",
+        "eq_jacobian", "ieq_jacobian", "eq_jacobian_batch", "ieq_jacobian_batch",
+        "eq_hessian", "ieq_hessian", "eq_hessian_batch", "ieq_hessian_batch",
+    ):
+        assert not hasattr(problem, name)
+
+    adapter = problem.as_pymoo_problem()
+    points = np.array([[0.2, 0.7], [0.5, 0.3]])
+    assert adapter.n_eq_constr == adapter.n_ieq_constr == 0
+    np.testing.assert_allclose(adapter.evaluate(points), problem.objective(points))
+
+
 @pytest.mark.parametrize("problem_type", [UF1, ZDT1])
 def test_box_constraint_switch(problem_type: type[CMOP]) -> None:
     without_bounds = problem_type()
     with_bounds = problem_type(boundary_constraints=True)
 
     assert without_bounds.n_ieq_constr == 0
-    assert without_bounds.ieq_constraint is None
-    assert without_bounds.ieq_constraint_batch is None
-    assert without_bounds.ieq_jacobian is None
-    assert without_bounds.ieq_jacobian_batch is None
-    assert without_bounds.ieq_hessian is None
-    assert without_bounds.ieq_hessian_batch is None
+    x = np.full(without_bounds.n_var, 0.5)
+    assert without_bounds.ieq_constraint(x) is None
+    assert without_bounds.ieq_constraint(x[None]) is None
+    assert without_bounds.ieq_jacobian(x) is None
+    assert without_bounds.ieq_jacobian(x[None]) is None
+    assert without_bounds.ieq_hessian(x) is None
+    assert without_bounds.ieq_hessian(x[None]) is None
     assert with_bounds.n_ieq_constr == 2 * with_bounds.n_var
     assert callable(with_bounds.ieq_constraint)
-    assert callable(with_bounds.ieq_constraint_batch)
     assert callable(with_bounds.ieq_jacobian)
-    assert callable(with_bounds.ieq_jacobian_batch)
     assert callable(with_bounds.ieq_hessian)
-    assert callable(with_bounds.ieq_hessian_batch)
+
+
+@pytest.mark.parametrize(
+    "problem_type,absent_families", [(ZDT1, ("eq", "ieq")), (CF1, ("eq",)), (Eq1DTLZ1, ("ieq",))]
+)
+def test_absent_constraint_methods_remain_callable(problem_type, absent_families) -> None:
+    problem = problem_type(n_var=5)
+    x = np.full(problem.n_var, 0.5)
+    for family in absent_families:
+        for name in ("constraint", "jacobian", "hessian"):
+            for argument in (x, np.stack([x, x])):
+                method_name = f"{family}_{name}"
+                method = getattr(problem, method_name)
+                assert callable(method)
+                assert method_name not in vars(problem)
+                assert method(argument) is None
 
 
 @pytest.mark.parametrize(("name", "value"), [("n_var", 0), ("n_var", True), ("n_obj", -1)])

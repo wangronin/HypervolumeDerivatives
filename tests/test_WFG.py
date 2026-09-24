@@ -36,15 +36,15 @@ def test_wfg_supports_ad_and_batched_derivatives(problem_type: type[CMOP]) -> No
     assert np.all(np.isfinite(problem.objective_jacobian(x)))
     assert np.all(np.isfinite(problem.objective_hessian(x)))
     np.testing.assert_allclose(
-        problem.objective_batch(population),
+        problem.objective(population),
         np.stack([problem.objective(row) for row in population]),
     )
     np.testing.assert_allclose(
-        problem.objective_jacobian_batch(population),
+        problem.objective_jacobian(population),
         np.stack([problem.objective_jacobian(row) for row in population]),
     )
     np.testing.assert_allclose(
-        problem.objective_hessian_batch(population),
+        problem.objective_hessian(population),
         np.stack([problem.objective_hessian(row) for row in population]),
     )
 

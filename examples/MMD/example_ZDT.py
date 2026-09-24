@@ -6,7 +6,9 @@ import numpy as np
 from matplotlib import rcParams
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton
+from hvd.mmd import MMDMatching
+from hvd.mmd.kernels import RBF
+from hvd.mmd_newton import MMDN
 from hvd.newton import DpN
 from hvd.problems import ZDT1, ZDT2, ZDT3, ZDT4, ZDT6
 from hvd.reference_set import ReferenceSet
@@ -49,13 +51,22 @@ def make_reference_set() -> ReferenceSet:
 
 
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
-opt_mmd = MMDNewton(
+indicator = MMDMatching(
     n_var=problem.n_var,
     n_obj=problem.n_obj,
     ref=make_reference_set(),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
+    kernel=RBF(theta=1.0),
+    beta=0.25,
+)
+opt_mmd = MMDN(
+    n_var=problem.n_var,
+    n_obj=problem.n_obj,
+    indicator=indicator,
+    func=problem.objective,
+    jac=problem.objective_jacobian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
     g_hessian=problem.ieq_hessian,
@@ -66,9 +77,6 @@ opt_mmd = MMDNewton(
     max_iters=max_iters,
     verbose=True,
     metrics=metrics,
-    matching=True,
-    theta=1.0,
-    beta=0.25,
     regularization=True,
 )
 X, Y, _ = opt_mmd.run()
@@ -134,7 +142,7 @@ for i in range(N):
         headwidth=2.5,
     )
 
-medoids = opt_mmd.ref.reference_set
+medoids = opt_mmd.indicator.ref.reference_set
 for i, m in enumerate(medoids):
     ax0.plot((m[0], Y[i, 0]), (m[1], Y[i, 1]), "k--", alpha=0.5)
 
@@ -145,7 +153,7 @@ lines += ax0.plot(Y0[:, 0], Y0[:, 1], "k+", ms=12, alpha=0.9)
 colors = plt.get_cmap("tab20").colors
 colors = [colors[2], colors[12], colors[13]]
 shifts = []
-for i, M in opt_mmd.history_medoids.items():
+for i, M in opt_mmd.indicator.history_reference_set.items():
     c = colors[len(M) - 1]
     for j, x in enumerate(M):
         line = ax0.plot(x[0], x[1], color=c, ls="none", marker="^", mec="none", ms=7, alpha=0.7)[0]
@@ -154,7 +162,7 @@ for i, M in opt_mmd.history_medoids.items():
 
 lines += shifts
 lines += ax0.plot(Y[:, 0], Y[:, 1], "k*", mec="none", ms=8, alpha=0.9)
-counts = np.unique([len(m) for m in opt_mmd.history_medoids.values()], return_counts=True)[1]
+counts = np.unique([len(m) for m in opt_mmd.indicator.history_reference_set.values()], return_counts=True)[1]
 lgnd = ax0.legend(
     lines,
     ["Pareto front", r"$Y_0$"]

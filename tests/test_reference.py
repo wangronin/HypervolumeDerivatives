@@ -10,6 +10,19 @@ from scipy.spatial.distance import cdist
 from hvd.reference_set import ReferenceSet
 
 
+def test_shift_selects_matched_medoids_without_moving_original_points():
+    original = np.array([[0.0, 1.0], [0.3, 0.7], [0.7, 0.3], [1.0, 0.0]])
+    reference = ReferenceSet(original.copy(), eta={0: -np.ones(2)})
+    reference.match(original[[0, 3]])
+    expected = reference.reference_set.copy()
+    expected[1] -= 0.1
+
+    reference.shift(0.1, np.array([1]))
+
+    np.testing.assert_allclose(reference.reference_set, expected)
+    np.testing.assert_array_equal(reference._ref[0], original)
+
+
 @pytest.mark.parametrize("n_component", [1, 3, 5])
 def test_initialization_reference(n_component: int):
     x = np.linspace(0, 1, 20)

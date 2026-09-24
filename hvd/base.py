@@ -26,6 +26,9 @@ class State:
     ) -> None:
         """State object of numerical optimization
 
+        Callbacks accept either a point `(n_var,)` or a population `(N, n_var)`
+        and return one result per point. They handle batching themselves.
+
         Args:
             n_var (int): number of decision variable
             n_eq (int): number of equality constraints
@@ -45,13 +48,15 @@ class State:
         self.n_cstr: int = self.n_eq + self.n_ieq
         self.func: ArrayFunction = func
         self.jac: ArrayFunction = jac
-        self.h: ArrayFunction | None = h
-        self.h_jac: ArrayFunction | None = h_jac
-        self.h_hess: ArrayFunction | None = h_hess
-        self.g: ArrayFunction | None = g
-        self.g_jac: ArrayFunction | None = g_jac
-        self.g_hess: ArrayFunction | None = g_hess
-        self._constrained: bool = self.g is not None or self.h is not None
+        # Problem methods remain callable even for absent constraint families.
+        # Use the counts to avoid evaluating those callbacks or their derivatives.
+        self.h: ArrayFunction | None = h if n_eq else None
+        self.h_jac: ArrayFunction | None = h_jac if n_eq else None
+        self.h_hess: ArrayFunction | None = h_hess if n_eq else None
+        self.g: ArrayFunction | None = g if n_ieq else None
+        self.g_jac: ArrayFunction | None = g_jac if n_ieq else None
+        self.g_hess: ArrayFunction | None = g_hess if n_ieq else None
+        self._constrained: bool = self.n_cstr > 0
         self.n_jac_evals: int = 0
         self.n_cstr_jac_evals: int = 0
         self.n_cstr_hess_evals: int = 0
@@ -61,35 +66,15 @@ class State:
         return len(self.X)
 
     @staticmethod
-    def _get_batch_variant(function: ArrayFunction) -> ArrayFunction:
-        """Return the batch implementation associated with a callback.
-
-        Native problem methods always expose ``<method>_batch``.  The small
-        row-wise adapter preserves support for legacy standalone callbacks.
-        """
-        owner = getattr(function, "__self__", None)
-        name = getattr(function, "__name__", None)
-        batch_function = getattr(owner, f"{name}_batch", None) if owner is not None and name else None
-        if callable(batch_function):
-            return batch_function
-
-        def evaluate_rows(x: np.ndarray) -> np.ndarray:
-            return np.stack([function(row) for row in x])
-
-        return evaluate_rows
-
-    @classmethod
     def evaluate(
-        cls,
         function: ArrayFunction | None,
         x: np.ndarray,
         output_shape: tuple[int, ...] | None = None,
     ) -> np.ndarray:
         """Evaluate any callback at one point or a population.
 
-        A one-dimensional input calls the point function; a two-dimensional
-        input calls its batch variant.  ``output_shape`` describes one point's
-        output and is used to keep empty constraints and scalar outputs
+        The callback handles the input shape. ``output_shape`` describes one
+        point's output and keeps empty constraints and scalar outputs
         shape-stable.
         """
         x = np.asarray(x)
@@ -102,8 +87,8 @@ class State:
                 raise ValueError("`output_shape` is required when the function is None.")
             return np.zeros((*prefix, *output_shape))
 
-        evaluator = function if x.ndim == 1 else cls._get_batch_variant(function)
-        values = np.asarray(evaluator(x))
+        # State updates these arrays in place; JAX-backed NumPy views can be read-only.
+        values = np.array(function(x), copy=True)
         return values if output_shape is None else values.reshape(*prefix, *output_shape)
 
     @staticmethod

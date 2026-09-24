@@ -20,7 +20,8 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 
-from hvd.mmd_vectorized import MMD, rbf
+from hvd.mmd import MMD
+from hvd.mmd.kernels import RBF
 
 np.random.seed(42)
 
@@ -48,8 +49,8 @@ ref_unshifted = np.array([MOP1(_) for _ in ref_X])
 # the reference set
 ref = ref_unshifted - 0.5 * np.ones(2)
 theta = 1
-kernel = rbf
-mmd = MMD(2, 2, ref=ref, func=MOP1, kernel=kernel, theta=theta)
+kernel = RBF
+mmd = MMD(2, 2, ref=ref, func=MOP1, kernel=kernel(theta=theta))
 # generate a fine grained Pareto front for measuring the final metrics
 p = np.linspace(-1, 1, 500)
 pareto_set = np.c_[p, p]

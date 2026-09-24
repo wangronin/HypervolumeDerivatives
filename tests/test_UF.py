@@ -34,15 +34,15 @@ def test_uf_supports_ad_and_batches(problem_type: type[MOP]) -> None:
     assert problem.objective_jacobian(x).shape == (problem.n_obj, problem.n_var)
     assert problem.objective_hessian(x).shape == (problem.n_obj, problem.n_var, problem.n_var)
     np.testing.assert_allclose(
-        problem.objective_batch(population),
+        problem.objective(population),
         np.stack([problem.objective(row) for row in population]),
     )
     np.testing.assert_allclose(
-        problem.objective_jacobian_batch(population),
+        problem.objective_jacobian(population),
         np.stack([problem.objective_jacobian(row) for row in population]),
     )
     np.testing.assert_allclose(
-        problem.objective_hessian_batch(population),
+        problem.objective_hessian(population),
         np.stack([problem.objective_hessian(row) for row in population]),
     )
 
@@ -94,15 +94,15 @@ def test_uf_can_expose_decision_bounds_as_constraints(problem_type: type[MOP]) -
     assert np.all(constraints <= 0)
     population = np.stack((x, problem.xl))
     np.testing.assert_allclose(
-        problem.ieq_constraint_batch(population),
+        problem.ieq_constraint(population),
         np.stack([problem.ieq_constraint(row) for row in population]),
     )
     np.testing.assert_allclose(
-        problem.ieq_jacobian_batch(population),
+        problem.ieq_jacobian(population),
         np.stack([problem.ieq_jacobian(row) for row in population]),
     )
     np.testing.assert_allclose(
-        problem.ieq_hessian_batch(population),
+        problem.ieq_hessian(population),
         np.stack([problem.ieq_hessian(row) for row in population]),
     )
 

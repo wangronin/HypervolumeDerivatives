@@ -21,7 +21,7 @@ def test_native_problem_as_pymoo_problem():
     problem = ZDT1(n_var=3)
     pymoo_problem = problem.as_pymoo_problem()
     X = np.array([[0.2, 0.1, 0.2], [0.4, 0.2, 0.1]])
-    np.testing.assert_allclose(pymoo_problem.evaluate(X), problem.objective_batch(X))
+    np.testing.assert_allclose(pymoo_problem.evaluate(X), problem.objective(X))
 
 
 def test_from_pymoo_is_idempotent_for_native_problem():

@@ -21,7 +21,8 @@ rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
 
-from hvd.mmd_vectorized import MMD
+from hvd.mmd import MMD
+from hvd.mmd.kernels import RBF
 
 np.random.seed(42)
 
@@ -45,7 +46,7 @@ dim = Y.shape[1]
 
 
 def U(theta: float) -> float:
-    mmd = MMD(ref=ref, theta=theta)
+    mmd = MMD(ref=ref, kernel=RBF(theta=theta))
     return np.max(-1 * mmd.compute_gradient(Y))
 
 
@@ -54,7 +55,7 @@ v = np.array([U(t) for t in theta])
 idx = np.argmin(v)
 theta_ = theta[idx]
 
-mmd = MMD(ref=ref, theta=theta_)
+mmd = MMD(ref=ref, kernel=RBF(theta=theta_))
 grad = -1 * mmd.compute_gradient(Y)
 
 fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(14, 6.5))

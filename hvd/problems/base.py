@@ -57,23 +57,14 @@ def add_boundary_constraints(
 
 
 class MOP:
-    """Base contract for a differentiable multi-objective problem."""
+    """Base contract for an unconstrained differentiable multi-objective problem.
+
+    Public evaluations accept one point of shape (n_var,) or a population of
+    shape (N, n_var). Population outputs have an additional leading axis of N;
+    Jacobians and Hessians differentiate each point independently.
+    """
 
     default_n_obj: ClassVar[int]
-    n_eq_constr = 0
-    n_ieq_constr = 0
-    eq_constraint = None
-    eq_constraint_batch = None
-    eq_jacobian = None
-    eq_jacobian_batch = None
-    eq_hessian = None
-    eq_hessian_batch = None
-    ieq_constraint = None
-    ieq_constraint_batch = None
-    ieq_jacobian = None
-    ieq_jacobian_batch = None
-    ieq_hessian = None
-    ieq_hessian_batch = None
 
     def __init__(self, n_var: int, n_obj: int, xl: ArrayLike, xu: ArrayLike) -> None:
         self.n_var: int = self._validate_dimension("n_var", n_var)
@@ -105,35 +96,39 @@ class MOP:
         except ValueError as error:
             raise ValueError(f"`{name}` must be scalar or have shape `(n_var,)`.") from error
 
-    def objective(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._obj_func(x))
+    @staticmethod
+    def _evaluate(
+        x: np.ndarray,
+        point_function: JaxFunction | None,
+        batch_function: JaxFunction | None,
+        output_shape: tuple[int, ...],
+    ) -> np.ndarray | None:
+        """Select a cached JIT function without rebuilding vmap on each call.
 
-    def objective_batch(self, x: np.ndarray) -> np.ndarray:
-        """Evaluate a population without a Python-level loop."""
-        return np.asarray(self._objective_batch(jnp.asarray(x)))
+        `output_shape` describes one point's result, retaining singleton
+        objective/constraint axes and allowing empty populations.
+        """
+        x = np.asarray(x)
+        if x.ndim not in (1, 2):
+            raise ValueError("Input must have shape `(n_var,)` or `(N, n_var)`.")
+        function = point_function if x.ndim == 1 else batch_function
+        if function is None:
+            return None
+        return np.array(function(x)).reshape(*x.shape[:-1], *output_shape)
+
+    def objective(self, x: np.ndarray) -> np.ndarray:
+        return self._evaluate(x, self._obj_func, self._objective_batch, (self.n_obj,))
 
     @timeit
     def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective_jacobian(x)).reshape(self.n_obj, self.n_var)
-
-    @timeit
-    def objective_jacobian_batch(self, x: np.ndarray) -> np.ndarray:
-        """Evaluate one objective Jacobian per row of a population."""
-        batch_size = len(x)
-        return np.asarray(self._objective_jacobian_batch(jnp.asarray(x))).reshape(
-            batch_size, self.n_obj, self.n_var
+        return self._evaluate(
+            x, self._objective_jacobian, self._objective_jacobian_batch, (self.n_obj, self.n_var)
         )
 
     @timeit
     def objective_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._objective_hessian(x)).reshape(self.n_obj, self.n_var, self.n_var)
-
-    @timeit
-    def objective_hessian_batch(self, x: np.ndarray) -> np.ndarray:
-        """Evaluate one objective Hessian tensor per row of a population."""
-        batch_size = len(x)
-        return np.asarray(self._objective_hessian_batch(jnp.asarray(x))).reshape(
-            batch_size, self.n_obj, self.n_var, self.n_var
+        return self._evaluate(
+            x, self._objective_hessian, self._objective_hessian_batch, (self.n_obj, self.n_var, self.n_var)
         )
 
     def as_pymoo_problem(self):
@@ -157,7 +152,11 @@ class MOP:
 
 
 class CMOP(MOP):
-    """Constrained MOP with class-level constraint defaults and instance-level effective counts."""
+    """Constrained MOP with instance-level effective constraint counts.
+
+    Constraint values and derivatives return None when their constraint family
+    is absent. Like objectives, these methods accept a point or a population.
+    """
 
     default_n_eq_constr: ClassVar[int] = 0
     default_n_ieq_constr: ClassVar[int] = 0
@@ -196,12 +195,9 @@ class CMOP(MOP):
             self._eq_jacobian_batch = jit(vmap(self._eq_jacobian))
             self._eq_hessian_batch = jit(vmap(self._eq_hessian))
         else:
-            self.eq_constraint = None
-            self.eq_constraint_batch = None
-            self.eq_jacobian = None
-            self.eq_jacobian_batch = None
-            self.eq_hessian = None
-            self.eq_hessian_batch = None
+            self._eq_jacobian = self._eq_hessian = self._eq_batch = None
+            self._eq_jacobian_batch = self._eq_hessian_batch = None
+
         if self._ieq is not None:
             self._ieq_jacobian = jit(jacrev(self._ieq))
             self._ieq_hessian = hessian(self._ieq)
@@ -209,65 +205,33 @@ class CMOP(MOP):
             self._ieq_jacobian_batch = jit(vmap(self._ieq_jacobian))
             self._ieq_hessian_batch = jit(vmap(self._ieq_hessian))
         else:
-            self.ieq_constraint = None
-            self.ieq_constraint_batch = None
-            self.ieq_jacobian = None
-            self.ieq_jacobian_batch = None
-            self.ieq_hessian = None
-            self.ieq_hessian_batch = None
+            self._ieq_jacobian = self._ieq_hessian = self._ieq_batch = None
+            self._ieq_jacobian_batch = self._ieq_hessian_batch = None
 
-    def eq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq(x))
+    def eq_constraint(self, x: np.ndarray) -> np.ndarray | None:
+        return self._evaluate(x, self._eq, self._eq_batch, (self.n_eq_constr,))
 
-    def ieq_constraint(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq(x))
-
-    def eq_constraint_batch(self, x: np.ndarray) -> np.ndarray:
-        return np.asarray(self._eq_batch(jnp.asarray(x)))
-
-    def ieq_constraint_batch(self, x: np.ndarray) -> np.ndarray:
-        return np.asarray(self._ieq_batch(jnp.asarray(x)))
+    def ieq_constraint(self, x: np.ndarray) -> np.ndarray | None:
+        return self._evaluate(x, self._ieq, self._ieq_batch, (self.n_ieq_constr,))
 
     @timeit
-    def eq_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq_jacobian(x)).reshape(self.n_eq_constr, self.n_var)
+    def eq_jacobian(self, x: np.ndarray) -> np.ndarray | None:
+        return self._evaluate(x, self._eq_jacobian, self._eq_jacobian_batch, (self.n_eq_constr, self.n_var))
 
     @timeit
-    def eq_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._eq_hessian(x)).reshape(self.n_eq_constr, self.n_var, self.n_var)
-
-    @timeit
-    def eq_jacobian_batch(self, x: np.ndarray) -> np.ndarray:
-        batch_size = len(x)
-        return np.asarray(self._eq_jacobian_batch(jnp.asarray(x))).reshape(
-            batch_size, self.n_eq_constr, self.n_var
+    def eq_hessian(self, x: np.ndarray) -> np.ndarray | None:
+        return self._evaluate(
+            x, self._eq_hessian, self._eq_hessian_batch, (self.n_eq_constr, self.n_var, self.n_var)
         )
 
     @timeit
-    def eq_hessian_batch(self, x: np.ndarray) -> np.ndarray:
-        batch_size = len(x)
-        return np.asarray(self._eq_hessian_batch(jnp.asarray(x))).reshape(
-            batch_size, self.n_eq_constr, self.n_var, self.n_var
+    def ieq_jacobian(self, x: np.ndarray) -> np.ndarray | None:
+        return self._evaluate(
+            x, self._ieq_jacobian, self._ieq_jacobian_batch, (self.n_ieq_constr, self.n_var)
         )
 
     @timeit
-    def ieq_jacobian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq_jacobian(x)).reshape(self.n_ieq_constr, self.n_var)
-
-    @timeit
-    def ieq_hessian(self, x: np.ndarray) -> np.ndarray:
-        return np.array(self._ieq_hessian(x)).reshape(self.n_ieq_constr, self.n_var, self.n_var)
-
-    @timeit
-    def ieq_jacobian_batch(self, x: np.ndarray) -> np.ndarray:
-        batch_size = len(x)
-        return np.asarray(self._ieq_jacobian_batch(jnp.asarray(x))).reshape(
-            batch_size, self.n_ieq_constr, self.n_var
-        )
-
-    @timeit
-    def ieq_hessian_batch(self, x: np.ndarray) -> np.ndarray:
-        batch_size = len(x)
-        return np.asarray(self._ieq_hessian_batch(jnp.asarray(x))).reshape(
-            batch_size, self.n_ieq_constr, self.n_var, self.n_var
+    def ieq_hessian(self, x: np.ndarray) -> np.ndarray | None:
+        return self._evaluate(
+            x, self._ieq_hessian, self._ieq_hessian_batch, (self.n_ieq_constr, self.n_var, self.n_var)
         )

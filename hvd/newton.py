@@ -82,19 +82,16 @@ class HVN:
         self.eps: float = 1e-3 * np.max(self.xu - self.xl)
         self.verbose: bool = verbose
 
-    def _check_constraints(self, h: Callable, g: Callable):
-        # initialize dual variables
-        self.n_eq, self.n_ieq = 0, 0
-        self._constrained = h is not None or g is not None
+    def _check_constraints(self, h: Callable | None, g: Callable | None) -> None:
+        # An absent family is either an omitted callback or a None result.
         x = np.random.rand(self.dim_p) * (self.xu - self.xl) + self.xl
-        if h is not None:
-            v = h(x)
-            self.n_eq = 1 if isinstance(v, (int, float)) else len(v)
-        if g is not None:
-            v = g(x)
-            self.n_ieq = 1 if isinstance(v, (int, float)) else len(v)
+        H = None if h is None else h(x)
+        G = None if g is None else g(x)
+        self.n_eq = 0 if H is None else np.size(H)
+        self.n_ieq = 0 if G is None else np.size(G)
         self.dim_d = self.n_eq + self.n_ieq
         self.dim = self.dim_p + self.dim_d
+        self._constrained = self.dim_d > 0
 
     def _initialize(self, X0: np.ndarray):
         if X0 is not None:
@@ -414,19 +411,16 @@ class DpN:
         self.preconditioning: bool = regularization
         self.project_box_constraints: bool = project_box_constraints
 
-    def _check_constraints(self, h: Callable, g: Callable):
-        # initialize dual variables
-        self.n_eq, self.n_ieq = 0, 0
-        self._constrained = h is not None or g is not None
+    def _check_constraints(self, h: Callable | None, g: Callable | None) -> None:
+        # An absent family is either an omitted callback or a None result.
         x = np.random.rand(self.dim_p) * (self.xu - self.xl) + self.xl
-        if h is not None:
-            v = h(x)
-            self.n_eq = 1 if isinstance(v, (int, float)) else len(v)
-        if g is not None:
-            v = g(x)
-            self.n_ieq = 1 if isinstance(v, (int, float)) else len(v)
+        H = None if h is None else h(x)
+        G = None if g is None else g(x)
+        self.n_eq = 0 if H is None else np.size(H)
+        self.n_ieq = 0 if G is None else np.size(G)
         self.dim_d = self.n_eq + self.n_ieq
         self.dim = self.dim_p + self.dim_d
+        self._constrained = self.dim_d > 0
 
     def _initialize(self, X0: np.ndarray):
         if X0 is not None:

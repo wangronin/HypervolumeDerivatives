@@ -23,7 +23,8 @@ rcParams["ytick.major.width"] = 1
 
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_vectorized import MMD, rational_quadratic, rbf
+from hvd.mmd import MMD
+from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.utils import regularize_hessian
 
 np.random.seed(42)
@@ -93,8 +94,8 @@ ax1.set_xlabel(r"$f_1$")
 ax1.set_ylabel(r"$f_2$")
 
 theta = 1 / mu
-kernel = rational_quadratic
-mmd = MMD(2, 2, ref=ref, func=MOP1, jac=MOP1_Jacobian, kernel=rational_quadratic, theta=theta)
+kernel = RationalQuadratic
+mmd = MMD(2, 2, ref=ref, func=MOP1, jac=MOP1_Jacobian, kernel=RationalQuadratic(theta=theta))
 hist_value = [mmd.compute(Y)]
 # hist_deltap = [igd.compute(Y=Y)]
 hist_norm = []

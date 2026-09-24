@@ -12,8 +12,9 @@ from matplotlib import rcParams
 
 from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import MMD
+from hvd.mmd import MMD, MMDMatching
+from hvd.mmd.kernels import RBF
+from hvd.mmd_newton import MMDN
 from hvd.newton import DpN
 from hvd.problems import DTLZ1
 from hvd.reference_set import ReferenceSet
@@ -65,14 +66,22 @@ Y_label = np.array([0] * len(X_component1) + [1] * len(X_component2))
 N = len(X_component2)
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
 igd = InvertedGenerationalDistance(pareto_front)
-mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=1.0 / N)
-opt = MMDNewton(
+mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, kernel=RBF(theta=1.0 / N))
+indicator = MMDMatching(
     n_var=problem.n_var,
     n_obj=problem.n_obj,
     ref=ReferenceSet(ref=ref2_, eta=None, Y_idx=None),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
+    beta=0.25,
+)
+opt = MMDN(
+    n_var=problem.n_var,
+    n_obj=problem.n_obj,
+    indicator=indicator,
+    func=problem.objective,
+    jac=problem.objective_jacobian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
     N=N,
@@ -84,20 +93,27 @@ opt = MMDNewton(
     metrics=metrics,
     regularization=False,
 )
-opt.indicator.beta = 0.25  # start with a large spreading effect
 X2, Y2, _, __ = bootstrap_reference_set(opt, problem, interval=3, plot=plot)
-ref2 = opt.indicator.ref.reference_set - 0.05 * opt.ref.eta[0]
+ref2 = opt.indicator.ref.reference_set - 0.05 * opt.indicator.ref.eta[0]
 
 N = len(X_component1)
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
 igd = InvertedGenerationalDistance(pareto_front)
-opt = MMDNewton(
+indicator = MMDMatching(
     n_var=problem.n_var,
     n_obj=problem.n_obj,
     ref=ReferenceSet(ref=ref1_, eta=None, Y_idx=None),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
+    beta=0.25,
+)
+opt = MMDN(
+    n_var=problem.n_var,
+    n_obj=problem.n_obj,
+    indicator=indicator,
+    func=problem.objective,
+    jac=problem.objective_jacobian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
     N=N,
@@ -109,10 +125,9 @@ opt = MMDNewton(
     metrics=metrics,
     regularization=False,
 )
-opt.indicator.beta = 0.25  # start with a large spreading effect
 X1, Y1, _, __ = bootstrap_reference_set(opt, problem, interval=3, plot=plot)
 
-ref1 = opt.indicator.ref.reference_set - 0.05 * opt.ref.eta[0]
+ref1 = opt.indicator.ref.reference_set - 0.05 * opt.indicator.ref.eta[0]
 X_MMD = np.r_[X1, X2]
 Y_MMD = np.r_[Y1, Y2]
 ref_MMD = np.r_[ref1, ref2]

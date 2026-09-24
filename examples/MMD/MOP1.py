@@ -24,8 +24,9 @@ rcParams["ytick.major.width"] = 1
 
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import MMD
+from hvd.mmd import MMD
+from hvd.mmd.kernels import RBF
+from hvd.mmd_newton import MMDN
 from hvd.newton import DpN
 from hvd.reference_set import ReferenceSet
 
@@ -74,16 +75,24 @@ max_iters = 10
 metrics = dict(
     GD=GenerationalDistance(pareto_front),
     IGD=InvertedGenerationalDistance(pareto_front),
-    MMD=MMD(2, 2, ref=ref, func=MOP1, theta=theta),
+    MMD=MMD(2, 2, ref=ref, func=MOP1, kernel=RBF(theta=theta)),
 )
-mmd = MMD(2, 2, ref=ref, func=MOP1, theta=theta)
-opt = MMDNewton(
+mmd = MMD(2, 2, ref=ref, func=MOP1, kernel=RBF(theta=theta))
+indicator = MMD(
     n_var=2,
     n_obj=2,
     ref=ReferenceSet(ref=ref, eta=np.zeros(2)),
     func=MOP1,
     jac=MOP1_Jacobian,
     hessian=MOP1_Hessian,
+    kernel=RBF(theta=theta),
+)
+opt = MMDN(
+    n_var=2,
+    n_obj=2,
+    indicator=indicator,
+    func=MOP1,
+    jac=MOP1_Jacobian,
     N=len(X),
     X0=X,
     xl=-2,
@@ -92,8 +101,6 @@ opt = MMDNewton(
     verbose=True,
     metrics=metrics,
     regularization=False,
-    matching=False,
-    theta=theta,
 )
 X_opt, Y_opt, _ = opt.run()
 

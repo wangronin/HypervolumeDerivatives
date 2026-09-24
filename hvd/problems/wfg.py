@@ -380,7 +380,7 @@ class WFG(CMOP):
         return self._optimal_positions(positions)
 
     def get_pareto_front(self, N: int = 500) -> np.ndarray:
-        return self.objective_batch(self.get_pareto_set(N))
+        return self.objective(self.get_pareto_set(N))
 
 
 class WFG1(WFG):

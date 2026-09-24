@@ -9,8 +9,9 @@ from matplotlib import rcParams
 
 from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import MMD
+from hvd.mmd import MMD, MMDMatching
+from hvd.mmd.kernels import RBF
+from hvd.mmd_newton import MMDN
 from hvd.newton import DpN
 from hvd.problems import DTLZ1
 from hvd.reference_set import ReferenceSet
@@ -48,14 +49,22 @@ ref = {0: ref_}
 N = len(X0)
 metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
 igd = InvertedGenerationalDistance(pareto_front)
-mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=1.0 / N)
-opt = MMDNewton(
+mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, kernel=RBF(theta=1.0 / N))
+indicator = MMDMatching(
     n_var=problem.n_var,
     n_obj=problem.n_obj,
     ref=ReferenceSet(ref=ref, eta=eta, Y_idx=Y_idx),
     func=problem.objective,
     jac=problem.objective_jacobian,
     hessian=problem.objective_hessian,
+    beta=0.25,
+)
+opt = MMDN(
+    n_var=problem.n_var,
+    n_obj=problem.n_obj,
+    indicator=indicator,
+    func=problem.objective,
+    jac=problem.objective_jacobian,
     g=problem.ieq_constraint,
     g_jac=problem.ieq_jacobian,
     g_hessian=problem.ieq_hessian,
@@ -68,7 +77,6 @@ opt = MMDNewton(
     metrics=metrics,
     regularization=False,
 )
-opt.indicator.beta = 0.25
 # TODO: figure out how to determine when to bootstrap automatically
 X, Y, _, __ = bootstrap_reference_set(
     opt,
@@ -80,7 +88,7 @@ X, Y, _, __ = bootstrap_reference_set(
     with_rsg=False,
 )
 # TODO: maybe create a `ref0` in the optimizer
-ref_new = opt.ref.reference_set - 0.05 * opt.ref.eta[0]
+ref_new = opt.indicator.ref.reference_set - 0.05 * opt.indicator.ref.eta[0]
 
 # Several DpN runs for the convergence
 metrics = dict(GD=GenerationalDistance(ref=pareto_front), IGD=InvertedGenerationalDistance(ref=pareto_front))

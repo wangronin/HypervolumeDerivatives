@@ -6,7 +6,7 @@ from jax import jacfwd, jacrev, jit
 
 sys.path.insert(0, "./")
 
-from hvd.mmd_vectorized import MMD, MMDMatching, linear
+from hvd.mmd import MMD, MMDMatching
 
 np.random.seed(42)
 
@@ -105,51 +105,6 @@ def test_2D_decision_space_against_ad():
     assert np.isclose(value, float(f(X)))
     assert np.all(np.isclose(grad, grad_ad))
     assert np.all(np.isclose(H, H_ad))
-
-
-def test_linear_kernel():
-    x = np.array([1.0, 2.0, -1.0])
-    y = np.array([3.0, -2.0, 4.0])
-    theta = 2.5
-
-    assert np.isclose(linear(x, y, theta), theta * np.dot(x, y))
-    assert np.allclose(jacrev(linear)(x, y, theta), theta * y)
-    assert np.allclose(jacfwd(jacrev(linear))(x, y, theta), np.zeros((3, 3)))
-    assert np.allclose(jacfwd(jacrev(linear), argnums=1)(x, y, theta), theta * np.eye(3))
-
-
-def test_mmd_derivatives_with_linear_kernel():
-    theta = 1.7
-    mmd = MMD(n_var=2, n_obj=2, ref=ref, kernel=linear, theta=theta)
-    result = mmd.compute_hessian(X=Y)
-
-    expected_value = theta * np.sum((Y.mean(axis=0) - ref.mean(axis=0)) ** 2)
-    expected_gradient = np.tile(2 * theta * (Y.mean(axis=0) - ref.mean(axis=0)) / N, (N, 1))
-    expected_hessian = np.kron(np.ones((N, N)), 2 * theta * np.eye(2) / N**2)
-
-    assert np.isclose(mmd.compute(Y=Y), expected_value)
-    assert np.allclose(result["MMDdY"], expected_gradient)
-    assert np.allclose(result["MMDdY2"], expected_hessian)
-
-
-def test_mmd_matching_derivatives_with_linear_kernel():
-    theta = 1.7
-    beta = 0.37
-    mmd = MMDMatching(n_var=2, n_obj=2, ref=ref, kernel=linear, theta=theta, beta=beta)
-    result = mmd.compute_hessian(X=Y)
-
-    expected_gradient = np.array(
-        [
-            2 * beta * theta * Y.sum(axis=0) / N**2
-            + 2 * theta * (point - matched) / N
-            for point, matched in zip(Y, mmd.ref.reference_set)
-        ]
-    )
-    expected_hessian = np.kron(np.ones((N, N)), 2 * beta * theta * np.eye(2) / N**2)
-    expected_hessian += np.kron(np.eye(N), 2 * theta * np.eye(2) / N)
-
-    assert np.allclose(result["MMDdY"], expected_gradient)
-    assert np.allclose(result["MMDdY2"], expected_hessian)
 
 
 def test_matching_hessian_against_ad_with_fixed_matching():

@@ -7,6 +7,7 @@ import pandas as pd
 from matplotlib import rcParams
 from scipy.linalg import solve
 
+from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.problems import DTLZ1
 
 plt.style.use("ggplot")
@@ -27,7 +28,7 @@ rcParams["ytick.major.width"] = 1
 from pymoo.util.reference_direction import UniformReferenceDirectionFactory
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_vectorized import MMD, rational_quadratic, rbf
+from hvd.mmd import MMD
 from hvd.utils import regularize_hessian
 
 np.random.seed(42)
@@ -47,14 +48,14 @@ Y = np.array([problem.objective(_) for _ in X])
 dim = Y.shape[1]
 
 theta = 1 / mu
-kernel = rational_quadratic
-mmd = MMD(2, 2, ref=ref, func=problem.objective, jac=problem.objective_jacobian, kernel=kernel, theta=theta)
+kernel = RationalQuadratic
+mmd = MMD(2, 2, ref=ref, func=problem.objective, jac=problem.objective_jacobian, kernel=kernel(theta=theta))
 # generate a fine grained Pareto front for measuring the final metrics
 pareto_front = 0.5 * UniformReferenceDirectionFactory(2, n_points=500).do()
 pareto_set = np.c_[np.linspace(0, 1, 500).reshape(-1, 1), 0.5 * np.ones(500).reshape(-1, 1)]
 # performance indicator
 mmd_metric = MMD(
-    2, 2, ref=pareto_front, func=problem.objective, jac=problem.objective_jacobian, kernel=kernel, theta=theta
+    2, 2, ref=pareto_front, func=problem.objective, jac=problem.objective_jacobian, kernel=kernel(theta=theta)
 )
 gd_metric = GenerationalDistance(ref=pareto_front)
 igd_metric = InvertedGenerationalDistance(ref=pareto_front, matching=False)

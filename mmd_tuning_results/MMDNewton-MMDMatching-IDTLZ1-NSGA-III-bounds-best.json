@@ -1,0 +1,133 @@
+{
+  "problem": "IDTLZ1",
+  "algorithm": "NSGA-III",
+  "generation": 300,
+  "max_iters": 5,
+  "indicator": "MMDMatching",
+  "boundary_constraints": true,
+  "best_tuning_ahd": 0.012646961477750338,
+  "validation_ahd": 0.01277656981504063,
+  "best_config": {
+    "kernel": "rational_quadratic",
+    "regularization": true,
+    "theta_multiplier": 0.3188357468002623,
+    "beta": 0.11685318311255498
+  },
+  "best_trial": 147,
+  "completed_trials": 42,
+  "workers": 15,
+  "storage": "/data1/wangh5/mmd-tuning/MMDNewton-MMDMatching-IDTLZ1-NSGA-III-bounds.journal",
+  "progress_log": "/data1/wangh5/mmd-tuning/MMDNewton-MMDMatching-IDTLZ1-NSGA-III-bounds-progress.log",
+  "validation_runs": [
+    {
+      "run": 21,
+      "theta": 4.723533533713447,
+      "initial_ahd": 0.01590484022970316,
+      "ahd": 0.013199133134400002,
+      "gd": 0.008624225245398643,
+      "igd": 0.013199133134400002,
+      "seconds": 26.81276408897247,
+      "n_points": 299,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 22,
+      "theta": 4.764557919435672,
+      "initial_ahd": 0.01564006998183927,
+      "ahd": 0.012943357223501595,
+      "gd": 0.008444778893661235,
+      "igd": 0.012943357223501595,
+      "seconds": 16.8187819509767,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 23,
+      "theta": 4.371302588660734,
+      "initial_ahd": 0.015293810113262656,
+      "ahd": 0.012224524241234928,
+      "gd": 0.008279256205387813,
+      "igd": 0.012224524241234928,
+      "seconds": 28.720486002974212,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 24,
+      "theta": 4.471902865695691,
+      "initial_ahd": 0.015646729379370096,
+      "ahd": 0.012101436435599222,
+      "gd": 0.008201348887946018,
+      "igd": 0.012101436435599222,
+      "seconds": 28.609681759029627,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 25,
+      "theta": 4.464991809141721,
+      "initial_ahd": 0.015849032737026158,
+      "ahd": 0.01259792831257456,
+      "gd": 0.008399348930809661,
+      "igd": 0.01259792831257456,
+      "seconds": 16.81096820195671,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 26,
+      "theta": 4.430880517375915,
+      "initial_ahd": 0.017019637486172974,
+      "ahd": 0.013584610604596615,
+      "gd": 0.0083840508165574,
+      "igd": 0.013584610604596615,
+      "seconds": 16.579939263989218,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 27,
+      "theta": 4.628157210898041,
+      "initial_ahd": 0.01515546339690315,
+      "ahd": 0.012561874277945514,
+      "gd": 0.008299427901168093,
+      "igd": 0.012561874277945514,
+      "seconds": 23.065853424021043,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 28,
+      "theta": 4.634435749188811,
+      "initial_ahd": 0.01579876333098666,
+      "ahd": 0.01314327284462738,
+      "gd": 0.008782995092546127,
+      "igd": 0.01314327284462738,
+      "seconds": 19.824952926952392,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 29,
+      "theta": 4.225319720242288,
+      "initial_ahd": 0.01594589812564116,
+      "ahd": 0.012287398005106942,
+      "gd": 0.008347163677585685,
+      "igd": 0.012287398005106942,
+      "seconds": 28.163231671089306,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    },
+    {
+      "run": 30,
+      "theta": 4.5228172220308425,
+      "initial_ahd": 0.015807882371336526,
+      "ahd": 0.013122163070819544,
+      "gd": 0.008383917891319781,
+      "igd": 0.013122163070819544,
+      "seconds": 21.14001783693675,
+      "n_points": 300,
+      "precomputed_shift_direction": true
+    }
+  ]
+}

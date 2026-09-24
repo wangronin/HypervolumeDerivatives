@@ -56,29 +56,31 @@ c2 = np.array([1.5, 0.5, -np.sqrt(3) / 6])
 c3 = np.array([1.5, -0.5, -np.sqrt(3) / 6])
 ref = np.array([24, 24, 24])
 
-# Define the objective function and its derivatives
+# Accept either one point or a population in the objective and its derivatives.
 def MOP1(x):
     x = np.array(x)
-    return np.array(
+    return np.stack(
         [
-            np.sum((x - c1) ** 2),
-            np.sum((x - c2) ** 2),
-            np.sum((x - c3) ** 2),
-        ]
+            np.sum((x - c1) ** 2, axis=-1),
+            np.sum((x - c2) ** 2, axis=-1),
+            np.sum((x - c3) ** 2, axis=-1),
+        ],
+        axis=-1,
     )
 
 def MOP1_Jacobian(x):
     x = np.array(x)
-    return np.array(
+    return np.stack(
         [
             2 * (x - c1),
             2 * (x - c2),
             2 * (x - c3),
-        ]
+        ],
+        axis=-2,
     )
 
 def MOP1_Hessian(x):
-    return np.array([2 * np.eye(3), 2 * np.eye(3), 2 * np.eye(3)])
+    return np.broadcast_to(2 * np.eye(3), (*np.shape(x)[:-1], 3, 3, 3))
 
 # Compute the HV Hessian w.r.t. the decision points
 hvh = HypervolumeDerivatives(
@@ -114,6 +116,90 @@ opt = HVN(
 
 X, Y, stop = opt.run()
 ```
+
+## MMD kernels
+
+The `hvd.mmd` package contains the vectorized indicators, kernels, and legacy
+implementation. The Newton optimizer remains in `hvd.mmd_newton`.
+Pass a configured kernel to `MMD` or `MMDMatching`:
+
+```python
+from hvd.mmd import MMD
+from hvd.mmd.kernels import RBF, RationalQuadratic
+
+kernel = RationalQuadratic(theta=0.7, alpha=1.3)
+indicator = MMD(n_var=3, n_obj=3, ref=reference_set, kernel=kernel)
+```
+
+Kernel parameters belong to the kernel. Replace `MMD(..., theta=t)` with
+`MMD(..., kernel=RBF(theta=t))`. `Laplace`
+is also available in `hvd.mmd.kernels`. The existing `theta`
+formulas are unchanged, so saved tuning configurations remain valid.
+Kernels are immutable; create a new instance when changing parameters.
+Each kernel owns its cached, JIT-compiled `gradient`, `hessian`, and
+`mixed_hessian`, computed with `jacrev` and `jacfwd`. It also exposes
+`diagonal`, `diagonal_gradient`, and `diagonal_hessian` for the function
+`k(x, x)`. Population helpers provide all-pairs evaluation (`pairwise*`),
+evaluation of already aligned pairs (`matched*`), and self-pair evaluation
+(`diagonal*_batch`). Their docstrings specify pairing rules and output shapes.
+MMD combines these kernel evaluations into indicator values and derivatives.
+Subclasses can override the derivative functions with analytical formulas.
+Custom JAX-compatible callables accepting `(x, y)` are supported through
+the `CallableKernel` adapter, applied automatically by MMD.
+
+Create the indicator before passing it to `MMDN`. The indicator owns its
+reference set, objective callbacks, kernel, and any matching parameters:
+
+```python
+from hvd.mmd import MMDMatching
+from hvd.mmd.kernels import RationalQuadratic
+from hvd.mmd_newton import MMDN
+
+indicator = MMDMatching(
+    n_var=problem.n_var,
+    n_obj=problem.n_obj,
+    ref=reference_set,
+    func=problem.objective,
+    jac=problem.objective_jacobian,
+    hessian=problem.objective_hessian,
+    kernel=RationalQuadratic(theta=0.7, alpha=1.3),
+    beta=0.25,
+)
+optimizer = MMDN(
+    n_var=problem.n_var,
+    n_obj=problem.n_obj,
+    func=problem.objective,
+    jac=problem.objective_jacobian,
+    xl=problem.xl,
+    xu=problem.xu,
+    indicator=indicator,
+)
+```
+
+The `indicator` argument is required. Use `MMD` instead of `MMDMatching` above
+for ordinary MMD. `MMDN` does not create an indicator or accept `ref`,
+`matching`, `beta`, `kernel`, or an objective `hessian`; configure these on
+the indicator. Access or replace the reference through `indicator.ref`.
+`MMDN` evaluates the indicator and decides when to request a reference shift:
+initially, then when a point is near a reference target and its previous
+Newton step is near zero. It calls `indicator.shift_reference_set(indices=...)`
+for the selected points. Both indicators forward the shift to `ReferenceSet.shift`,
+which controls how reference points or matched medoids move. The indicator
+records target trajectories in `history_reference_set`.
+During line searches, the optimizer uses the indicator's `trial_evaluation()`
+context. `MMDMatching` keeps its matching fixed and always enables `re_match`
+on exit, including when evaluation raises an exception; ordinary `MMD` needs
+no temporary state change.
+
+Native problem methods accept either a point `(n_var,)` or a population
+`(N, n_var)`: use `problem.objective(X)` or `problem.eq_constraint(X)` for
+either input shape. The same applies to Jacobians and Hessians. Population
+results have a leading axis of size `N`; derivatives are computed per point.
+These methods replace the separate public `*_batch` methods while retaining
+cached `jit(vmap(...))` implementations. Constraint methods return `None` when
+their constraint count is zero.
+Custom callbacks passed to optimizers must follow the same point-or-population
+convention: `State` passes the input directly to the callback.
 
 ## Brief Explanation of the Analytical Computation
 

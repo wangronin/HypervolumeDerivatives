@@ -14,8 +14,9 @@ from sklearn_extra.cluster import KMedoids
 from hvd.bootstrap import bootstrap_reference_set
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import hypervolume
-from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import MMD, laplace, linear, rbf
+from hvd.mmd import MMD
+from hvd.mmd.kernels import RBF, Laplace
+from hvd.mmd_newton import MMDN
 from hvd.problems import DTLZ1, DTLZ2, DTLZ3, DTLZ4, DTLZ5, DTLZ6, DTLZ7, ZDT1, ZDT2, ZDT3, ZDT4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
@@ -57,7 +58,7 @@ gen = 200 if emoa == "MOEAD" else 300
 params = pd.read_csv("./scripts/benchmark_MMD_param.csv", index_col=None, header=0)
 params = params[(params.algorithm == emoa) & (params.problem == problem_name)]
 kernel_name, theta = params["kernel"].values[0], params["param"].values[0]
-kernel = locals()[kernel_name]
+kernel = {"rbf": RBF, "laplace": Laplace}[kernel_name]
 
 
 def execute(run: int) -> np.ndarray:
@@ -73,7 +74,7 @@ def execute(run: int) -> np.ndarray:
             pareto_front
         )
         pareto_front = pareto_front[km.medoid_indices_]
-    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, theta=theta, kernel=kernel)
+    mmd = MMD(n_var=problem.n_var, n_obj=problem.n_obj, ref=pareto_front, kernel=kernel(theta=theta))
     metrics = dict(GD=GenerationalDistance(pareto_front), IGD=InvertedGenerationalDistance(pareto_front))
     # compute the initial performance metrics
     hv_value0 = hypervolume(y0, ref=ref_point[problem_name])
@@ -85,13 +86,21 @@ def execute(run: int) -> np.ndarray:
     print(f"initial IGD: {igd_value0}")
     print(f"initial MMD: {mmd_value0}")
     t0 = time.process_time_ns()
-    opt = MMDNewton(
+    indicator = MMD(
         n_var=problem.n_var,
         n_obj=problem.n_obj,
         ref=ReferenceSet(ref=ref, eta=eta, Y_idx=Y_index),
         func=problem.objective,
         jac=problem.objective_jacobian,
         hessian=problem.objective_hessian,
+        kernel=kernel(theta=theta),
+    )
+    opt = MMDN(
+        n_var=problem.n_var,
+        n_obj=problem.n_obj,
+        indicator=indicator,
+        func=problem.objective,
+        jac=problem.objective_jacobian,
         g=problem.ieq_constraint,
         g_jac=problem.ieq_jacobian,
         N=N,
@@ -101,17 +110,14 @@ def execute(run: int) -> np.ndarray:
         max_iters=max_iters,
         verbose=True,
         metrics=metrics,
-        matching=False,
         regularization=True,
-        theta=theta,
-        kernel=kernel,
     )
     # NOTE: you might need to use a smaller beta value if you see
     # the final Pareto front contains any outliers
     opt.indicator.beta = 0.3  # start with a large spreading effect
     # NOTE: `interval`` parameter should be adjusted together with `beta`
     X, Y, _, __ = bootstrap_reference_set(opt, problem, interval=3, plot=False)
-    ref_new = opt.ref.reference_set - 0.05 * opt.ref.eta[0]
+    ref_new = opt.indicator.ref.reference_set - 0.05 * opt.indicator.ref.eta[0]
     wall_clock_time = time.process_time_ns() - t0
     # remove the dominated ones in the final solutions
     print(opt.history_R_norm)
@@ -130,7 +136,7 @@ def execute(run: int) -> np.ndarray:
                 ref_list,
                 pareto_front,
                 opt.history_Y,
-                opt.history_medoids,
+                opt.indicator.history_reference_set,
                 opt.history_metrics,
                 opt.history_R_norm,
                 fig_name,
@@ -142,7 +148,7 @@ def execute(run: int) -> np.ndarray:
                 ref_list,
                 pareto_front,
                 opt.history_Y,
-                opt.history_medoids,
+                opt.indicator.history_reference_set,
                 opt.history_metrics,
                 opt.history_R_norm,
                 fig_name,

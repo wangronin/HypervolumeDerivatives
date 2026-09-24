@@ -101,11 +101,11 @@ class _PymooProblemAdapter(PymooProblem):
 
     def _evaluate(self, x: np.ndarray, out: dict, *args, **kwargs) -> None:
         x = np.atleast_2d(x)
-        out["F"] = self._problem.objective_batch(x)
+        out["F"] = self._problem.objective(x)
         if hasattr(self._problem, "n_eq_constr") and self._problem.n_eq_constr > 0:
-            out["H"] = self._problem.eq_constraint_batch(x)
+            out["H"] = self._problem.eq_constraint(x)
         if hasattr(self._problem, "n_ieq_constr") and self._problem.n_ieq_constr > 0:
-            out["G"] = self._problem.ieq_constraint_batch(x)
+            out["G"] = self._problem.ieq_constraint(x)
 
     def pareto_front(self, *args, **kwargs) -> np.ndarray:
         return self._problem.get_pareto_front(*args, **kwargs)

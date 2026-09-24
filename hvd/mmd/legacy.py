@@ -7,16 +7,11 @@ from jax import jacfwd, jacrev, jit
 from scipy.linalg import block_diag
 from scipy.spatial.distance import cdist
 
-from .reference_set import ReferenceSet
+from ..reference_set import ReferenceSet
 
 @jit
 def rational_quadratic(x: np.ndarray, y: np.ndarray, theta: float = 1.0, alpha: float = 1.0) -> float:
     return (jnp.sum((x - y) ** 2) * theta / (2 * alpha) + 1) ** (-alpha)
-
-
-@jit
-def linear(x: np.ndarray, y: np.ndarray, theta: float = 1.0) -> float:
-    return theta * jnp.dot(x, y)
 
 
 @jit

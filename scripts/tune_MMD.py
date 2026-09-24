@@ -37,7 +37,14 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, Callable, Iterable, TypeVar
+
+if TYPE_CHECKING:
+    from optuna import Study, Trial
+    from optuna.pruners import BasePruner
+    from optuna.storages import BaseStorage
+    from optuna.trial import FrozenTrial
 
 from jax import config as jax_config
 
@@ -51,12 +58,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.mmd_newton import MMDNewton
-from hvd.mmd_vectorized import rational_quadratic, rbf
-from hvd.problems import IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
+from hvd.mmd import MMD, MMDMatching
+from hvd.mmd.kernels import RBF, RationalQuadratic
+from hvd.mmd_newton import MMDN
+from hvd.problems import CMOP, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
-from scripts.utils import get_pareto_front, kernel_theta, read_reference_set_data
+from scripts.utils import MMDConfig, get_pareto_front, kernel_theta, read_reference_set_data
 
 PROBLEMS = {
     "IDTLZ1": IDTLZ1,
@@ -65,10 +73,11 @@ PROBLEMS = {
     "IDTLZ4": IDTLZ4,
 }
 KERNELS = {
-    "rbf": rbf,
-    "rational_quadratic": rational_quadratic,
+    "rbf": RBF,
+    "rational_quadratic": RationalQuadratic,
 }
 BOUNDARY_CONSTRAINTS = True
+Choice = TypeVar("Choice", str, bool, int, float)
 
 
 @dataclass(frozen=True)
@@ -131,10 +140,10 @@ def averaged_hausdorff(points: np.ndarray, pareto_front: np.ndarray) -> tuple[fl
 
 def evaluate_configuration(
     *,
-    problem,
+    problem: CMOP,
     problem_name: str,
     pareto_front: np.ndarray,
-    config: dict,
+    config: MMDConfig,
     run_ids: Iterable[int],
     data_path: Path,
     algorithm: str,
@@ -142,21 +151,31 @@ def evaluate_configuration(
     max_iters: int,
     matching: bool = False,
     report: Callable[[float, int], None] | None = None,
-) -> tuple[float, list[dict]]:
-    records: list[dict] = []
+) -> tuple[float, list[dict[str, float | int | bool]]]:
+    records: list[dict[str, float | int | bool]] = []
     completed_scores: list[float] = []
     run_ids = list(run_ids)
     for run_index, run in enumerate(run_ids):
         data = load_run(data_path, problem_name, algorithm, run, generation, matching=matching)
         reference = np.vstack(list(data.ref.values()))
         theta = kernel_theta(config["theta_multiplier"], data.y0, reference)
-        optimizer = MMDNewton(
+        indicator_type = MMDMatching if matching else MMD
+        indicator = indicator_type(
             n_var=problem.n_var,
             n_obj=problem.n_obj,
             ref=ReferenceSet(ref=data.ref, eta=data.eta, Y_idx=data.y_indices),
             func=problem.objective,
             jac=problem.objective_jacobian,
             hessian=problem.objective_hessian,
+            kernel=KERNELS[config["kernel"]](theta=theta),
+            **({"beta": config.get("beta", 0.25)} if matching else {}),
+        )
+        optimizer = MMDN(
+            n_var=problem.n_var,
+            n_obj=problem.n_obj,
+            indicator=indicator,
+            func=problem.objective,
+            jac=problem.objective_jacobian,
             g=problem.ieq_constraint,
             g_jac=problem.ieq_jacobian,
             g_hessian=problem.ieq_hessian,
@@ -166,11 +185,7 @@ def evaluate_configuration(
             xu=problem.xu,
             max_iters=max_iters,
             verbose=False,
-            matching=matching,
-            beta=config.get("beta", 0.25),
             regularization=config["regularization"],
-            theta=theta,
-            kernel=KERNELS[config["kernel"]],
         )
 
         started = time.perf_counter()
@@ -203,26 +218,26 @@ def evaluate_configuration(
     return float(np.mean(completed_scores)), records
 
 
-def choice(trial, name: str, values: list):
+def choice(trial: Trial, name: str, values: list[Choice]) -> Choice:
     return values[0] if len(values) == 1 else trial.suggest_categorical(name, values)
 
 
-def sample_configuration(trial, args) -> dict:
+def sample_configuration(trial: Trial, args: argparse.Namespace) -> MMDConfig:
     kernel_name = choice(trial, "kernel", args.kernels)
-    config = {
+    regularization = choice(trial, "regularization", args.regularization_choices)
+    beta = trial.suggest_float("beta", args.beta_min, args.beta_max, log=True) if args.matching else None
+    config: MMDConfig = {
         "kernel": kernel_name,
-        "regularization": choice(trial, "regularization", args.regularization_choices),
+        "regularization": regularization,
+        "theta_multiplier": trial.suggest_float("theta_multiplier", args.theta_min, args.theta_max, log=True),
     }
-    if args.matching:
-        config["beta"] = trial.suggest_float("beta", args.beta_min, args.beta_max, log=True)
-    config["theta_multiplier"] = trial.suggest_float(
-        "theta_multiplier", args.theta_min, args.theta_max, log=True
-    )
+    if beta is not None:
+        config["beta"] = beta
     return config
 
 
-def config_from_params(params: dict, args) -> dict:
-    config = {
+def config_from_params(params: dict[str, Any], args: argparse.Namespace) -> MMDConfig:
+    config: MMDConfig = {
         "kernel": params.get("kernel", args.kernels[0]),
         "regularization": params.get("regularization", args.regularization_choices[0]),
         "theta_multiplier": params["theta_multiplier"],
@@ -236,7 +251,7 @@ def boolean_choices(value: str) -> list[bool]:
     return {"both": [False, True], "false": [False], "true": [True]}[value]
 
 
-def make_pruner(optuna, args, max_resource: int):
+def make_pruner(optuna: ModuleType, args: argparse.Namespace, max_resource: int) -> BasePruner:
     if args.pruner == "none":
         return optuna.pruners.NopPruner()
     if args.pruner == "median":
@@ -250,26 +265,28 @@ def make_pruner(optuna, args, max_resource: int):
     )
 
 
-def study_name(problem_name: str, args) -> str:
+def study_name(problem_name: str, args: argparse.Namespace) -> str:
     indicator = "MMDMatching" if args.matching else "MMD"
     return f"MMDNewton-{indicator}-{problem_name}-{args.algorithm}-bounds"
 
 
-def storage_specification(problem_name: str, args) -> str:
+def storage_specification(problem_name: str, args: argparse.Namespace) -> str:
     if args.storage:
         return args.storage if "://" in args.storage else str(Path(args.storage).resolve())
     return str((args.output_dir.resolve() / f"{study_name(problem_name, args)}.journal"))
 
 
-def progress_log_path(problem_name: str, args) -> Path:
+def progress_log_path(problem_name: str, args: argparse.Namespace) -> Path:
     return args.output_dir.resolve() / f"{study_name(problem_name, args)}-progress.log"
 
 
-def make_progress_callback(problem_name: str, args):
+def make_progress_callback(
+    problem_name: str, args: argparse.Namespace
+) -> Callable[[Study, FrozenTrial], None]:
     """Append one process-safe JSON record after every finished trial."""
     path = progress_log_path(problem_name, args)
 
-    def log_progress(study, trial) -> None:
+    def log_progress(study: Study, trial: FrozenTrial) -> None:
         trials = study.get_trials(deepcopy=False)
         state_counts: dict[str, int] = {}
         for completed_trial in trials:
@@ -299,7 +316,7 @@ def make_progress_callback(problem_name: str, args):
     return log_progress
 
 
-def make_storage(optuna, specification: str):
+def make_storage(optuna: ModuleType, specification: str) -> str | BaseStorage:
     if "://" in specification:
         return specification
     from optuna.storages import JournalStorage
@@ -308,7 +325,9 @@ def make_storage(optuna, specification: str):
     return JournalStorage(JournalFileBackend(file_path=specification))
 
 
-def create_study(problem_name: str, args, optuna, worker_id: int = 0):
+def create_study(
+    problem_name: str, args: argparse.Namespace, optuna: ModuleType, worker_id: int = 0
+) -> Study:
     train_runs = parse_runs(args.train_runs)
     sampler = optuna.samplers.TPESampler(
         seed=args.seed + worker_id,
@@ -328,12 +347,14 @@ def create_study(problem_name: str, args, optuna, worker_id: int = 0):
     )
 
 
-def make_objective(problem_name: str, args, optuna):
+def make_objective(
+    problem_name: str, args: argparse.Namespace, optuna: ModuleType
+) -> Callable[[Trial], float]:
     problem = PROBLEMS[problem_name](boundary_constraints=BOUNDARY_CONSTRAINTS)
     pareto_front = get_pareto_front(problem)
     train_runs = parse_runs(args.train_runs)
 
-    def objective(trial):
+    def objective(trial: Trial) -> float:
         config = sample_configuration(trial, args)
         trial.set_user_attr("worker_pid", os.getpid())
 
@@ -367,7 +388,7 @@ def make_objective(problem_name: str, args, optuna):
     return objective
 
 
-def run_study_worker(payload) -> None:
+def run_study_worker(payload: tuple[str, argparse.Namespace, int, int]) -> None:
     problem_name, args, trial_count, worker_id = payload
     if trial_count == 0:
         return
@@ -395,7 +416,7 @@ def distribute_trials(n_trials: int, n_workers: int) -> list[int]:
     return [quotient + (worker_id < remainder) for worker_id in range(n_workers)]
 
 
-def tune_problem(problem_name: str, args, optuna) -> dict:
+def tune_problem(problem_name: str, args: argparse.Namespace, optuna: ModuleType) -> dict[str, Any]:
     train_runs = parse_runs(args.train_runs)
     validation_runs = parse_runs(args.validation_runs)
     if not train_runs:
@@ -565,4 +586,4 @@ def main(matching: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(matching=True)
