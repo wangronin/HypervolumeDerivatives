@@ -1,15 +1,16 @@
-"""Tune MMD Newton without matching on the IDTLZ benchmark problems.
+"""Tune MMD Newton on the IDTLZ and WFG benchmark problems.
 
-The tuner uses the vectorized original MMD indicator, without point matching,
-and the per-run reference shift directions stored in the MMD data. IDTLZ box
-bounds are always included as inequality constraints. Install Optuna to run a
-study::
+The command-line entry point uses MMD-Matching; ``main(matching=False)`` uses
+original MMD. Both use the per-run reference shift directions stored in the
+MMD data. Problem dimensions are read from the stored population, and box
+bounds are always included as inequality constraints. Install Optuna to run a study::
 
     python -m pip install optuna
     python scripts/tune_MMD.py IDTLZ1 --workers 15
+    python scripts/tune_MMD.py WFG4 --algorithm MOEAD --workers 15
 
-On Slurm, launch one problem per job from the cluster-specific submission
-script and pass ``--workers 15`` when 15 CPUs are allocated to that job.
+On Slurm, the submission script launches one problem-algorithm pair per job,
+with one worker per allocated CPU.
 ``--trials`` is the total number of trials, not the number assigned to every
 worker.
 
@@ -17,12 +18,10 @@ Each finished trial is appended to ``<study>-progress.log`` in the output
 directory. The default ``<study>.journal`` file is Optuna's durable study
 storage and allows interrupted studies to resume.
 
-Use ``tune_MMD_matching.py`` for the separate MMD-Matching study.
-
 The objective is the mean averaged Hausdorff distance over the tuning runs,
 where averaged Hausdorff distance is ``max(GD, IGD)``.  Validation runs are
-never shown to the tuner. Every run uses its complete initial population;
-population subsampling is intentionally unsupported.
+never shown to the tuner. Original MMD uses the complete initial population;
+MMD-Matching uses the prepared, outlier-filtered population.
 """
 
 from __future__ import annotations
@@ -61,15 +60,42 @@ from hvd.delta_p import averaged_hausdorff
 from hvd.mmd import MMD, MMDMatching
 from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
-from hvd.problems import CMOP, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
+from hvd.problems import (
+    CMOP,
+    IDTLZ1,
+    IDTLZ2,
+    IDTLZ3,
+    IDTLZ4,
+    WFG1,
+    WFG2,
+    WFG3,
+    WFG4,
+    WFG5,
+    WFG6,
+    WFG7,
+    WFG8,
+    WFG9,
+)
 from hvd.reference_set import ReferenceSet
 from scripts.utils import get_pareto_front, kernel_theta, read_reference_set_data
 
 PROBLEMS = {
-    "IDTLZ1": IDTLZ1,
-    "IDTLZ2": IDTLZ2,
-    "IDTLZ3": IDTLZ3,
-    "IDTLZ4": IDTLZ4,
+    problem.__name__: problem
+    for problem in (
+        IDTLZ1,
+        IDTLZ2,
+        IDTLZ3,
+        IDTLZ4,
+        WFG1,
+        WFG2,
+        WFG3,
+        WFG4,
+        WFG5,
+        WFG6,
+        WFG7,
+        WFG8,
+        WFG9,
+    )
 }
 KERNELS = {
     "rbf": RBF,
@@ -137,6 +163,21 @@ def load_run(
     )
 
 
+def load_problem(problem_name: str, args: argparse.Namespace) -> CMOP:
+    """Use the stored decision and objective dimensions for tuning and validation."""
+    run = parse_runs(args.train_runs)[0]
+    prefix = f"{problem_name}_{args.algorithm}_run_{run}"
+    n_var, n_obj = [
+        pd.read_csv(
+            args.data_path / f"{prefix}_lastpopu_{space}_gen{args.generation}.csv",
+            header=None,
+            nrows=1,
+        ).shape[1]
+        for space in ("x", "y")
+    ]
+    return PROBLEMS[problem_name](n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS)
+
+
 def evaluate_configuration(
     *,
     problem: CMOP,
@@ -154,6 +195,7 @@ def evaluate_configuration(
     records: list[dict[str, float | int | bool]] = []
     completed_scores: list[float] = []
     run_ids = list(run_ids)
+
     for run_index, run in enumerate(run_ids):
         data = load_run(data_path, problem_name, algorithm, run, generation, matching=matching)
         reference = np.vstack(list(data.ref.values()))
@@ -349,7 +391,7 @@ def create_study(
 def make_objective(
     problem_name: str, args: argparse.Namespace, optuna: ModuleType
 ) -> Callable[[Trial], float]:
-    problem = PROBLEMS[problem_name](boundary_constraints=BOUNDARY_CONSTRAINTS)
+    problem = load_problem(problem_name, args)
     pareto_front = get_pareto_front(problem)
     train_runs = parse_runs(args.train_runs)
 
@@ -452,7 +494,7 @@ def tune_problem(problem_name: str, args: argparse.Namespace, optuna: ModuleType
     name = study_name(problem_name, args)
     study.trials_dataframe().to_csv(output_dir / f"{name}-trials.csv", index=False)
 
-    problem = PROBLEMS[problem_name](boundary_constraints=BOUNDARY_CONSTRAINTS)
+    problem = load_problem(problem_name, args)
     pareto_front = get_pareto_front(problem)
     best_config = config_from_params(study.best_trial.params, args)
     validation_score, validation_records = evaluate_configuration(
@@ -503,11 +545,7 @@ def tune_problem(problem_name: str, args: argparse.Namespace, optuna: ModuleType
 
 
 def build_parser(matching: bool = False) -> argparse.ArgumentParser:
-    description = (
-        "Tune MMD-Matching Newton on IDTLZ with the prepared, outlier-filtered population."
-        if matching
-        else __doc__
-    )
+    description = "Tune MMD-Matching Newton on IDTLZ and WFG problems"
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("problems", nargs="+", choices=PROBLEMS)
     parser.add_argument("--data-path", type=Path, default="/home/wangh5/data/mmd_data")

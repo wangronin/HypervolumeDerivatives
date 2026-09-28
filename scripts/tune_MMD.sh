@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=MMDN-tuning
-#SBATCH --array=0-3
+#SBATCH --array=0-8
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=15
@@ -10,8 +10,11 @@
 #SBATCH --output="%x-%j-%a.out"
 #SBATCH --mail-type=END,FAIL
 
-problems=(IDTLZ1 IDTLZ2 IDTLZ3 IDTLZ4)
-problem="${problems[SLURM_ARRAY_TASK_ID]}"
+problems=(WFG1 WFG2 WFG3 WFG4 WFG5 WFG6 WFG7 WFG8 WFG9)
+algorithms=(NSGA-III)
+# Each problem occupies three consecutive array tasks, one per algorithm.
+problem="${problems[SLURM_ARRAY_TASK_ID / ${#algorithms[@]}]}"
+algorithm="${algorithms[SLURM_ARRAY_TASK_ID % ${#algorithms[@]}]}"
 workers="${SLURM_CPUS_PER_TASK:-15}"
 
 source .bashrc
@@ -34,6 +37,7 @@ mkdir -p "${MPLCONFIGDIR}"
 
 srun --ntasks=1 --cpus-per-task="${workers}" --cpu-bind=cores \
     python scripts/tune_MMD.py "${problem}" \
+    --algorithm "${algorithm}" \
     --workers "${workers}" \
     --output-dir "${HOME}/data/mmd-tuning" \
     "$@"

@@ -201,6 +201,36 @@ their constraint count is zero.
 Custom callbacks passed to optimizers must follow the same point-or-population
 convention: `State` passes the input directly to the callback.
 
+## MMD tuning
+
+`scripts/tune_MMD.py` supports IDTLZ1–IDTLZ4 and WFG1–WFG9 with MOEA/D
+(`MOEAD` on the command line), NSGA-II, and NSGA-III. The WFG data in
+`mmd_data` contains runs 1–30 at generation 300 for every problem–algorithm
+pair: 810 populations, each with 300 points, 10 decision variables, and
+3 objectives. The tuner reads the problem dimensions from the stored data;
+WFG uses its default position parameter `k=4`.
+
+```shell
+python scripts/tune_MMD.py WFG4 --algorithm MOEAD --data-path mmd_data --workers 15
+sbatch scripts/tune_MMD.sh
+```
+
+The command-line entry point uses MMD-Matching. Runs 1–20 tune the parameters
+and runs 21–30 validate them. The Slurm script has 39 tasks: all 13 problems
+across the three algorithms, with 15 workers per task.
+
+The WFG hypervolume reference points in `scripts/ref_point.csv` are
+`(3, 5, 7)`, following the convention `r_i = 2i + 1` in Section IV-C of
+[Li, Özcan, and John, *A Learning Automata based Multiobjective Hyper-heuristic*](https://nottingham-repository.worktribe.com/OutputFile/901013).
+This point also exceeds every stored WFG objective value. It is used for
+hypervolume evaluation; the tuning objective remains averaged Hausdorff distance.
+
+WFG1 data is complete, but its current objective implementation produces
+nonfinite derivatives at all 300 points in NSGA-III run 1. Its fractional-power
+transformation is also sensitive to rounding near zero. WFG1 is included in
+the registry and Slurm array, but needs numerical treatment before its Newton
+tuning results can be relied on.
+
 ## DpN benchmarks
 
 `scripts/benchmark_DpN.py` is the common runner for CF1–CF10, ZDT1–ZDT4/ZDT6,
