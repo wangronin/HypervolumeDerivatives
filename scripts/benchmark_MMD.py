@@ -23,17 +23,44 @@ from hvd.hypervolume import HV
 from hvd.mmd import MMD, MMDMatching
 from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
-from hvd.problems import CMOP, IDTLZ1, IDTLZ2, IDTLZ3, IDTLZ4
+from hvd.problems import (
+    CMOP,
+    IDTLZ1,
+    IDTLZ2,
+    IDTLZ3,
+    IDTLZ4,
+    WFG1,
+    WFG2,
+    WFG3,
+    WFG4,
+    WFG5,
+    WFG6,
+    WFG7,
+    WFG8,
+    WFG9,
+)
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.tune_MMD import MMDConfig
 from scripts.utils import get_pareto_front, get_run_instances, kernel_theta, plot, read_reference_set_data
 
 PROBLEMS = {
-    "IDTLZ1": IDTLZ1,
-    "IDTLZ2": IDTLZ2,
-    "IDTLZ3": IDTLZ3,
-    "IDTLZ4": IDTLZ4,
+    problem.__name__: problem
+    for problem in (
+        IDTLZ1,
+        IDTLZ2,
+        IDTLZ3,
+        IDTLZ4,
+        WFG1,
+        WFG2,
+        WFG3,
+        WFG4,
+        WFG5,
+        WFG6,
+        WFG7,
+        WFG8,
+        WFG9,
+    )
 }
 KERNELS = {
     "rbf": RBF,
@@ -62,11 +89,11 @@ def get_config(args: argparse.Namespace) -> tuple[MMDConfig, argparse.Namespace]
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Benchmark MMD Newton on IDTLZ.")
+    parser = argparse.ArgumentParser(description="Benchmark MMD Newton on IDTLZ and WFG.")
     parser.add_argument("problem", choices=PROBLEMS)
     parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
     parser.add_argument("--data-path", type=Path, default=ROOT / "mmd_data")
-    parser.add_argument("--tuning-dir", type=Path, default=Path.home() / "mmd_tuning_results")
+    parser.add_argument("--tuning-dir", type=Path, default=ROOT / "mmd_tuning_results")
     parser.add_argument("--generation", type=int, default=None)
     parser.add_argument("--max-iters", type=int, default=None)
     parser.add_argument("--matching", action="store_true", dest="matching")
@@ -143,12 +170,28 @@ def execute(
 def main() -> None:
     args = build_parser().parse_args()
     config, args = get_config(args)
-    problem = PROBLEMS[args.problem](boundary_constraints=BOUNDARY_CONSTRAINTS)
-    pareto_front = get_pareto_front(problem)
     instances = get_run_instances(args.problem, args.algorithm, args.generation, args.data_path)
+    if not instances:
+        raise FileNotFoundError(
+            f"No {args.problem} / {args.algorithm} runs at generation {args.generation} in {args.data_path}."
+        )
+    # Use the stored population dimensions; WFG's default n_var is different.
+    prefix = f"{args.problem}_{args.algorithm}_run_{instances[0]}"
+    n_var, n_obj = [
+        pd.read_csv(
+            args.data_path / f"{prefix}_lastpopu_{space}_gen{args.generation}.csv",
+            header=None,
+            nrows=1,
+        ).shape[1]
+        for space in ("x", "y")
+    ]
+    problem = PROBLEMS[args.problem](n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS)
+    pareto_front = get_pareto_front(problem)
     ref_point = (
         pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem")
-        .loc[args.problem].dropna().to_numpy(dtype=float)
+        .loc[args.problem]
+        .dropna()
+        .to_numpy(dtype=float)
     )
 
     # make the plot and result folder

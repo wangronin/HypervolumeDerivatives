@@ -13,8 +13,6 @@ from pymoo.algorithms.base.genetic import GeneticAlgorithm
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.constraints.eps import AdaptiveEpsilonConstraintHandling
-from pymoo.problems.many import *
-from pymoo.problems.multi import *
 from pymoo.termination import get_termination
 from pymoo.util.ref_dirs import get_reference_directions
 from scipy.io import savemat
@@ -63,6 +61,18 @@ def minimize(
         pop = copy.deepcopy(algorithm.pop)
         # save the population in the last six iterations
         if k >= n_gen - 5:
+            # Verify cached objectives before export; never silently replace
+            # them, since a mismatch can indicate that X changed after evaluation.
+            expected = problem.evaluate(pop.get("X"), return_values_of=["F"])
+            actual = pop.get("F")
+            if not np.all(np.isfinite(expected)) or not np.allclose(
+                actual, expected, rtol=1e-10, atol=1e-12
+            ):
+                error = np.max(np.abs(actual - expected))
+                raise ValueError(
+                    f"Run {run_id}, generation {k}: cached F differs from F(X); "
+                    f"maximum absolute error is {error:.6g}."
+                )
             df = pd.DataFrame(pop_to_numpy(pop), columns=columns)
             df.insert(0, "iteration", k)
             data.append(df)
@@ -117,34 +127,43 @@ def get_algorithm(n_obj: int, algorithm_name: str, constrained: bool) -> Genetic
     return algorithm
 
 
-# TODO: `globals` should be replaced by `getattr(my_models, class_name)`
-# problems = (
-#     [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
-#     + [globals()[f"IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-#     + [globals()[f"Eq1IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-#     + [globals()[f"Eq1DTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-# )
-problems = [globals()[f"UF{k}"]() for k in range(1, 11)]
-for problem in [problems[int(sys.argv[1])]]:
-    problem_name = problem.__class__.__name__
-    print(problem_name)
-    problem = problem.as_pymoo_problem() if isinstance(problem, MOP) else problem
-    termination = get_termination("n_gen", n_gen)
-    constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
-        hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
-    )
-    for algorithm_name in ["MOEAD", "NSGA-II", "NSGA-III"]:
-        print(algorithm_name)
-        algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
-        if 11 < 2:  # for testing
-            data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
-        data = Parallel(n_jobs=N)(
-            delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
-            for i in range(N)
+def main() -> None:
+    # TODO: `globals` should be replaced by `getattr(my_models, class_name)`
+    # problems = (
+    #     [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
+    #     + [globals()[f"IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+    #     + [globals()[f"Eq1IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+    #     + [globals()[f"Eq1DTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+    # )
+    problems = [globals()[f"UF{k}"]() for k in range(1, 11)]
+    for problem in [problems[int(sys.argv[1])]]:
+        problem_name = problem.__class__.__name__
+        print(problem_name)
+        problem = problem.as_pymoo_problem() if isinstance(problem, MOP) else problem
+        termination = get_termination("n_gen", n_gen)
+        constrained = (hasattr(problem, "n_eq_constr") and problem.n_eq_constr > 0) or (
+            hasattr(problem, "n_ieq_constr") and problem.n_ieq_constr > 0
         )
-        data = pd.concat(data, axis=0)
-        # save to Matlab's data format
-        mdic = {"data": data.values, "columns": data.columns.values}
-        savemat(f"{data_path}/{problem_name.upper()}_{algorithm_name}.mat", mdic)
-        # save to CSV
-        data.to_csv(f"{data_path}/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+        for algorithm_name in ["MOEAD", "NSGA-II", "NSGA-III"]:
+            print(algorithm_name)
+            algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
+            if 11 < 2:  # for testing
+                data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
+            data = Parallel(n_jobs=N)(
+                delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
+                for i in range(N)
+            )
+            data = pd.concat(data, axis=0)
+            # MAT preserves binary doubles. Subsequent CSV splitting must also
+            # retain 17 significant digits (and use a round-trip CSV reader).
+            mdic = {"data": data.values, "columns": data.columns.values}
+            savemat(f"{data_path}/{problem_name.upper()}_{algorithm_name}.mat", mdic)
+            data.to_csv(
+                f"{data_path}/{problem_name.upper()}_{algorithm_name}.csv",
+                index=False,
+                float_format="%.17g",
+            )
+
+
+if __name__ == "__main__":
+    main()

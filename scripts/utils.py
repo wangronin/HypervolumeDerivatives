@@ -113,10 +113,14 @@ def read_reference_set_data(
 
     # the load the final population from an EMOA
     x0 = pd.read_csv(
-        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_x_gen{generation}.csv", header=None
+        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_x_gen{generation}.csv",
+        header=None,
+        float_precision="round_trip" if problem == "WFG1" else None,
     ).values
     y0 = pd.read_csv(
-        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_y_gen{generation}.csv", header=None
+        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_y_gen{generation}.csv",
+        header=None,
+        float_precision="round_trip" if problem == "WFG1" else None,
     ).values
     Y_label = pd.read_csv(
         f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_labels_gen{generation}.csv", header=None
