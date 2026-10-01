@@ -33,8 +33,19 @@ def kernel_theta(multiplier: float, approximation: np.ndarray, reference: np.nda
 
 def get_run_instances(problem: str, algorithm: str, generation: int, data_path: Path) -> list[int]:
     """Return the available run IDs in numerical order for one dataset."""
-    file_name = f"{problem}_{algorithm}_run_*_lastpopu_x_gen{generation}.csv"
-    return sorted(int(path.name.split("_run_")[1].split("_")[0]) for path in data_path.glob(file_name))
+    return sorted({
+        int(path.name.split("_run_")[1].split("_")[0])
+        for name in {problem, problem.upper()}
+        for path in data_path.glob(f"{name}_{algorithm}_run_*_lastpopu_x_gen{generation}.csv")
+    })
+
+
+def get_data_prefix(problem: str, algorithm: str, run: int, generation: int, data_path: Path) -> str:
+    """Resolve class-name or uppercase population filenames, including Eq1 exports."""
+    prefix = f"{problem}_{algorithm}_run_{run}"
+    if not (data_path / f"{prefix}_lastpopu_x_gen{generation}.csv").is_file():
+        prefix = f"{problem.upper()}_{algorithm}_run_{run}"
+    return prefix
 
 
 def get_pareto_front(problem) -> np.ndarray:
@@ -71,9 +82,8 @@ def read_reference_set_data(
         Reference components, decision points, objective points, component
         indices, and optional precomputed shift directions.
     """
-    ref_label = pd.read_csv(
-        data_path / f"{problem}_{moea}_run_{run}_component_id_gen{generation}.csv", header=None
-    ).values[0]
+    prefix = get_data_prefix(problem, moea, run, generation, data_path)
+    ref_label = pd.read_csv(data_path / f"{prefix}_component_id_gen{generation}.csv", header=None).values[0]
     component_ids = np.unique(ref_label)
     n_cluster = len(component_ids)
     ref = dict()
@@ -84,13 +94,13 @@ def read_reference_set_data(
         if 11 < 2 and problem in ["DTLZ6", "DTLZ7"]:
             # for DTLZ7 we need to load the dense fillings of the reference set
             r = pd.read_csv(
-                f"{data_path}/{problem}_{moea}_run_{run}_filling_comp{i+1}_gen{generation}.csv", header=None
+                f"{data_path}/{prefix}_filling_comp{i+1}_gen{generation}.csv", header=None
             ).values
         else:
             if n_cluster == 1:
-                ref_file = f"{data_path}/{problem}_{moea}_run_{run}_ref_gen{generation}.csv"
+                ref_file = f"{data_path}/{prefix}_ref_gen{generation}.csv"
             else:
-                ref_file = f"{data_path}/{problem}_{moea}_run_{run}_ref_{component_id}_gen{generation}.csv"
+                ref_file = f"{data_path}/{prefix}_ref_{component_id}_gen{generation}.csv"
             try:
                 r = pd.read_csv(ref_file, header=None).values
             except:
@@ -99,7 +109,7 @@ def read_reference_set_data(
         ref[i] = np.array(random.sample(r.tolist(), 3000)) if len(r) >= 3000 else r
         try:
             eta[i] = pd.read_csv(
-                f"{data_path}/{problem}_{moea}_run_{run}_eta_{component_id}_gen{generation}.csv", header=None
+                f"{data_path}/{prefix}_eta_{component_id}_gen{generation}.csv", header=None
             ).values.ravel()
         except:
             if i > 0 and eta[i - 1] is not None:  # copy the shift direction from the last cluster
@@ -113,17 +123,17 @@ def read_reference_set_data(
 
     # the load the final population from an EMOA
     x0 = pd.read_csv(
-        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_x_gen{generation}.csv",
+        f"{data_path}/{prefix}_lastpopu_x_gen{generation}.csv",
         header=None,
         float_precision="round_trip" if problem == "WFG1" else None,
     ).values
     y0 = pd.read_csv(
-        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_y_gen{generation}.csv",
+        f"{data_path}/{prefix}_lastpopu_y_gen{generation}.csv",
         header=None,
         float_precision="round_trip" if problem == "WFG1" else None,
     ).values
     Y_label = pd.read_csv(
-        f"{data_path}/{problem}_{moea}_run_{run}_lastpopu_labels_gen{generation}.csv", header=None
+        f"{data_path}/{prefix}_lastpopu_labels_gen{generation}.csv", header=None
     ).values.ravel()
     Y_label = Y_label - 1  # index starts at 0
     if not matching:

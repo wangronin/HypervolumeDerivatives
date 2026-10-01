@@ -25,6 +25,14 @@ from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
 from hvd.problems import (
     CMOP,
+    Eq1DTLZ1,
+    Eq1DTLZ2,
+    Eq1DTLZ3,
+    Eq1DTLZ4,
+    Eq1IDTLZ1,
+    Eq1IDTLZ2,
+    Eq1IDTLZ3,
+    Eq1IDTLZ4,
     IDTLZ1,
     IDTLZ2,
     IDTLZ3,
@@ -42,7 +50,14 @@ from hvd.problems import (
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.tune_MMD import MMDConfig
-from scripts.utils import get_pareto_front, get_run_instances, kernel_theta, plot, read_reference_set_data
+from scripts.utils import (
+    get_data_prefix,
+    get_pareto_front,
+    get_run_instances,
+    kernel_theta,
+    plot,
+    read_reference_set_data,
+)
 
 PROBLEMS = {
     problem.__name__: problem
@@ -51,6 +66,14 @@ PROBLEMS = {
         IDTLZ2,
         IDTLZ3,
         IDTLZ4,
+        Eq1DTLZ1,
+        Eq1DTLZ2,
+        Eq1DTLZ3,
+        Eq1DTLZ4,
+        Eq1IDTLZ1,
+        Eq1IDTLZ2,
+        Eq1IDTLZ3,
+        Eq1IDTLZ4,
         WFG1,
         WFG2,
         WFG3,
@@ -89,7 +112,9 @@ def get_config(args: argparse.Namespace) -> tuple[MMDConfig, argparse.Namespace]
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Benchmark MMD Newton on IDTLZ and WFG.")
+    parser = argparse.ArgumentParser(
+        description="Benchmark MMD Newton on IDTLZ, WFG, Eq1DTLZ, and Eq1IDTLZ."
+    )
     parser.add_argument("problem", choices=PROBLEMS)
     parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
     parser.add_argument("--data-path", type=Path, default=ROOT / "mmd_data")
@@ -145,6 +170,9 @@ def execute(
         indicator=indicator,
         func=problem.objective,
         jac=problem.objective_jacobian,
+        h=problem.eq_constraint,
+        h_jac=problem.eq_jacobian,
+        h_hessian=problem.eq_hessian,
         g=problem.ieq_constraint,
         g_jac=problem.ieq_jacobian,
         g_hessian=problem.ieq_hessian,
@@ -176,7 +204,7 @@ def main() -> None:
             f"No {args.problem} / {args.algorithm} runs at generation {args.generation} in {args.data_path}."
         )
     # Use the stored population dimensions; WFG's default n_var is different.
-    prefix = f"{args.problem}_{args.algorithm}_run_{instances[0]}"
+    prefix = get_data_prefix(args.problem, args.algorithm, instances[0], args.generation, args.data_path)
     n_var, n_obj = [
         pd.read_csv(
             args.data_path / f"{prefix}_lastpopu_{space}_gen{args.generation}.csv",

@@ -203,8 +203,26 @@ convention: `State` passes the input directly to the callback.
 
 ## MMD tuning
 
-`scripts/tune_MMD.py` supports IDTLZ1–IDTLZ4 and WFG1–WFG9 with MOEA/D
-(`MOEAD` on the command line), NSGA-II, and NSGA-III. The WFG data in
+`scripts/tune_MMD.py` and `scripts/benchmark_MMD.py` support IDTLZ1–IDTLZ4,
+WFG1–WFG9, Eq1DTLZ1–Eq1DTLZ4, and Eq1IDTLZ1–Eq1IDTLZ4 with MOEA/D
+(`MOEAD` on the command line), NSGA-II, and NSGA-III. Both pass equality
+constraints and their first and second derivatives to Newton, along with
+the box inequalities. Class-name and uppercase dataset prefixes are supported
+(for example, `Eq1DTLZ1` on the command line and `EQ1DTLZ1` in CSV filenames).
+Eq1 hypervolume reference points are `(2, 2, 2)`, matching their parent families.
+Eq1 scoring uses the intersection of the parent Pareto set and `h(x) = 0`.
+The distance variables stay at `0.5`, and the position variables lie on the
+two spheres with squared radii `0.4**2 - 1e-4` and `0.4**2 + 1e-4`, as required
+by the implemented equality constraint. Sampling is deterministic across
+tuning workers; in three objectives, it uses evenly spaced angles on both circles.
+
+The copied Eq1 datasets need a separate preprocessing correction before their
+scores can be trusted: for example, NSGA-III run 1 of Eq1DTLZ2 stores
+`[f2, f3, h1]` in `lastpopu_y` instead of `[f1, f2, f3]`. Population and
+reference-set exports must select objective columns explicitly, excluding
+constraints. The scripts do not silently replace these stored values.
+
+The WFG data in
 `mmd_data` contains runs 1–30 at generation 300 for every problem–algorithm
 pair: 810 populations, each with 300 points, 10 decision variables, and
 3 objectives. The tuner reads the problem dimensions from the stored data;
@@ -212,12 +230,16 @@ WFG uses its default position parameter `k=4`.
 
 ```shell
 python scripts/tune_MMD.py WFG4 --algorithm MOEAD --data-path mmd_data --workers 15
+python scripts/tune_MMD.py Eq1DTLZ2 --data-path mmd_data --workers 15
+python scripts/benchmark_MMD.py Eq1IDTLZ2 --data-path mmd_data --matching
 sbatch scripts/tune_MMD.sh
 ```
 
 The command-line entry point uses MMD-Matching. Runs 1–20 tune the parameters
-and runs 21–30 validate them. The Slurm script has 39 tasks: all 13 problems
-across the three algorithms, with 15 workers per task.
+and runs 21–30 validate them. The Slurm script has 16 tasks: WFG2–WFG9 and
+the eight Eq1 problems with NSGA-III, using 15 workers per task. Its data
+directory must contain the prepared populations and reference sets for all
+selected problems; other algorithm datasets may have missing runs.
 
 The WFG hypervolume reference points in `scripts/ref_point.csv` are
 `(3, 5, 7)`, following the convention `r_i = 2i + 1` in Section IV-C of

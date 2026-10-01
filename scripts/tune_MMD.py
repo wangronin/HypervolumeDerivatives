@@ -1,9 +1,10 @@
-"""Tune MMD Newton on the IDTLZ and WFG benchmark problems.
+"""Tune MMD Newton on IDTLZ, WFG, Eq1DTLZ, and Eq1IDTLZ problems.
 
 The command-line entry point uses MMD-Matching; ``main(matching=False)`` uses
 original MMD. Both use the per-run reference shift directions stored in the
 MMD data. Problem dimensions are read from the stored population, and box
-bounds are always included as inequality constraints. Install Optuna to run a study::
+bounds are always included as inequality constraints. Equality constraints and
+their derivatives are passed to Newton for the Eq1 problems. Install Optuna to run a study::
 
     python -m pip install optuna
     python scripts/tune_MMD.py IDTLZ1 --workers 15
@@ -75,9 +76,17 @@ from hvd.problems import (
     WFG7,
     WFG8,
     WFG9,
+    Eq1DTLZ1,
+    Eq1DTLZ2,
+    Eq1DTLZ3,
+    Eq1DTLZ4,
+    Eq1IDTLZ1,
+    Eq1IDTLZ2,
+    Eq1IDTLZ3,
+    Eq1IDTLZ4,
 )
 from hvd.reference_set import ReferenceSet
-from scripts.utils import get_pareto_front, kernel_theta, read_reference_set_data
+from scripts.utils import get_data_prefix, get_pareto_front, kernel_theta, read_reference_set_data
 
 PROBLEMS = {
     problem.__name__: problem
@@ -86,6 +95,14 @@ PROBLEMS = {
         IDTLZ2,
         IDTLZ3,
         IDTLZ4,
+        Eq1DTLZ1,
+        Eq1DTLZ2,
+        Eq1DTLZ3,
+        Eq1DTLZ4,
+        Eq1IDTLZ1,
+        Eq1IDTLZ2,
+        Eq1IDTLZ3,
+        Eq1IDTLZ4,
         WFG1,
         WFG2,
         WFG3,
@@ -166,15 +183,11 @@ def load_run(
 def load_problem(problem_name: str, args: argparse.Namespace) -> CMOP:
     """Use the stored decision and objective dimensions for tuning and validation."""
     run = parse_runs(args.train_runs)[0]
-    prefix = f"{problem_name}_{args.algorithm}_run_{run}"
-    n_var, n_obj = [
-        pd.read_csv(
-            args.data_path / f"{prefix}_lastpopu_{space}_gen{args.generation}.csv",
-            header=None,
-            nrows=1,
-        ).shape[1]
-        for space in ("x", "y")
-    ]
+    prefix = get_data_prefix(problem_name, args.algorithm, run, args.generation, args.data_path)
+    x_file = args.data_path / f"{prefix}_lastpopu_x_gen{args.generation}.csv"
+    y_file = args.data_path / f"{prefix}_lastpopu_y_gen{args.generation}.csv"
+    n_var = pd.read_csv(x_file, header=None, nrows=1).shape[1]
+    n_obj = pd.read_csv(y_file, header=None, nrows=1).shape[1]
     return PROBLEMS[problem_name](n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS)
 
 
@@ -217,6 +230,9 @@ def evaluate_configuration(
             indicator=indicator,
             func=problem.objective,
             jac=problem.objective_jacobian,
+            h=problem.eq_constraint,
+            h_jac=problem.eq_jacobian,
+            h_hessian=problem.eq_hessian,
             g=problem.ieq_constraint,
             g_jac=problem.ieq_jacobian,
             g_hessian=problem.ieq_hessian,
@@ -545,7 +561,7 @@ def tune_problem(problem_name: str, args: argparse.Namespace, optuna: ModuleType
 
 
 def build_parser(matching: bool = False) -> argparse.ArgumentParser:
-    description = "Tune MMD-Matching Newton on IDTLZ and WFG problems"
+    description = "Tune MMD Newton on IDTLZ, WFG, Eq1DTLZ, and Eq1IDTLZ problems"
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("problems", nargs="+", choices=PROBLEMS)
     parser.add_argument("--data-path", type=Path, default="/home/wangh5/data/mmd_data")

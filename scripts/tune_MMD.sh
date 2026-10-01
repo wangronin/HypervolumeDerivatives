@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=MMDN-tuning
-#SBATCH --array=0-7
+#SBATCH --array=0-15
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=15
@@ -10,9 +10,13 @@
 #SBATCH --output="%x-%j-%a.out"
 #SBATCH --mail-type=END,FAIL
 
-problems=(WFG2 WFG3 WFG4 WFG5 WFG6 WFG7 WFG8 WFG9)
+problems=(
+    WFG2 WFG3 WFG4 WFG5 WFG6 WFG7 WFG8 WFG9
+    Eq1DTLZ1 Eq1DTLZ2 Eq1DTLZ3 Eq1DTLZ4
+    Eq1IDTLZ1 Eq1IDTLZ2 Eq1IDTLZ3 Eq1IDTLZ4
+)
 algorithms=(NSGA-III)
-# Each problem occupies three consecutive array tasks, one per algorithm.
+# Each problem occupies one task per selected algorithm.
 problem="${problems[SLURM_ARRAY_TASK_ID / ${#algorithms[@]}]}"
 algorithm="${algorithms[SLURM_ARRAY_TASK_ID % ${#algorithms[@]}]}"
 workers="${SLURM_CPUS_PER_TASK:-15}"
