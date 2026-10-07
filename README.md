@@ -247,20 +247,10 @@ The WFG hypervolume reference points in `scripts/ref_point.csv` are
 This point also exceeds every stored WFG objective value. It is used for
 hypervolume evaluation; the tuning objective remains averaged Hausdorff distance.
 
-WFG1 is particularly sensitive to rounding before its `y**0.02` transformation.
-Its normalization, shift, and flat transformations use one vectorized NumPy
-callback per population to preserve pymoo's floating-point evaluation under
-JIT. The remaining objective calculation and surrogate derivatives use JAX.
-This adds a CPU callback, but avoids objective discrepancies caused by XLA
-rearranging cancellation-prone expressions near zero. WFG2–WFG9 are unchanged.
-
-The Pareto set has distance coordinates `x[i] = 0.35 * xu[i]`, where the
-transformed distance is zero. Excluding these zeros would exclude the front.
-`WFG1(power_gradient_limit=1e6)` instead bounds the internal power derivative
-and defines it as zero at zero. Objective values are unchanged by this option.
-Jacobians and Hessians use the bounded rule, so they are surrogate derivatives
-near the singularity. Pass `power_gradient_limit=None` for singular, unbounded
-derivatives. The cap applies to the power transformation, not the final Jacobian.
+WFG1 uses the original pymoo transformation formulas adapted to JAX, with
+ordinary automatic differentiation.
+Its `y**0.02` transformation is singular at zero and sensitive to rounding;
+JIT can produce different floating-point values from pymoo near zero.
 
 Keep 17 significant digits when exporting WFG1 populations, including any step
 that splits combined files into `lastpopu_x` and `lastpopu_y`. The generator
@@ -270,12 +260,6 @@ error of about 0.109 in a fresh pymoo WFG1 run. The prepared data also contained
 four mismatched X/Y rows: NSGA-II run 4, rows 50, 188, and 225; and run 16,
 row 7 (one-based). All original combined population pairs agreed with pymoo
 to machine precision; these problems were introduced after population export.
-
-`scripts/repair_WFG1_data.py RAW_DATA_PATH` audits the prepared populations
-against the six saved generations. Add `--apply` to restore full-precision
-pairs after saving a backup ZIP and a repair report in `mmd_data`. It preserves
-objective row order and recovers the original decision vector for a mispaired
-row, keeping reference labels aligned. It only modifies WFG1 populations.
 
 ## DpN benchmarks
 

@@ -65,9 +65,7 @@ def minimize(
             # them, since a mismatch can indicate that X changed after evaluation.
             expected = problem.evaluate(pop.get("X"), return_values_of=["F"])
             actual = pop.get("F")
-            if not np.all(np.isfinite(expected)) or not np.allclose(
-                actual, expected, rtol=1e-10, atol=1e-12
-            ):
+            if not np.all(np.isfinite(expected)) or not np.allclose(actual, expected, rtol=1e-10, atol=1e-12):
                 error = np.max(np.abs(actual - expected))
                 raise ValueError(
                     f"Run {run_id}, generation {k}: cached F differs from F(X); "
@@ -147,7 +145,7 @@ def main() -> None:
         for algorithm_name in ["MOEAD", "NSGA-II", "NSGA-III"]:
             print(algorithm_name)
             algorithm = get_algorithm(problem.n_obj, algorithm_name, constrained)
-            if 11 < 2:  # for testing
+            if 11 < 2:  # for testing only
                 data = minimize(problem, algorithm, termination, run_id=1, seed=1, verbose=True)
             data = Parallel(n_jobs=N)(
                 delayed(minimize)(problem, algorithm, termination, run_id=i + 1, seed=i + 1, verbose=False)
