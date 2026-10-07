@@ -1,3 +1,4 @@
+import warnings
 from typing import ClassVar
 
 import jax.numpy as jnp
@@ -46,6 +47,13 @@ class ConstrainedDTLZ(_DTLZ):
         M = self.n_obj - 1
         if M == 1:
             # bi-objective case: the feasible efficient set contains only two points
+            if N > 2:
+                warnings.warn(
+                    f"The supplied N={N} is ignored because in the bi-objective case, "
+                    f"{type(self).__name__}'s feasible efficient set contains only two points.",
+                    UserWarning,
+                    stacklevel=3,
+                )
             directions = np.array([[-1.0], [1.0]])
         elif M == 2:
             # evenly-spaced points on S^2

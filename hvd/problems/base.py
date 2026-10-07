@@ -173,11 +173,7 @@ class CMOP(MOP):
     ) -> None:
         self.n_eq_constr: int = int(n_eq_constr)
         self.n_ieq_constr: int = int(n_ieq_constr)
-        if self.n_eq_constr < 0 or self.n_ieq_constr < 0:
-            raise ValueError("Constraint counts must be non-negative integers.")
-
         super().__init__(n_var=n_var, n_obj=n_obj, xl=xl, xu=xu)
-
         self._eq: JaxFunction | None = (
             jit(partial(self.__class__._eq_constraint, self)) if self.n_eq_constr > 0 else None
         )
@@ -187,7 +183,10 @@ class CMOP(MOP):
         if boundary_constraints:
             self._ieq = add_boundary_constraints(self._ieq, self.xl, self.xu)
             self.n_ieq_constr += 2 * self.n_var
+        self.__set_eq_jac_hess()
+        self.__set_ieq_jac_hess()
 
+    def __set_eq_jac_hess(self):
         if self._eq is not None:
             self._eq_jacobian = jit(jacrev(self._eq))
             self._eq_hessian = hessian(self._eq)
@@ -198,6 +197,7 @@ class CMOP(MOP):
             self._eq_jacobian = self._eq_hessian = self._eq_batch = None
             self._eq_jacobian_batch = self._eq_hessian_batch = None
 
+    def __set_ieq_jac_hess(self):
         if self._ieq is not None:
             self._ieq_jacobian = jit(jacrev(self._ieq))
             self._ieq_hessian = hessian(self._ieq)

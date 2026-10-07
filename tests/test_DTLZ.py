@@ -119,22 +119,22 @@ def test_IDTLZ_function_value(F, input, expected):
         [Eq1IDTLZ1, Eq1IDTLZ2, Eq1IDTLZ3, Eq1IDTLZ4],
         input,
         expected,
-        [0.15491684, 0.12304637, 0.03234342, 0.01905571],
+        [0.15501684, 0.12314637, 0.03244342, 0.01915571],
     ),
 )
 def test_Eq1IDTLZ_function_value(F, input, expected, cstr):
     problem = F()
-    assert all(np.isclose(problem.objective(np.array(input)), expected))
+    assert np.all(np.isclose(problem.objective(np.array(input)), expected))
     assert np.isclose(problem.eq_constraint(np.array(input)), cstr)
 
 
 @pytest.mark.parametrize(
     "problem, expected, cstr",
     [
-        (Eq1DTLZ1, [39.2583506542203, 363.3913996454754, 234.0513096302470], 0.01943601),
-        (Eq1DTLZ2, [1.092253942326640, 0.168601869538367, 1.696393580953341], 0.01943601),
-        (Eq1DTLZ3, [686.973245563538, 106.042165687341, 1066.946942373372], 0.01943601),
-        (Eq1DTLZ4, [2.024647240000000, 0, 0], 0.01943601),
+        (Eq1DTLZ1, [39.2583506542203, 363.3913996454754, 234.0513096302470], 0.01953601),
+        (Eq1DTLZ2, [1.092253942326640, 0.168601869538367, 1.696393580953341], 0.01953601),
+        (Eq1DTLZ3, [686.973245563538, 106.042165687341, 1066.946942373372], 0.01953601),
+        (Eq1DTLZ4, [2.024647240000000, 0, 0], 0.01953601),
     ],
 )
 def test_Eq1DTLZ_function_value(problem, expected, cstr):

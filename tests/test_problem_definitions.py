@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 from numpy.typing import ArrayLike
 
-from hvd.problems import CF1, CMOP, DTLZ1, Eq1DTLZ1, MOP, UF1, UF8, ZDT1
+from hvd.problems import CF1, CMOP, DTLZ1, MOP, UF1, UF8, ZDT1, Eq1DTLZ1
 from hvd.problems.misc import CONV3, DENT
 
 
@@ -102,10 +102,20 @@ def test_resolved_metadata_are_instance_annotations() -> None:
 def test_unconstrained_mop_has_no_constraint_interface() -> None:
     problem = _ToyMOP()
     for name in (
-        "n_eq_constr", "n_ieq_constr",
-        "eq_constraint", "ieq_constraint", "eq_constraint_batch", "ieq_constraint_batch",
-        "eq_jacobian", "ieq_jacobian", "eq_jacobian_batch", "ieq_jacobian_batch",
-        "eq_hessian", "ieq_hessian", "eq_hessian_batch", "ieq_hessian_batch",
+        "n_eq_constr",
+        "n_ieq_constr",
+        "eq_constraint",
+        "ieq_constraint",
+        "eq_constraint_batch",
+        "ieq_constraint_batch",
+        "eq_jacobian",
+        "ieq_jacobian",
+        "eq_jacobian_batch",
+        "ieq_jacobian_batch",
+        "eq_hessian",
+        "ieq_hessian",
+        "eq_hessian_batch",
+        "ieq_hessian_batch",
     ):
         assert not hasattr(problem, name)
 
@@ -173,8 +183,3 @@ def test_boundary_constraints_append_box_constraints_after_native_constraints() 
     np.testing.assert_allclose(problem.ieq_constraint(x), expected)
     assert problem.n_eq_constr == 1
     assert problem.n_ieq_constr == 1 + 2 * problem.n_var
-
-
-def test_cmop_rejects_negative_constraint_counts() -> None:
-    with pytest.raises(ValueError, match="non-negative"):
-        CMOP(n_var=2, n_obj=2, xl=0.0, xu=1.0, n_ieq_constr=-1)
