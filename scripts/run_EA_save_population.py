@@ -60,7 +60,7 @@ def minimize(
         k = algorithm.n_gen - 1  # NOTE: the first iteration is actually 2..
         pop = copy.deepcopy(algorithm.pop)
         # save the population in the last six iterations
-        if k >= n_gen - 5:
+        if k >= n_gen - 7:
             # Verify cached objectives before export; never silently replace
             # them, since a mismatch can indicate that X changed after evaluation.
             expected = problem.evaluate(pop.get("X"), return_values_of=["F"])
