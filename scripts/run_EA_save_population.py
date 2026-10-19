@@ -21,7 +21,7 @@ from hvd.moea import SMSEMOA, ConstraintAwareMOEAD
 from hvd.problems import *
 
 N = 30
-n_gen = 300
+n_gen = 600
 pop_to_numpy = lambda pop: np.array([np.r_[ind.X, ind.F, ind.H, ind.G] for ind in pop])
 data_path = "/home/wangh5/data"
 
@@ -127,13 +127,12 @@ def get_algorithm(n_obj: int, algorithm_name: str, constrained: bool) -> Genetic
 
 def main() -> None:
     # TODO: `globals` should be replaced by `getattr(my_models, class_name)`
-    # problems = (
-    #     [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
-    #     + [globals()[f"IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-    #     + [globals()[f"Eq1IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-    #     + [globals()[f"Eq1DTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
-    # )
-    problems = [globals()[f"UF{k}"]() for k in range(1, 11)]
+    problems = (
+        [globals()[f"WFG{k}"](n_var=10, n_obj=3) for k in range(1, 10)]
+        + [globals()[f"IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+        + [globals()[f"Eq1IDTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+        + [globals()[f"Eq1DTLZ{k}"](n_var=11, n_obj=3) for k in range(1, 5)]
+    )
     for problem in [problems[int(sys.argv[1])]]:
         problem_name = problem.__class__.__name__
         print(problem_name)
