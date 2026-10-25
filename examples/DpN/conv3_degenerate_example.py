@@ -15,13 +15,13 @@ from hvd.reference_set import ReferenceSet
 np.random.seed(42)
 np.set_printoptions(edgeitems=30, linewidth=100000)
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
-rcParams["font.size"] = 20
+rcParams["font.size"] = 25
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
 rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 20
-rcParams["ytick.labelsize"] = 20
+rcParams["xtick.labelsize"] = 25
+rcParams["ytick.labelsize"] = 25
 rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
@@ -75,7 +75,7 @@ lines = []
 lines += ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=13)
 lines += ax.plot(reference_set[:, 0], reference_set[:, 1], reference_set[:, 2], "g+", ms=13)
 lines.append(ax.plot_trisurf(triang, z, color="k", alpha=0.2))
-ax.legend(lines, [r"$Y_0$", "reference set", r"Pareto front"], loc="lower right")
+ax.legend(lines, [r"$Y_0$", "reference set", r"Pareto front"], loc="upper right")
 ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
 ax.set_ylabel(r"$f_2$")
@@ -89,7 +89,7 @@ lines = []
 lines += ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r.", ms=13)
 lines += ax.plot(reference_set[:, 0], reference_set[:, 1], reference_set[:, 2], "g+", ms=13)
 lines.append(ax.plot_trisurf(triang, z, color="k", alpha=0.2))
-ax.legend(lines, [r"$Y_{\text{final}}$", "reference set", r"Pareto front"], loc="lower right")
+ax.legend(lines, [r"$Y_{\text{final}}$", "reference set", r"Pareto front"], loc="upper right")
 ax.set_title("objective space")
 ax.set_xlabel(r"$f_1$")
 ax.set_ylabel(r"$f_2$")

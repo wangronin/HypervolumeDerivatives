@@ -6,6 +6,7 @@ import matplotlib.tri as mtri
 import numpy as np
 import pandas as pd
 from matplotlib import rcParams
+from matplotlib.ticker import FuncFormatter
 
 from hvd.newton import HVN
 from hvd.problems import CONV3
@@ -13,13 +14,13 @@ from hvd.problems import CONV3
 np.random.seed(42)
 np.set_printoptions(edgeitems=30, linewidth=100000)
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
-rcParams["font.size"] = 20
+rcParams["font.size"] = 26
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
 rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 20
-rcParams["ytick.labelsize"] = 20
+rcParams["xtick.labelsize"] = 26
+rcParams["ytick.labelsize"] = 26
 rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
@@ -62,17 +63,17 @@ p = np.c_[xmid, ymid, zmid]
 mask = np.array([np.any(np.all(pp > p, axis=1)) for pp in p])
 triang.set_mask(mask)
 
-fig = plt.figure(figsize=(8, 22), layout="compressed")
+fig = plt.figure(figsize=(6.85, 17), layout="none")
 ax = fig.add_subplot(3, 1, 1, projection="3d")
 ax.set_box_aspect((1, 1, 1))
 ax.view_init(15, 45)
 lines = []
 lines += ax.plot(y0[:, 0], y0[:, 1], y0[:, 2], "k.", ms=13)
 lines.append(ax.plot_trisurf(triang, z, color="k", alpha=0.2))
-ax.legend(lines, [r"$Y_0$", r"Pareto front"], loc="lower right")
-ax.set_xlabel(r"$f_1$")
-ax.set_ylabel(r"$f_2$")
-ax.set_zlabel(r"$f_3$")
+ax.legend(lines, [r"$Y_0$", r"Pareto front"], loc="upper right")
+ax.set_xlabel(r"$f_1$", labelpad=18)
+ax.set_ylabel(r"$f_2$", labelpad=18)
+ax.set_zlabel(r"$f_3$", labelpad=18)
 
 ax = fig.add_subplot(3, 1, 2, projection="3d")
 ax.set_box_aspect((1, 1, 1))
@@ -80,10 +81,10 @@ ax.view_init(15, 45)
 lines = []
 lines += ax.plot(Y[:, 0], Y[:, 1], Y[:, 2], "r.", ms=13)
 lines.append(ax.plot_trisurf(triang, z, color="k", alpha=0.2))
-ax.legend(lines, [r"$Y_{\text{final}}$", r"Pareto front"], loc="lower right")
-ax.set_xlabel(r"$f_1$")
-ax.set_ylabel(r"$f_2$")
-ax.set_zlabel(r"$f_3$")
+ax.legend(lines, [r"$Y_{\text{final}}$", r"Pareto front"], loc="upper right")
+ax.set_xlabel(r"$f_1$", labelpad=18)
+ax.set_ylabel(r"$f_2$", labelpad=18)
+ax.set_zlabel(r"$f_3$", labelpad=18)
 
 ax = fig.add_subplot(3, 1, 3)
 ax.set_box_aspect(1)
@@ -91,11 +92,17 @@ ax_ = ax.twinx()
 ax_.set_box_aspect(1)
 ax.semilogy(range(1, len(opt.history_indicator_value) + 1), opt.history_indicator_value, "b-")
 ax_.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
+formatter = FuncFormatter(lambda value, _: f"${value / 1e4:g}$")
+ax.yaxis.set_major_formatter(formatter)
+ax.yaxis.set_minor_formatter(formatter)
 ax.set_ylabel("")
 ax_.set_ylabel("")
-ax.text(0, 1.01, r"$\operatorname{HV}$", transform=ax.transAxes, color="b", ha="right", va="bottom")
+ax.text(0, 1.01, r"$\operatorname{HV}\;(\times 10^4)$", transform=ax.transAxes, color="b", ha="left", va="bottom")
 ax_.text(
-    1.12, 1.01, r"$||R(\mathbf{X}, \lambda)||$", transform=ax.transAxes, color="g", ha="right", va="bottom"
+    1, 1.01, r"$||R(\mathbf{X}, \lambda)||$", transform=ax.transAxes, color="g", ha="right", va="bottom"
 )
 ax.set_xlabel("iteration")
-plt.savefig(f"CONV3-HVN-example-{N}.pdf", dpi=100)
+# Common panel bounds in inches leave only room for labels and small gaps.
+for panel, bottom in zip(fig.axes, (11.89, 6.64, 1.02, 1.02)):
+    panel.set_position((0.85 / 6.85, bottom / 17, 5.02 / 6.85, 5.02 / 17))
+fig.savefig(f"CONV3-HVN-example-{N}.pdf", dpi=100, bbox_inches=fig.bbox_inches)

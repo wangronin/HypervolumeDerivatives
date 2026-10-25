@@ -12,13 +12,13 @@ from hvd.problems.misc import DENT
 
 plt.style.use("ggplot")
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
-rcParams["font.size"] = 30
+rcParams["font.size"] = 26
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
 rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 30
-rcParams["ytick.labelsize"] = 30
+rcParams["xtick.labelsize"] = 26
+rcParams["ytick.labelsize"] = 26
 rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
@@ -55,7 +55,7 @@ opt = HVN(
 )
 X, Y, stop = opt.run()
 
-fig, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=(8, 22), layout="compressed")
+fig, (ax0, ax1, ax2) = plt.subplots(3, 1, figsize=(7.3, 18.7), layout="none")
 ax0.set_box_aspect(1)
 ax1.set_box_aspect(1)
 ax2.set_box_aspect(1)
@@ -63,13 +63,13 @@ ax2.set_box_aspect(1)
 x = np.linspace(-2, 2, 400)
 y = -x
 lines = []
-lines += ax0.plot(X[:, 0], X[:, 1], "r+", ms=12)
+lines += ax0.plot(X[:, 0], X[:, 1], "r+", ms=17)
 lines += ax0.plot(X0[:, 0], X0[:, 1], "k.", ms=8, clip_on=False)
 lines += ax0.plot(x, y, "k--", clip_on=False)
 ax0.set_xlim([-2, 2])
 ax0.set_ylim([-2, 2])
-ax0.set_xlabel(r"$x_1$")
-ax0.set_ylabel(r"$x_2$")
+ax0.set_xlabel(r"$x_1$", fontsize=26)
+ax0.set_ylabel(r"$x_2$", fontsize=26)
 ax0.legend(lines, [r"$X_{\text{final}}$", r"$X_0$", r"Pareto set"])
 
 n_per_axis = 30
@@ -123,8 +123,8 @@ for i in range(N):
         headwidth=2.7,
     )
 
-ax1.set_xlabel(r"$f_1$")
-ax1.set_ylabel(r"$f_2$")
+ax1.set_xlabel(r"$f_1$", fontsize=26)
+ax1.set_ylabel(r"$f_2$", fontsize=26)
 
 ax22 = ax2.twinx()
 ax22.set_box_aspect(1)
@@ -132,13 +132,16 @@ ax2.plot(range(1, len(opt.history_indicator_value) + 1), opt.history_indicator_v
 ax22.semilogy(range(1, len(opt.history_R_norm) + 1), opt.history_R_norm, "g--")
 ax2.set_ylabel("")
 ax22.set_ylabel("")
-ax2.text(0, 1.01, r"$\operatorname{HV}$", transform=ax2.transAxes, color="b", ha="right", va="bottom")
+ax2.text(0, 1.01, r"$\operatorname{HV}$", transform=ax2.transAxes, color="b", ha="left", va="bottom")
 ax22.text(
-    1.12, 1.01, r"$||R(\mathbf{X}, \lambda)||$", transform=ax2.transAxes, color="g", ha="right", va="bottom"
+    1, 1.01, r"$||R(\mathbf{X}, \lambda)||$", transform=ax2.transAxes, color="g", ha="right", va="bottom"
 )
 ax2.set_xlabel("iteration")
 ax2.set_xticks(range(1, max_iters + 1))
-plt.savefig(f"dent-example-HVN-{N}.pdf", dpi=1000)
+# Common panel bounds in inches keep paired PDFs aligned.
+for panel, bottom in zip(fig.axes, (13.46, 7.44, 1.02, 1.02)):
+    panel.set_position((1.30 / 7.3, bottom / 18.7, 5.02 / 7.3, 5.02 / 18.7))
+fig.savefig(f"dent-example-HVN-{N}.pdf", dpi=1000, bbox_inches=fig.bbox_inches)
 
 data = pd.DataFrame(
     np.c_[np.arange(len(opt.history_indicator_value)), opt.history_indicator_value, opt.history_R_norm],
