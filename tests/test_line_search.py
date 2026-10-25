@@ -22,6 +22,28 @@ def test_residual_armijo_accepts_full_newton_step():
     assert evaluated == [1.0]
 
 
+@pytest.mark.parametrize("max_step", [0.0, 0.25, 1.0])
+@pytest.mark.parametrize(
+    "residual,kwargs",
+    [
+        ([1e-9], {}),
+        ([1.0], {"initial_step": 0.0}),
+        ([1.0], {"step": np.zeros((2, 2))}),
+        ([1.0], {"step": np.array([1e-12, -1e-12]), "initial_step": 0.5}),
+    ],
+)
+def test_residual_armijo_skips_trials_and_respects_step_limit(residual, kwargs, max_step):
+    def evaluate(alpha):
+        pytest.fail("The line search should skip trial evaluations.")
+
+    result = residual_armijo_line_search(residual, evaluate, max_step=max_step, **kwargs)
+
+    assert result.step_size == min(kwargs.get("initial_step", 1.0), max_step)
+    assert result.evaluations == 0
+    assert result.converged
+    np.testing.assert_array_equal(result.residual, residual)
+
+
 def test_residual_armijo_backtracks_to_an_evaluated_step():
     residual = np.array([1.0])
     evaluated = []

@@ -12,13 +12,13 @@ from hvd.problems.misc import DENT
 
 plt.style.use("ggplot")
 plt.rc("text.latex", preamble=r"\usepackage{amsmath}")
-rcParams["font.size"] = 20
+rcParams["font.size"] = 30
 rcParams["xtick.direction"] = "out"
 rcParams["ytick.direction"] = "out"
 rcParams["text.usetex"] = True
 rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 20
-rcParams["ytick.labelsize"] = 20
+rcParams["xtick.labelsize"] = 30
+rcParams["ytick.labelsize"] = 30
 rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7

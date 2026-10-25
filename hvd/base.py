@@ -26,8 +26,7 @@ class State:
     ) -> None:
         """State object of numerical optimization
 
-        Callbacks accept either a point `(n_var,)` or a population `(N, n_var)`
-        and return one result per point. They handle batching themselves.
+        Callbacks accept a point `(n_var,)`. Populations are evaluated row by row.
 
         Args:
             n_var (int): number of decision variable
@@ -73,9 +72,8 @@ class State:
     ) -> np.ndarray:
         """Evaluate any callback at one point or a population.
 
-        The callback handles the input shape. ``output_shape`` describes one
-        point's output and keeps empty constraints and scalar outputs
-        shape-stable.
+        Callbacks receive one point at a time. ``output_shape`` describes one
+        point's output and keeps empty constraints and scalar outputs shape-stable.
         """
         x = np.asarray(x)
         if x.ndim not in (1, 2):
@@ -88,7 +86,7 @@ class State:
             return np.zeros((*prefix, *output_shape))
 
         # State updates these arrays in place; JAX-backed NumPy views can be read-only.
-        values = np.array(function(x), copy=True)
+        values = np.array([function(point) for point in x] if x.ndim == 2 else function(x), copy=True)
         return values if output_shape is None else values.reshape(*prefix, *output_shape)
 
     @staticmethod

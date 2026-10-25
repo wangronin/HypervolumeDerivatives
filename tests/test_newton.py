@@ -16,6 +16,44 @@ def test_box_projection_is_opt_in_for_mmdn_and_dpn() -> None:
     assert inspect.signature(DpN).parameters["project_box_constraints"].default is False
 
 
+def test_hvn_delegates_small_step_handling_to_line_search(monkeypatch):
+    optimizer = HVN(
+        n_var=2,
+        n_obj=2,
+        func=lambda x: np.array([np.sum((x + 1) ** 2), np.sum((x - 1) ** 2)]),
+        jac=lambda x: np.array([2 * (x + 1), 2 * (x - 1)]),
+        hessian=lambda x: np.array([2 * np.eye(2), 2 * np.eye(2)]),
+        h=lambda x: x[1],
+        h_jac=lambda x: np.array([0, 1]),
+        h_hessian=lambda x: np.zeros((2, 2)),
+        ref=np.array([20, 20]),
+        X0=np.c_[np.linspace(-1, 1, 30), np.full(30, 0.2)],
+        xl=-1.5,
+        xu=1.5,
+        max_iters=6,
+        verbose=False,
+    )
+    original_search = newton_module.residual_armijo_line_search
+    search_results = []
+
+    def search(*args, **kwargs):
+        assert kwargs["step"].shape == (optimizer.N, optimizer.dim)
+        result = original_search(*args, **kwargs)
+        search_results.append(result)
+        return result
+
+    monkeypatch.setattr(newton_module, "residual_armijo_line_search", search)
+    for _ in range(optimizer.max_iters):
+        optimizer.iterate()
+        np.testing.assert_array_equal(optimizer.step_size, np.ones(optimizer.N))
+        optimizer.log()
+
+    assert len(search_results) == optimizer.max_iters
+    assert [result.evaluations for result in search_results] == [1, 1, 1, 1, 0, 0]
+    assert np.all(np.isclose(optimizer.step, 0))
+    assert np.linalg.norm(optimizer._compute_R(optimizer.state)[0]) < 1e-12
+
+
 @pytest.mark.parametrize("optimizer_type", [HVN, DpN, MMDN])
 @pytest.mark.parametrize("boundary_constraints", [False, True])
 def test_newton_detects_constraint_counts_from_optional_method_results(optimizer_type, boundary_constraints):

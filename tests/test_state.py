@@ -49,7 +49,7 @@ class _ProblemFunctions:
         return np.zeros((*x.shape[:-1], 1, x.shape[-1], x.shape[-1]))
 
 
-def test_state_passes_populations_and_points_directly_to_callbacks() -> None:
+def test_state_evaluates_callbacks_pointwise() -> None:
     functions = _ProblemFunctions()
     state = State(
         n_var=2,
@@ -74,26 +74,35 @@ def test_state_passes_populations_and_points_directly_to_callbacks() -> None:
     np.testing.assert_array_equal(state.active_indices, [[True, False], [True, True]])
     assert state.cstr_grad.shape == (2, 2, 2)
     assert state.cstr_hess.shape == (2, 2, 2, 2)
-    assert functions.single_calls == 0
-    assert functions.batch_calls == {
-        "objective": 1,
-        "objective_jacobian": 1,
-        "eq_constraint": 1,
-        "eq_jacobian": 1,
-        "eq_hessian": 1,
-        "ieq_constraint": 1,
-        "ieq_jacobian": 1,
-        "ieq_hessian": 1,
-    }
+    assert functions.single_calls == 8 * len(x)
+    assert functions.batch_calls == {}
     assert state.n_jac_evals == len(x)
     assert state.n_cstr_jac_evals == len(x)
     assert state.n_cstr_hess_evals == len(x)
 
-    batch_calls = functions.batch_calls.copy()
     state.update_one(np.array([0.1, 0.2]), 0)
-    assert functions.single_calls == 8
-    assert functions.batch_calls == batch_calls
+    assert functions.single_calls == 8 * (len(x) + 1)
+    assert functions.batch_calls == {}
     assert state.n_jac_evals == len(x) + 1
+
+
+@pytest.mark.parametrize(
+    "function,output_shape,expected",
+    [
+        (lambda x: x[1], (1,), [[0.5], [-0.5]]),
+        (lambda _: np.array([0, 1]), (1, 2), [[[0, 1]], [[0, 1]]]),
+        (lambda _: np.zeros((2, 2)), (1, 2, 2), np.zeros((2, 1, 2, 2))),
+    ],
+)
+def test_evaluate_handles_single_constraint_callbacks(function, output_shape, expected) -> None:
+    x = np.array([[0.25, 0.5], [1.5, -0.5]])
+    values = State.evaluate(function, x, output_shape)
+    point_values = State.evaluate(function, x[0], output_shape)
+
+    assert values.shape == (len(x), *output_shape)
+    assert point_values.shape == output_shape
+    np.testing.assert_allclose(values, expected)
+    np.testing.assert_allclose(point_values, expected[0])
 
 
 @pytest.mark.parametrize(

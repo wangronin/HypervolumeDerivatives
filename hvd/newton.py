@@ -186,7 +186,7 @@ class HVN:
             max_step_size = self._compute_max_step_size(self.state[idx].primal, self.step[idx, : self.dim_p])
             # backtracking line search with Armijo's condition for each layer
             phi_func = self._get_phi_func(self.state[idx], step)
-            result = residual_armijo_line_search(R, phi_func, max_step=float(np.min(max_step_size)))
+            result = residual_armijo_line_search(R, phi_func, max_step=float(np.min(max_step_size)), step=step)
             self.step_size[idx] = result.step_size
         # Newton iteration and evaluation
         self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))

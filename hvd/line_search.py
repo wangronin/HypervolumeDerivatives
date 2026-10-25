@@ -29,12 +29,19 @@ def residual_armijo_line_search(
     max_evaluations: int = 10,
     minimum_step: float = 0.0,
     directional_derivative: float | None = None,
+    step: np.ndarray | None = None,
 ) -> LineSearchResult[Payload]:
     """Armijo search for the nonlinear-system merit ``0.5 * ||R||**2``.
 
     By default the direction is assumed to be a Newton direction, giving
     ``phi'(0) = -||R||**2``. ``evaluate(alpha)`` may additionally return an
     arbitrary payload, such as an already evaluated trial state.
+
+    Skip trial evaluations for a negligible initial merit, a zero initial
+    step size, or a supplied direction ``step`` whose components are close
+    to zero. Return the initial step size capped by ``max_step``; a zero
+    ``max_step`` always returns zero. Without a trial evaluation, the returned
+    residual and merit describe the input residual.
     """
     if not 0 < c1 < 1:
         raise ValueError("`c1` must lie strictly between zero and one.")
@@ -48,15 +55,15 @@ def residual_armijo_line_search(
     residual = np.asarray(residual)
     residual_norm_squared = float(np.vdot(residual.ravel(), residual.ravel()).real)
     phi0 = 0.5 * residual_norm_squared
+    alpha = min(float(initial_step), float(max_step))
+    if phi0 <= np.finfo(float).eps or (step is not None and np.all(np.isclose(step, 0))):
+        return LineSearchResult(alpha, residual.copy(), phi0, 0, True)
+
     derivative0 = -residual_norm_squared if directional_derivative is None else float(directional_derivative)
     if derivative0 >= 0 and phi0 > 0:
         raise ValueError("The search direction must be a descent direction for the residual merit.")
 
-    if phi0 <= np.finfo(float).eps or initial_step == 0 or max_step == 0:
-        return LineSearchResult(0.0, residual.copy(), phi0, 0, True)
-
-    alpha = min(float(initial_step), float(max_step))
-    best = LineSearchResult(0.0, residual.copy(), phi0, 0, False)
+    best = LineSearchResult(alpha, residual.copy(), phi0, 0, False)
     for evaluation in range(1, max_evaluations + 1):
         evaluated = evaluate(alpha)
         trial_residual, payload = evaluated if isinstance(evaluated, tuple) else (evaluated, None)
