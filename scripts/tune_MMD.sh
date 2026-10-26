@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=MMDN-tuning
-#SBATCH --array=0-15
+#SBATCH --array=0-3
 #SBATCH --ntasks=1
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=15
@@ -11,9 +11,10 @@
 #SBATCH --mail-type=END,FAIL
 
 problems=(
-    WFG2 WFG3 WFG4 WFG5 WFG6 WFG7 WFG8 WFG9
-    Eq1DTLZ1 Eq1DTLZ2 Eq1DTLZ3 Eq1DTLZ4
-    Eq1IDTLZ1 Eq1IDTLZ2 Eq1IDTLZ3 Eq1IDTLZ4
+    # WFG2 WFG3 WFG4 WFG5 WFG6 WFG7 WFG8 WFG9
+    # Eq1DTLZ1 Eq1DTLZ2 Eq1DTLZ3 Eq1DTLZ4
+    # Eq1IDTLZ1 Eq1IDTLZ2 Eq1IDTLZ3 Eq1IDTLZ4
+    IDTLZ1 IDTLZ2 IDTLZ3 IDTLZ4
 )
 algorithms=(NSGA-III)
 # Each problem occupies one task per selected algorithm.
