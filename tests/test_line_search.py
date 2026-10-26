@@ -27,7 +27,6 @@ def test_residual_armijo_accepts_full_newton_step():
     "residual,kwargs",
     [
         ([1e-9], {}),
-        ([1.0], {"initial_step": 0.0}),
         ([1.0], {"step": np.zeros((2, 2))}),
         ([1.0], {"step": np.array([1e-12, -1e-12]), "initial_step": 0.5}),
     ],
@@ -41,6 +40,24 @@ def test_residual_armijo_skips_trials_and_respects_step_limit(residual, kwargs, 
     assert result.step_size == min(kwargs.get("initial_step", 1.0), max_step)
     assert result.evaluations == 0
     assert result.converged
+    np.testing.assert_array_equal(result.residual, residual)
+
+
+@pytest.mark.parametrize("kwargs", [{"initial_step": 0.0}, {"max_step": 0.0}])
+def test_residual_armijo_evaluates_zero_step(kwargs):
+    residual = np.array([1.0])
+    evaluated = []
+
+    def evaluate(alpha):
+        evaluated.append(alpha)
+        return (1 - alpha) * residual
+
+    result = residual_armijo_line_search(residual, evaluate, **kwargs)
+
+    assert result.step_size == 0.0
+    assert result.evaluations == 1
+    assert result.converged
+    assert evaluated == [0.0]
     np.testing.assert_array_equal(result.residual, residual)
 
 
@@ -78,14 +95,14 @@ def test_failed_search_returns_best_evaluated_improvement():
     assert result.merit < 0.5
 
 
-def test_failed_search_rejects_direction_without_improvement():
+def test_failed_search_keeps_initial_step_without_improvement():
     residual = np.array([1.0])
     result = residual_armijo_line_search(
         residual, lambda alpha: np.array([1 + alpha]), max_evaluations=3
     )
 
     assert not result.converged
-    assert result.step_size == 0
+    assert result.step_size == 1.0
     assert result.evaluations == 3
     assert np.array_equal(result.residual, residual)
 

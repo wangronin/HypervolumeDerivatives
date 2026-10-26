@@ -5,7 +5,7 @@ import statistics
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, TypeVar, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -306,6 +306,20 @@ def get_logger(logger_id: str, file: Union[str, List[str]] = None, console: bool
 
     logger.propagate = False
     return logger
+
+
+_FunctionT = TypeVar("_FunctionT", bound=Callable[..., Any])
+
+
+def supports_batch(func: _FunctionT) -> _FunctionT:
+    """Declare that a callback accepts both points and populations.
+
+    A population result must equal stacking the individual point results, with
+    a leading population axis. This decorator marks the original callable;
+    it does not wrap or vectorize it.
+    """
+    setattr(func, "supports_batch", True)
+    return func
 
 
 def timeit(func):

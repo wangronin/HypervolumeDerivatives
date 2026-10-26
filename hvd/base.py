@@ -26,7 +26,8 @@ class State:
     ) -> None:
         """State object of numerical optimization
 
-        Callbacks accept a point `(n_var,)`. Populations are evaluated row by row.
+        Callbacks accept a point `(n_var,)`. Callbacks marked with
+        ``@supports_batch`` also accept populations; others are called row by row.
 
         Args:
             n_var (int): number of decision variable
@@ -66,27 +67,28 @@ class State:
 
     @staticmethod
     def evaluate(
-        function: ArrayFunction | None,
+        function: ArrayFunction,
         x: np.ndarray,
         output_shape: tuple[int, ...] | None = None,
     ) -> np.ndarray:
         """Evaluate any callback at one point or a population.
 
-        Callbacks receive one point at a time. ``output_shape`` describes one
-        point's output and keeps empty constraints and scalar outputs shape-stable.
+        Only callbacks declaring ``supports_batch`` receive populations directly.
+        Other callbacks receive one point at a time. ``output_shape`` describes
+        one point's output and keeps empty constraints and scalar outputs shape-stable.
         """
         x = np.asarray(x)
         if x.ndim not in (1, 2):
             raise ValueError("Evaluation input must have shape `(n_var,)` or `(n_points, n_var)`.")
 
         prefix = (len(x),) if x.ndim == 2 else ()
-        if function is None:
-            if output_shape is None:
-                raise ValueError("`output_shape` is required when the function is None.")
-            return np.zeros((*prefix, *output_shape))
-
+        values = (
+            function(x)
+            if x.ndim == 1 or getattr(function, "supports_batch", False)
+            else [function(point) for point in x]
+        )
         # State updates these arrays in place; JAX-backed NumPy views can be read-only.
-        values = np.array([function(point) for point in x] if x.ndim == 2 else function(x), copy=True)
+        values = np.array(values, copy=True)
         return values if output_shape is None else values.reshape(*prefix, *output_shape)
 
     @staticmethod
@@ -130,9 +132,7 @@ class State:
         ddG = self.evaluate(self.g_hess, x, (self.n_ieq, self.n_var, self.n_var))
         return np.concatenate((ddH, ddG), axis=-3)
 
-    def update(
-        self, X: np.ndarray, compute_gradient: bool = True, compute_hessian: bool = True
-    ) -> None:
+    def update(self, X: np.ndarray, compute_gradient: bool = True, compute_hessian: bool = True) -> None:
         self.X = np.asarray(X).copy()
         self.Y = self.evaluate(self.func, self.primal)
         self.J = self.eval_jac(self.primal) if compute_gradient else None

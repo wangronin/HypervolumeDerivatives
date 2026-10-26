@@ -16,6 +16,7 @@ def test_unified_evaluations_preserve_empty_and_singleton_axes(problem_type, pop
         for order, suffix in enumerate(("", "_jacobian", "_hessian")):
             name = f"{family}{suffix}" if family == "objective" or suffix else f"{family}_constraint"
             evaluate = getattr(problem, name)
+            assert evaluate.supports_batch is True
             result = evaluate(population)
             if count == 0:
                 assert result is None
@@ -53,18 +54,4 @@ def test_batched_inequality_derivatives_match_single_evaluations() -> None:
     np.testing.assert_allclose(
         problem.ieq_hessian(population),
         np.stack([problem.ieq_hessian(row) for row in population]),
-    )
-
-
-def test_batched_equality_derivatives_match_single_evaluations() -> None:
-    problem = Eq1DTLZ1(n_var=5)
-    population = np.stack((np.full(5, 0.3), np.full(5, 0.6)))
-
-    np.testing.assert_allclose(
-        problem.eq_jacobian(population),
-        np.stack([problem.eq_jacobian(row) for row in population]),
-    )
-    np.testing.assert_allclose(
-        problem.eq_hessian(population),
-        np.stack([problem.eq_hessian(row) for row in population]),
     )

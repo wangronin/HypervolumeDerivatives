@@ -7,7 +7,7 @@ import numpy as np
 from jax import jacfwd, jacrev, jit, vmap
 from numpy.typing import ArrayLike
 
-from ..utils import timeit
+from ..utils import supports_batch, timeit
 
 JaxFunction = Callable[[jnp.ndarray], jnp.ndarray]
 
@@ -116,15 +116,18 @@ class MOP:
             return None
         return np.array(function(x)).reshape(*x.shape[:-1], *output_shape)
 
+    @supports_batch
     def objective(self, x: np.ndarray) -> np.ndarray:
         return self._evaluate(x, self._obj_func, self._objective_batch, (self.n_obj,))
 
+    @supports_batch
     @timeit
     def objective_jacobian(self, x: np.ndarray) -> np.ndarray:
         return self._evaluate(
             x, self._objective_jacobian, self._objective_jacobian_batch, (self.n_obj, self.n_var)
         )
 
+    @supports_batch
     @timeit
     def objective_hessian(self, x: np.ndarray) -> np.ndarray:
         return self._evaluate(
@@ -208,28 +211,34 @@ class CMOP(MOP):
             self._ieq_jacobian = self._ieq_hessian = self._ieq_batch = None
             self._ieq_jacobian_batch = self._ieq_hessian_batch = None
 
+    @supports_batch
     def eq_constraint(self, x: np.ndarray) -> np.ndarray | None:
         return self._evaluate(x, self._eq, self._eq_batch, (self.n_eq_constr,))
 
+    @supports_batch
     def ieq_constraint(self, x: np.ndarray) -> np.ndarray | None:
         return self._evaluate(x, self._ieq, self._ieq_batch, (self.n_ieq_constr,))
 
+    @supports_batch
     @timeit
     def eq_jacobian(self, x: np.ndarray) -> np.ndarray | None:
         return self._evaluate(x, self._eq_jacobian, self._eq_jacobian_batch, (self.n_eq_constr, self.n_var))
 
+    @supports_batch
     @timeit
     def eq_hessian(self, x: np.ndarray) -> np.ndarray | None:
         return self._evaluate(
             x, self._eq_hessian, self._eq_hessian_batch, (self.n_eq_constr, self.n_var, self.n_var)
         )
 
+    @supports_batch
     @timeit
     def ieq_jacobian(self, x: np.ndarray) -> np.ndarray | None:
         return self._evaluate(
             x, self._ieq_jacobian, self._ieq_jacobian_batch, (self.n_ieq_constr, self.n_var)
         )
 
+    @supports_batch
     @timeit
     def ieq_hessian(self, x: np.ndarray) -> np.ndarray | None:
         return self._evaluate(
