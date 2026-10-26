@@ -45,4 +45,5 @@ srun --ntasks=1 --cpus-per-task="${workers}" --cpu-bind=cores \
     --algorithm "${algorithm}" \
     --workers "${workers}" \
     --output-dir "${HOME}/data/mmd-tuning" \
+    --generation 600 \
     "$@"
