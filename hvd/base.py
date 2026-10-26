@@ -67,7 +67,7 @@ class State:
 
     @staticmethod
     def evaluate(
-        function: ArrayFunction,
+        function: ArrayFunction | None,
         x: np.ndarray,
         output_shape: tuple[int, ...] | None = None,
     ) -> np.ndarray:
@@ -76,12 +76,18 @@ class State:
         Only callbacks declaring ``supports_batch`` receive populations directly.
         Other callbacks receive one point at a time. ``output_shape`` describes
         one point's output and keeps empty constraints and scalar outputs shape-stable.
+        A missing callback returns zeros and requires ``output_shape``.
         """
         x = np.asarray(x)
         if x.ndim not in (1, 2):
             raise ValueError("Evaluation input must have shape `(n_var,)` or `(n_points, n_var)`.")
 
         prefix = (len(x),) if x.ndim == 2 else ()
+        if function is None:
+            if output_shape is None:
+                raise ValueError("`output_shape` is required when the function is None.")
+            return np.zeros((*prefix, *output_shape))
+
         values = (
             function(x)
             if x.ndim == 1 or getattr(function, "supports_batch", False)
