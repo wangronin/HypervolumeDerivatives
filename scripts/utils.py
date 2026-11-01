@@ -33,11 +33,13 @@ def kernel_theta(multiplier: float, approximation: np.ndarray, reference: np.nda
 
 def get_run_instances(problem: str, algorithm: str, generation: int, data_path: Path) -> list[int]:
     """Return the available run IDs in numerical order for one dataset."""
-    return sorted({
-        int(path.name.split("_run_")[1].split("_")[0])
-        for name in {problem, problem.upper()}
-        for path in data_path.glob(f"{name}_{algorithm}_run_*_lastpopu_x_gen{generation}.csv")
-    })
+    return sorted(
+        {
+            int(path.name.split("_run_")[1].split("_")[0])
+            for name in {problem, problem.upper()}
+            for path in data_path.glob(f"{name}_{algorithm}_run_*_lastpopu_x_gen{generation}.csv")
+        }
+    )
 
 
 def get_data_prefix(problem: str, algorithm: str, run: int, generation: int, data_path: Path) -> str:
@@ -93,9 +95,7 @@ def read_reference_set_data(
         i = len(ref)
         if 11 < 2 and problem in ["DTLZ6", "DTLZ7"]:
             # for DTLZ7 we need to load the dense fillings of the reference set
-            r = pd.read_csv(
-                f"{data_path}/{prefix}_filling_comp{i+1}_gen{generation}.csv", header=None
-            ).values
+            r = pd.read_csv(f"{data_path}/{prefix}_filling_comp{i+1}_gen{generation}.csv", header=None).values
         else:
             if n_cluster == 1:
                 ref_file = f"{data_path}/{prefix}_ref_gen{generation}.csv"
@@ -182,7 +182,8 @@ def plot(
     plot_func = {2: plot_2d, 3: plot_3d, 4: plot_4d}[ndim]
     # DpN records medoid shifts; MMD indicators own their reference history.
     reference_history = (
-        optimizer.history_medoids if hasattr(optimizer, "history_medoids")
+        optimizer.history_medoids
+        if hasattr(optimizer, "history_medoids")
         else optimizer.indicator.history_reference_set
     )
     plot_func(
@@ -374,7 +375,7 @@ def plot_3d(
     )
     lgnd = ax1.legend(
         handles=lines,
-        labels=["Y0", "Y-final", "Pareto front"],
+        labels=["Y-final", "Pareto front"],
         loc="lower center",
         bbox_to_anchor=(0.5, 0.1),
         ncol=2,

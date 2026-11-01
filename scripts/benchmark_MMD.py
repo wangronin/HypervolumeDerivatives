@@ -25,14 +25,6 @@ from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
 from hvd.problems import (
     CMOP,
-    Eq1DTLZ1,
-    Eq1DTLZ2,
-    Eq1DTLZ3,
-    Eq1DTLZ4,
-    Eq1IDTLZ1,
-    Eq1IDTLZ2,
-    Eq1IDTLZ3,
-    Eq1IDTLZ4,
     IDTLZ1,
     IDTLZ2,
     IDTLZ3,
@@ -46,6 +38,14 @@ from hvd.problems import (
     WFG7,
     WFG8,
     WFG9,
+    Eq1DTLZ1,
+    Eq1DTLZ2,
+    Eq1DTLZ3,
+    Eq1DTLZ4,
+    Eq1IDTLZ1,
+    Eq1IDTLZ2,
+    Eq1IDTLZ3,
+    Eq1IDTLZ4,
 )
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
@@ -112,15 +112,13 @@ def get_config(args: argparse.Namespace) -> tuple[MMDConfig, argparse.Namespace]
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Benchmark MMD Newton on IDTLZ, WFG, Eq1DTLZ, and Eq1IDTLZ."
-    )
+    parser = argparse.ArgumentParser(description="Benchmark MMD Newton on IDTLZ, WFG, Eq1DTLZ, and Eq1IDTLZ.")
     parser.add_argument("problem", choices=PROBLEMS)
     parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
     parser.add_argument("--data-path", type=Path, default=ROOT / "mmd_data")
     parser.add_argument("--tuning-dir", type=Path, default=ROOT / "mmd_tuning_results")
-    parser.add_argument("--generation", type=int, default=None)
-    parser.add_argument("--max-iters", type=int, default=None)
+    parser.add_argument("--generation", type=int, default=600)
+    parser.add_argument("--max-iters", type=int, default=5)
     parser.add_argument("--matching", action="store_true", dest="matching")
     parser.add_argument("--n-jobs", type=int, default=1)
     parser.add_argument("--plot-dir", type=Path, default=ROOT / "plots")

@@ -63,7 +63,7 @@ def residual_armijo_line_search(
     if derivative0 >= 0 and phi0 > 0:
         raise ValueError("The search direction must be a descent direction for the residual merit.")
 
-    best = LineSearchResult(alpha, residual.copy(), phi0, 0, False)
+    best = LineSearchResult(0, residual.copy(), phi0, 0, False)
     for evaluation in range(1, max_evaluations + 1):
         evaluated = evaluate(alpha)
         trial_residual, payload = evaluated if isinstance(evaluated, tuple) else (evaluated, None)

@@ -176,10 +176,10 @@ class MMDN:
         return self.state.primal, self.state.Y, self.stop_dict
 
     def newton_iteration(self):
-        # evaluate first so matching indicators establish their current targets
-        self.curr_indicator_value = self.indicator.compute(Y=self.state.Y)
         # initial shifting of reference point or if the reference is very close to the approximation point
         self._shift_reference_set()
+        # evaluate first so matching indicators establish their current targets
+        self.curr_indicator_value = self.indicator.compute(Y=self.state.Y)
         # compute the Newton step
         self.step, self.R = self._compute_netwon_step()
         max_step_size = None
@@ -318,7 +318,7 @@ class MMDN:
         # TODO: use the backtracking line search in scipy
         """backtracking line search with Armijo's condition"""
         c1 = 1e-4
-        if 1 < 2 and np.all(np.isclose(step, 0)):
+        if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
             return np.ones((self.N, 1))
 
         def phi_func(alpha, i):

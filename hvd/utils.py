@@ -5,7 +5,8 @@ import statistics
 import sys
 import time
 from collections import defaultdict
-from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple, TypeVar, Union
+from typing import (Any, Callable, Dict, Iterable, List, Sequence, Tuple,
+                    TypeVar, Union)
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -50,12 +51,12 @@ def Nd_vector_to_matrix(
 def plot_reference_set_matching(matched_medoids: np.ndarray, Y: np.ndarray) -> None:
     colors = plt.get_cmap("tab20").colors
     colors = [colors[2], colors[12], colors[13], colors[15], colors[19]]
-    colors = ["m", "c"]
     fig = plt.figure(figsize=plt.figaspect(1))
     plt.subplots_adjust(bottom=0.08, top=0.9, right=0.93, left=0.05)
     ax0 = fig.add_subplot(1, 1, 1, projection="3d")
     ax0.set_box_aspect((1, 1, 1))
     ax0.view_init(45, 45)
+    # plot the reference points
     ax0.plot(
         matched_medoids[:, 0],
         matched_medoids[:, 1],
@@ -63,9 +64,16 @@ def plot_reference_set_matching(matched_medoids: np.ndarray, Y: np.ndarray) -> N
         "g+",
         ms=10,
         alpha=0.6,
+        color="k",
     )
+    # plot the approximation points
     for i, Y_ in enumerate(Y):
-        ax0.plot(Y_[:, 0], Y_[:, 1], Y_[:, 2], mfc=colors[i], ls="none", marker=".", ms=10, alpha=0.8)
+        ax0.plot(
+            Y_[:, 0], Y_[:, 1], Y_[:, 2], mfc=colors[i], mec="none", ls="none", marker=".", ms=8, alpha=0.8
+        )
+    # plot the matching pairs
+    for start, end in zip(matched_medoids, Y[0]):
+        ax0.plot(*zip(start, end), color="green", linestyle="dashed", linewidth=1, markersize=12)
 
     ax0.set_title("reference set")
     ax0.set_xlabel(r"$f_1$")
