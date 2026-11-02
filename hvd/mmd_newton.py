@@ -319,7 +319,8 @@ class MMDN:
         """backtracking line search with Armijo's condition"""
         c1 = 1e-4
         if np.any(np.isclose(np.median(step[:, : self.dim_p]), np.finfo(np.double).resolution)):
-            return np.ones((self.N, 1))
+            limits = np.ones(self.N) if max_step_size is None else np.asarray(max_step_size)
+            return limits.reshape(-1, 1)
 
         def phi_func(alpha, i):
             state = deepcopy(self.state)

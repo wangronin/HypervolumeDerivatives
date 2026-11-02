@@ -16,6 +16,8 @@
 *.pkl
 data/
 model/
+mmd_tuning_results/
+plots/
 hv/
 RSG/
 *gen*/

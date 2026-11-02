@@ -247,20 +247,6 @@ The WFG hypervolume reference points in `scripts/ref_point.csv` are
 This point also exceeds every stored WFG objective value. It is used for
 hypervolume evaluation; the tuning objective remains averaged Hausdorff distance.
 
-WFG1 uses the original pymoo transformation formulas adapted to JAX, with
-ordinary automatic differentiation.
-Its `y**0.02` transformation is singular at zero and sensitive to rounding;
-JIT can produce different floating-point values from pymoo near zero.
-
-Keep 17 significant digits when exporting WFG1 populations, including any step
-that splits combined files into `lastpopu_x` and `lastpopu_y`. The generator
-checks cached objectives against `F(X)` before export; the loader uses
-round-trip decimal conversion. Fifteen-digit export reproduced an objective
-error of about 0.109 in a fresh pymoo WFG1 run. The prepared data also contained
-four mismatched X/Y rows: NSGA-II run 4, rows 50, 188, and 225; and run 16,
-row 7 (one-based). All original combined population pairs agreed with pymoo
-to machine precision; these problems were introduced after population export.
-
 ## DpN benchmarks
 
 `scripts/benchmark_DpN.py` is the common runner for CF1–CF10, ZDT1–ZDT4/ZDT6,
@@ -303,3 +289,28 @@ Also, we include, in folder `mathematica/`, several cases of the hypervolume ind
 * [[WED+22]](https://www.preprints.org/manuscript/202211.0103/v1) Wang, H.; Emmerich, Michael T. M.; Deutz, A.; Hernández, V.A.S.; Schütze, O. The Hypervolume Newton Method for Constrained Multi-objective Optimization Problems. _Preprints_ **2022**, 2022110103.
 
 * [[DEW22]](https://arxiv.org/abs/2211.04171) Deutz, A.; Emmerich, Michael T. M.; Wang, H. The Hypervolume Indicator Hessian Matrix: Analytical Expression, Computational Time Complexity, and Sparsity, _arXiv_, 2022.
+
+## WFG fronts and limitations
+
+Efficient decisions are nondominated over all feasible decisions; their objective
+image is the Pareto front ([Huband et al., 2006, Section III-A](https://doi.org/10.1109/TEVC.2005.861417)).
+`get_pareto_set(N)` constructs inverse representatives from the published WFG
+transformations. WFG2 restricts samples to efficient disconnected branches;
+WFG3 includes the line and sheet in [Ishibuchi et al., 2016, Eq. (25)](https://doi.org/10.1109/TEVC.2015.2505784).
+
+- **WFG1:** the `0.02` power amplifies float64 roundoff, so evaluated nominal
+  efficient decisions may differ substantially from the analytical front.
+  Failed checks raise `FloatingPointError`; `allow_approximate=True` returns
+  nominal decisions with a warning. The full Jacobian/Hessian are undefined at
+  efficient decisions. Preserve 17 significant digits when exporting populations.
+- **WFG3:** complete fronts/sets currently support only two or three objectives.
+- **Set sampling:** returns one inverse representative per target point, not all
+  inverse branches. Custom bounds may exclude the selected representatives.
+
+View all nine fronts against theoretical meshes interactively (drag to rotate):
+
+```shell
+python scripts/plot_WFG_final_fronts.py
+```
+
+Use `--output fronts.png` to save an image, or add `--no-show` for saving only.

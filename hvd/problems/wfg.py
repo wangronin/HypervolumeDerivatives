@@ -4,6 +4,7 @@ WFG contains floor, absolute-value, and piecewise transformations, so its
 derivatives are meaningful piecewise and remain non-smooth at their kinks.
 """
 
+import warnings
 from typing import ClassVar
 
 import jax.numpy as jnp
@@ -11,6 +12,282 @@ import numpy as np
 from numpy.typing import ArrayLike
 
 from .base import CMOP
+
+# Efficient means nondominated over all feasible decisions (Huband et al.,
+# 2006, Sec. III-A, doi:10.1109/TEVC.2005.861417). Set samples below are derived
+# inverse representatives, not a published complete parameterization. WFG3's
+# full 3D front follows Ishibuchi et al. (2016), Eq. (25),
+# doi:10.1109/TEVC.2015.2505784.
+# Limitations: WFG1's 0.02 power amplifies float64 roundoff; failed set/front
+# roundtrips raise unless allow_approximate=True (warns). Its full Jacobian and
+# Hessian are undefined at efficient decisions. Full WFG3 fronts/sets support
+# only 2 or 3 objectives. Sets select one inverse branch per target point;
+# custom bounds may exclude these representatives.
+
+
+def _wfg_front_integer_at_least(value: int, minimum: int, name: str) -> int:
+    if (
+        isinstance(value, (bool, np.bool_))
+        or not isinstance(value, (int, np.integer))
+        or value < minimum
+    ):
+        raise ValueError(f"{name} must be an integer >= {minimum}.")
+    return int(value)
+
+
+def _wfg_cover_candidates(candidates: np.ndarray, n_points: int, forced: int) -> np.ndarray:
+    """Cover objective-space candidates in raw Euclidean distance."""
+    selected = list(range(forced))
+    minimum_squared = np.full(len(candidates), np.inf)
+    for index in selected:
+        minimum_squared = np.minimum(
+            minimum_squared, np.sum((candidates - candidates[index]) ** 2, axis=1)
+        )
+    minimum_squared[selected] = -1.0
+    while len(selected) < n_points:
+        index = int(np.argmax(minimum_squared))
+        selected.append(index)
+        minimum_squared = np.minimum(
+            minimum_squared, np.sum((candidates - candidates[index]) ** 2, axis=1)
+        )
+        minimum_squared[selected] = -1.0
+    return candidates[selected]
+
+
+def _wfg2_front_intervals() -> tuple[tuple[float, float], ...]:
+    """Closures of the strict-record intervals of u*cos(5*pi*u)**2.
+
+    The first left endpoint is included. Subsequent left endpoints tie an
+    earlier record peak and are dominated, so the sampler excludes them.
+    """
+    from scipy.optimize import brentq
+
+    def record(u: float) -> float:
+        return u * np.cos(5 * np.pi * u) ** 2
+
+    def derivative(u: float) -> float:
+        return np.cos(5 * np.pi * u) ** 2 - 5 * np.pi * u * np.sin(10 * np.pi * u)
+
+    intervals = []
+    previous_record = 0.0
+    for index in range(6):
+        center = index / 5
+        right = 1.0 if index == 5 else brentq(derivative, center, center + 0.05, xtol=1e-15)
+        left = 0.0 if index == 0 else brentq(
+            lambda u: record(u) - previous_record, center - 0.1, center, xtol=1e-15
+        )
+        intervals.append((left, right))
+        previous_record = record(right)
+    return tuple(intervals)
+
+
+def _wfg12_shape(positions: np.ndarray, number: int) -> np.ndarray:
+    """Zero-distance convex/mixed (WFG1) or convex/disconnected (WFG2) shapes."""
+    # Half-angle identities avoid cancellation close to the shape boundaries.
+    convex = 2 * np.sin(np.pi * positions / 4) ** 2
+    complement = 2 * np.sin(np.pi * (1 - positions) / 4) ** 2
+    convex[positions == 1] = 1.0
+    complement[positions == 0] = 1.0
+    n_obj = positions.shape[1] + 1
+    columns = [np.prod(convex, axis=1)]
+    for objective in range(2, n_obj):
+        index = n_obj - objective
+        columns.append(np.prod(convex[:, :index], axis=1) * complement[:, index])
+
+    u = positions[:, 0]
+    if number == 1:
+        remainder = 1 - u
+        angle = 10 * np.pi * remainder
+        last = remainder - np.sin(angle) / (10 * np.pi)
+        small = angle < 0.1
+        squared = angle[small] ** 2
+        last[small] = remainder[small] * squared * (
+            1 / 6 - squared / 120 + squared**2 / 5040 - squared**3 / 362880
+        )
+    else:
+        last = 1 - u * np.cos(5 * np.pi * u) ** 2
+    last[u == 0] = 1.0
+    last[u == 1] = 0.0
+    return np.column_stack((*columns, last))
+
+
+def _wfg12_front(number: int, n_obj: int, n_points: int) -> np.ndarray:
+    """Cover the analytic WFG1/2 front without evaluating efficient decisions."""
+    scales = 2.0 * np.arange(1, n_obj + 1)
+    axes = np.eye(n_obj) * scales
+    if n_points == n_obj:
+        return axes
+
+    from scipy.stats import qmc
+
+    dimension = n_obj - 1
+    intervals = ((0.0, 1.0),) if number == 1 else _wfg2_front_intervals()
+    per_branch = max(256, (32 * n_points + len(intervals) - 1) // len(intervals))
+    exponent = (per_branch - 1).bit_length()
+    sample = qmc.Sobol(dimension, scramble=True, seed=711).random_base2(exponent)
+    face_count = min(len(sample), max(32, 2 * n_points // len(intervals)))
+    # Representatives of the remaining convex shape's objective-axis limits.
+    angular_corners = np.array([
+        [1.0] * (dimension - 1 - index) + [0.0] * index
+        for index in range(dimension)
+    ]).reshape(dimension, dimension - 1)
+    positions = []
+    peaks = []
+    for branch, (left, right) in enumerate(intervals):
+        block = sample.copy()
+        block[:, 0] = left + (right - left) * block[:, 0]
+        positions.append(block)
+        for coordinate in range(1, dimension):
+            for side in (0.0, 1.0):
+                face = block[:face_count].copy()
+                face[:, coordinate] = side
+                positions.append(face)
+        # Sample both u boundaries, moving inside later open branch starts.
+        lower = left if branch == 0 else left + (right - left) / (2**exponent)
+        for endpoint in (lower, right):
+            face = sample[:face_count].copy()
+            face[:, 0] = endpoint
+            positions.append(face)
+            positions.append(np.column_stack((np.full(dimension, endpoint), angular_corners)))
+        if number == 2:
+            peak = np.full(dimension, 0.5)
+            peak[0] = right
+            peaks.append(peak)
+
+    candidates = _wfg12_shape(np.vstack(positions), number) * scales
+    forced = axes
+    if number == 2 and n_points >= n_obj + len(peaks):
+        # Keep every disconnected component, including the small first one.
+        forced = np.vstack((axes, _wfg12_shape(np.array(peaks), number) * scales))
+        _, unique = np.unique(forced, axis=0, return_index=True)
+        forced = forced[np.sort(unique)]
+    return _wfg_cover_candidates(np.vstack((forced, candidates)), n_points, len(forced))
+
+
+def _wfg3_front(n_obj: int, n_points: int) -> np.ndarray:
+    """Cover WFG3's full front, including its three-objective sheet.
+
+    Ishibuchi, Masuda and Nojima (2016), doi:10.1109/TEVC.2015.2505784,
+    equations (17) and (25). The distance-zero line alone is incomplete for
+    three or more objectives. The full higher-dimensional front is unsupported.
+    """
+    if n_obj > 3:
+        raise NotImplementedError(
+            "WFG3's full Pareto front is implemented for 2 and 3 objectives only; "
+            "a distance-zero line omits its nondegenerate part for n_obj >= 3."
+        )
+    if n_obj == 2:
+        t = np.linspace(0.0, 1.0, n_points)
+        return np.column_stack((2 * t, 4 * (1 - t)))
+
+    from scipy.stats import qmc
+
+    exponent = (max(1024, 32 * n_points) - 1).bit_length()
+    u = qmc.Sobol(2, scramble=True, seed=711).random_base2(exponent)
+    edge_exponent = (max(32, 2 * n_points) - 1).bit_length()
+    t = np.linspace(0.0, 1.0, 2**edge_exponent + 1)
+    line = np.column_stack((t, 2 * t, 6 * (1 - t)))
+
+    # The sheet has a in (2/3, 1] and d in (0, 1]. Neither its a=2/3
+    # boundary nor the d=0 duplicate line belongs among sheet candidates.
+    a = np.r_[2 / 3 + u[:, 0] / 3, np.ones(len(t) - 1), 2 / 3 + t[1:] / 3]
+    d = np.r_[u[:, 1], t[1:], np.ones(len(t) - 1)]
+    sheet = np.column_stack((d + a * (1 + d), d + 2 * a * (1 - d), d + 6 * (1 - a)))
+    extremes = np.array([[0.0, 0.0, 6.0], [1.0, 2.0, 0.0], [3.0, 1.0, 1.0]])
+    return _wfg_cover_candidates(np.vstack((extremes, line, sheet)), n_points, forced=3)
+
+
+def _wfg_ellipsoid_cover(n_obj: int, n_points: int) -> np.ndarray:
+    scales = 2.0 * np.arange(1, n_obj + 1)
+    axes = np.eye(n_obj)
+    if n_points == n_obj:
+        return axes * scales
+
+    from scipy.special import ndtri
+    from scipy.stats import qmc
+
+    # Sobol coordinates transformed to absolute normal directions sample the
+    # normalized sphere. Only the final covering selection uses raw scales.
+    exponent = (max(1024, 32 * n_points) - 1).bit_length()
+    u = qmc.Sobol(n_obj, scramble=True, seed=711).random_base2(exponent)
+    interior = np.abs(ndtri(np.clip(u, 1e-15, 1 - 1e-15)))
+    interior /= np.linalg.norm(interior, axis=1, keepdims=True)
+
+    edge_exponent = (max(32, 2 * n_points) - 1).bit_length()
+    angles = np.linspace(0.0, np.pi / 2, 2**edge_exponent + 1)[1:-1]
+    parts = [axes]
+    for first in range(n_obj):
+        for second in range(first + 1, n_obj):
+            arc = np.zeros((len(angles), n_obj))
+            arc[:, first] = np.cos(angles)
+            arc[:, second] = np.sin(angles)
+            parts.append(arc)
+    parts.append(interior)
+    candidates = np.vstack(parts) * scales
+
+    # Force every objective-axis endpoint, then greedily reduce uncovered raw
+    # Euclidean distances. Candidate order resolves ties deterministically.
+    return _wfg_cover_candidates(candidates, n_points, forced=n_obj)
+
+
+def _analytic_wfg_front(number: int, n_obj: int = 3, N: int = 500) -> np.ndarray:
+    """Return exactly N analytic target points for WFG1–9.
+
+    No decision-space variables, problem objective evaluation or global RNG
+    state enter the construction. WFG4–9 return identical fronts at equal M,N.
+    """
+    number = _wfg_front_integer_at_least(number, 1, "number")
+    if number > 9:
+        raise ValueError("number must identify WFG1–9.")
+    n_obj = _wfg_front_integer_at_least(n_obj, 2, "n_obj")
+    N = _wfg_front_integer_at_least(N, n_obj, "N")
+    if number in (1, 2):
+        return _wfg12_front(number, n_obj, N)
+    if number == 3:
+        return _wfg3_front(n_obj, N)
+    return _wfg_ellipsoid_cover(n_obj, N)
+
+
+def _convex_front_positions(front: np.ndarray, scales: np.ndarray) -> np.ndarray:
+    """Invert the convex shape's nested homogeneous gauge."""
+    normalized = front[:, :-1] / scales[:-1]
+    gauges = [normalized[:, 0].copy()]
+    for coordinate in range(1, normalized.shape[1]):
+        value = normalized[:, coordinate]
+        gauges.append(gauges[-1] + value + np.sqrt(2 * gauges[-1] * value))
+    columns = []
+    for index in range(len(gauges) - 1, -1, -1):
+        if index == len(gauges) - 1:
+            cosine_complement = gauges[index]
+        else:
+            cosine_complement = np.divide(
+                gauges[index], gauges[index + 1],
+                out=np.zeros_like(gauges[index]), where=gauges[index + 1] > 0,
+            )
+        columns.append(4 * np.arcsin(np.sqrt(np.clip(cosine_complement, 0, 1) / 2)) / np.pi)
+    return np.clip(np.column_stack(columns), 0.0, 1.0)
+
+
+def _efficient_decisions_1_to_3(problem, front: np.ndarray) -> np.ndarray:
+    """Invert the WFG1–3 transformations, including WFG3's efficient sheet."""
+    gap = problem.k // (problem.n_obj - 1)
+    values = np.full((len(front), problem.n_var), 0.35)
+    if problem.problem_number in (1, 2):
+        positions = _convex_front_positions(front, np.asarray(problem.S))
+        if problem.problem_number == 1:
+            positions = positions**50
+        values[:, :problem.k] = np.repeat(positions, gap, axis=1)
+    elif problem.n_obj == 2:
+        values[:, :problem.k] = front[:, 0, None] / 2
+    else:
+        distance = np.clip((6 * front[:, 0] + 3 * front[:, 1] + 2 * front[:, 2] - 12) / 11, 0, 1)
+        position = np.clip(1 + (distance - front[:, 2]) / 6, 0, 1)
+        values[:, :gap] = position[:, None]
+        values[:, gap:problem.k] = 1.0
+        # The linear shift maps this suffix to pairs (d,0), whose
+        # nonseparable reduction is (d+0+2*abs(d-0))/3=d.
+        values[:, problem.k::2] += 0.65 * distance[:, None]
+    return values * problem.xu
 
 
 def _correct_to_01(x: jnp.ndarray, epsilon: float = 1.0e-10) -> jnp.ndarray:
@@ -360,27 +637,54 @@ class WFG(CMOP):
         )
         return values[0]
 
-    def _optimal_positions(self, positions: np.ndarray) -> np.ndarray:
-        suffix = np.full((len(positions), self.l), 0.35)
-        return np.column_stack((positions, suffix)) * self.xu
+    def get_pareto_set(self, N: int = 500, *, allow_approximate: bool = False) -> np.ndarray:
+        """Return N decision representatives of the analytic target front.
 
-    def get_pareto_set(self, N: int = 500) -> np.ndarray:
-        extremes = np.array(
-            [
-                [(row >> column) & 1 for column in range(self.k)]
-                for row in range(2**self.k)
-            ],
-            dtype=float,
-        )
-        n_interior = max(0, N - len(extremes))
-        interior = np.random.random((n_interior, self.k))
-        if self.problem_number == 1:
-            interior = interior**50
-        positions = np.row_stack((extremes, interior)) if n_interior else extremes
-        return self._optimal_positions(positions)
+        One inverse preimage is selected for each row of get_pareto_front(N),
+        rather than enumerating every inverse branch of the infinite efficient
+        set. Bounds and objective roundtrips are checked before returning.
+
+        WFG1 generally cannot reproduce its exact efficient set in float64.
+        A failed WFG1 roundtrip raises FloatingPointError by default; explicitly
+        allowing approximation returns nominal decisions with a RuntimeWarning.
+        This does not alter objective values or derivative conventions.
+        """
+        if not isinstance(allow_approximate, (bool, np.bool_)):
+            raise ValueError("allow_approximate must be a boolean.")
+        front = self.get_pareto_front(N)
+        if self.problem_number <= 3:
+            decisions = _efficient_decisions_1_to_3(self, front)
+        else:
+            from ._wfg_pareto import efficient_decisions_4_to_9
+
+            decisions = efficient_decisions_4_to_9(self, front)
+        if (
+            not np.isfinite(decisions).all()
+            or np.any(decisions < self.xl)
+            or np.any(decisions > self.xu)
+        ):
+            raise ValueError("The efficient-decision construction is incompatible with these WFG bounds.")
+        actual = self.objective(decisions)
+        if not np.all(np.isfinite(actual)) or not np.allclose(actual, front, rtol=1e-9, atol=1e-9):
+            error = float(np.max(np.abs(actual - front)))
+            if self.problem_number != 1:
+                raise FloatingPointError(
+                    f"WFG{self.problem_number} inverse objective roundtrip failed: max error {error:.6g}."
+                )
+            message = (
+                "WFG1's nominal efficient decisions fail the float64 objective roundtrip "
+                f"(max error {error:.6g}). Decimal optimal distance coordinates and the "
+                "0.02 power are numerically ill-conditioned; the analytic target remains "
+                "the reference. allow_approximate=True explicitly returns nominal decisions "
+                "without certifying numerical efficiency."
+            )
+            if not allow_approximate:
+                raise FloatingPointError(message)
+            warnings.warn(message, RuntimeWarning, stacklevel=2)
+        return decisions
 
     def get_pareto_front(self, N: int = 500) -> np.ndarray:
-        return self.objective(self.get_pareto_set(N))
+        return _analytic_wfg_front(self.problem_number, self.n_obj, N)
 
 
 class WFG1(WFG):
@@ -414,24 +718,6 @@ class WFG7(WFG):
 class WFG8(WFG):
     problem_number = 8
 
-    def _optimal_positions(self, positions: np.ndarray) -> np.ndarray:
-        values = positions
-        for _ in range(self.l):
-            degree = values.mean(axis=1)
-            tmp1 = np.abs(np.floor(0.5 - degree) + 0.98 / 49.98)
-            tmp2 = 0.02 + 49.98 * (0.98 / 49.98 - (1 - 2 * degree) * tmp1)
-            suffix = 0.35 ** (tmp2**-1)
-            values = np.column_stack((values, suffix))
-        return values * self.xu
-
 
 class WFG9(WFG):
     problem_number = 9
-
-    def _optimal_positions(self, positions: np.ndarray) -> np.ndarray:
-        values = np.column_stack((positions, np.zeros((len(positions), self.l))))
-        values[:, -1] = 0.35
-        for index in range(self.n_var - 2, self.k - 1, -1):
-            degree = values[:, index + 1 :].mean(axis=1)
-            values[:, index] = 0.35 ** ((0.02 + 1.96 * degree) ** -1)
-        return values * self.xu

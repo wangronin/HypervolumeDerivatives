@@ -109,3 +109,8 @@ class _PymooProblemAdapter(PymooProblem):
 
     def pareto_front(self, *args, **kwargs) -> np.ndarray:
         return self._problem.get_pareto_front(*args, **kwargs)
+
+    def pareto_set(self, *args, **kwargs) -> np.ndarray | None:
+        """Expose the native decision sampler with its native arguments."""
+        method = getattr(self._problem, "get_pareto_set", None)
+        return None if method is None else method(*args, **kwargs)
