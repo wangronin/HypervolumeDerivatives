@@ -33,7 +33,7 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-path = "./data/HVSS/"
+path = "./test_data/HVSS/"
 problem = DTLZ2(n_var=7, boundary_constraints=True)
 pareto_front = problem.get_pareto_front()
 

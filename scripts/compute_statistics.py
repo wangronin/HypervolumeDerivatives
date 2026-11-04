@@ -1,104 +1,131 @@
+"""Read paired GD/IGD CSVs and write compact AHD comparison tables."""
+
+import argparse
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
-from scipy.stats import mannwhitneyu
+from scipy.stats import wilcoxon
 from statsmodels.stats.multitest import multipletests
 
-gen = 300  # the number of MOEA iterations
-pvalues = []
-stats = []
-index = []
-stats_func = lambda x: [np.median(x), np.quantile(x, 0.9) - np.quantile(x, 0.1)]
-# MOEA algorithms to compare to
-MOEAs = [
-    "NSGA-II",
-    "NSGA-III",
-    # "SMS-EMOA",
-    # "MOEAD",
-]
-method = "MMDboot"
-# test problem to include
-problems = [
-    # "CF1",
-    # "CF2",
-    # "CF3",
-    # "CF4",
-    # "CF5",
-    # "CF6",
-    # "CF7",
-    # "CF8",
-    # "CF9",
-    # "CF10",
-    "ZDT1",
-    "ZDT2",
-    "ZDT3",
-    "ZDT4",
-    # "ZDT6",
-    # "DTLZ1",
-    # "DTLZ2",
-    # "DTLZ3",
-    # "DTLZ4",
-    # "DTLZ5",
-    # "DTLZ6",
-    # "DTLZ7",
-    # "IDTLZ1",
-    # "IDTLZ2",
-    # "IDTLZ3",
-    # "IDTLZ4",
-    # "CONV4_2F",
-]
-
-for moea in MOEAs:
-    for problem in problems:
-        try:
-            data1 = pd.read_csv(f"./results/{problem}-{method}-{moea}-{gen}.csv")
-            # data2 = pd.read_csv(f"./results/{problem}-MMD-{moea}-{gen}.csv")
-            data2 = pd.read_csv(f"./results/{problem}-{moea}-{gen}.csv")
-        except:
-            continue
-        x, y = np.maximum(data1.GD.values, data1.IGD.values), np.maximum(data2.GD.values, data2.IGD.values)
-        # if moea == "NSGA-III" and problem == "Eq1IDTLZ4":
-        #     x = x[x <= 1.7]
-        # filtering out the outliers in DpN
-        # q = np.quantile(x, q=(0.25, 0.75))
-        # iqr = q[1] - q[0]
-        # x = x[(x > q[0] - 1.5 * iqr) & (x < q[1] + 1.5 * iqr)]
-        pvalue = mannwhitneyu(x=x, y=y, alternative="two-sided").pvalue
-        pvalues.append(pvalue)
-        stats.append([stats_func(x), stats_func(y)])
-        index.append([moea, problem])
-
-reject, pvals_corrected, _, _ = multipletests(pvalues, alpha=0.05, method="fdr_bh")
-win, tie, loose = 0, 0, 0
-for k, (n, m) in enumerate(stats):
-    x, y = n[0], m[0]
-    if reject[k]:
-        if x < y:
-            win += 1
-            s = "$\\uparrow$"
-        else:
-            loose += 1
-            s = "$\\downarrow$"
-    else:
-        tie += 1
-        s = "$\\leftrightarrow$"
-    stats[k] = [f"{n[0]:.4f}({n[1]:.4e}){s}", f"{m[0]:.4f}({m[1]:.4e})"]
-
-summary = ["+/$\\approx$/-", "", f"{win}/{tie}/{loose}", ""]
-data = pd.DataFrame(
-    np.vstack([np.hstack([index, stats]), summary]),
-    # columns=["Method", "Problem", "Newton (iter = 5)", "MOEA (iter = 300 + 5 \\times (4 + 10n)"],
-    columns=["Method", "Problem", "MMD w/ bootstrapping", "MMD"],
-)
 pd.set_option("display.max_rows", None)
-print(data)
-with open(f"{method}-{gen}.txt", "w") as file:
-    print(data, file=file)
+ROOT = Path(__file__).resolve().parents[1]
+MOEAS = ["NSGA-II", "NSGA-III", "MOEAD"]
+FAMILIES = {
+    "IDTLZ1-4": [f"IDTLZ{i}" for i in range(1, 5)],
+    "WFG2-9": [f"WFG{i}" for i in range(2, 10)],
+}
+FAMILIES["all"] = FAMILIES["IDTLZ1-4"] + FAMILIES["WFG2-9"]
+RUNS = list(range(1, 31))
+ALPHA = 0.05
 
-caption = f"""Warmstarting the {method} method after 300 iterations of the MOEA, we show the $\Delta_p$ values 
-(median and 10\\% - 90\\% quantile range) of the final Pareto fronts, averaged over
-30 independent runs. The Newton method is executed for five iterations, and the corresponding MOEA terminates
-with 4\,870 iterations on ZDTs and 3\,700 on DTLZs. Mann–Whitney U test (with 5\\% significance level) is 
-employed to compare the performance of the Newton method and the MOEA, where Holm-Sidak method is used to 
-adjust the $p$-value for multiple testing. 
-"""
-data.to_latex(f"{method}-{gen}.tex", index=False, caption=caption)
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / "results/summary_stats")
+    parser.add_argument("--generation", type=int, default=600)
+    parser.add_argument("--method", choices=["MMDN", "MMDNMatching"], default="MMDNMatching")
+    parser.add_argument(
+        "--compare", nargs="*", default=["DpN"], help="Other algorithms; MOEA is always included"
+    )
+    parser.add_argument("--family", choices=FAMILIES, default="all")
+    return parser
+
+
+def load_ahd(path: Path, runs: list[int]) -> np.ndarray:
+    """Read GD/IGD, pair by run ID, and return one AHD value per run."""
+    data = pd.read_csv(path).set_index("run")
+    if data.index.has_duplicates or not set(runs).issubset(data.index):
+        raise ValueError(f"Missing or duplicate run IDs in {path}")
+    distances = data.loc[runs, ["GD", "IGD"]].to_numpy(dtype=float)
+    if not np.isfinite(distances).all():
+        raise ValueError(f"Nonfinite GD or IGD in {path}")
+    return np.maximum(distances[:, 0], distances[:, 1])
+
+
+def paired_pvalue(x: np.ndarray, y: np.ndarray) -> float:
+    """Return the two-sided Wilcoxon p-value for paired AHD observations."""
+    difference = x - y
+    nonzero = difference[difference != 0]
+    if not len(nonzero):
+        return 1.0
+    exact = (
+        len(difference) <= 50
+        and len(nonzero) == len(difference)
+        and len(np.unique(np.abs(nonzero))) == len(nonzero)
+    )
+    return float(
+        wilcoxon(
+            difference, zero_method="wilcox", alternative="two-sided", method="exact" if exact else "approx"
+        ).pvalue
+    )
+
+
+iqr = lambda v: np.quantile(v, 0.9) - np.quantile(v, 0.1)
+get_summary_stats = lambda v: dict(median=np.median(v), IQR=iqr(v))
+stats_formatter = lambda s: f"{s['median']:.4f}({s['IQR']:.2e})"
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    comparators = ["MOEA", *args.compare]
+    columns = ["Method", "Problem", args.method, *comparators]
+    if len(columns) != len(set(columns)):
+        raise ValueError("Comparison algorithms must give distinct table columns")
+    records, pvalues = [], []
+    # Each case uses the same 30 runs. Missing observations are never dropped.
+    for moea in MOEAS:
+        for problem in FAMILIES[args.family]:
+            samples = {}
+            row = {"Method": moea, "Problem": problem}
+            for algorithm in [args.method, *comparators]:
+                tag = "" if algorithm == "MOEA" else f"-{algorithm}"
+                path = args.results_dir / f"{problem}{tag}-{moea}-{args.generation}.csv"
+                samples[algorithm] = load_ahd(path, RUNS)
+                row[algorithm] = get_summary_stats(samples[algorithm])
+            records.append(row)
+            pvalues.append([paired_pvalue(samples[args.method], samples[other]) for other in comparators])
+
+    # one joint BH correction over every case and comparator, at the fixed 5% level.
+    reject = multipletests(np.asarray(pvalues).ravel(), alpha=ALPHA, method="fdr_bh")[0]
+    reject = reject.reshape(len(records), len(comparators))
+    counts = {algorithm: {"win": 0, "tie": 0, "loss": 0} for algorithm in comparators}
+    for row, rejected in zip(records, reject):
+        median = row[args.method]["median"]
+        row[args.method] = stats_formatter(row[args.method])
+        for algorithm, significant in zip(comparators, rejected):
+            other_median = row[algorithm]["median"]
+            outcome, symbol = "tie", "↔"
+            if significant and median != other_median:
+                outcome = "win" if median < other_median else "loss"
+                symbol = "↑" if outcome == "win" else "↓"
+            counts[algorithm][outcome] += 1
+            row[algorithm] = stats_formatter(row[algorithm]) + f" {symbol}"
+    summary = {"Method": "win/tie/loss", "Problem": "", args.method: ""}
+    for algorithm in comparators:
+        summary[algorithm] = "/".join(str(counts[algorithm][outcome]) for outcome in ("win", "tie", "loss"))
+    table = pd.DataFrame([*records, summary], columns=columns)
+    print(table)
+    # save the table to CSV format
+    comparison_names = "-".join(args.compare) or "MOEA"
+    family_suffix = "" if args.family == "all" else f"-{args.family}"
+    prefix = args.output_dir / f"{args.method}-{comparison_names}{family_suffix}-{args.generation}"
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    table.to_csv(prefix.with_suffix(".csv"), index=False)
+    # save the table to latex format
+    caption = rf"""Warmstarting {args.method} after {args.generation} MOEA iterations, we show the
+    $\Delta_p$ values (median and 10% - 90% quantile range) of the final approximation set, averaged over 
+    {len(RUNS)} paired runs. The {args.method} is executed for five iterations, and the MOEA baseline 
+    terminates with evaluation budget equivalent to {args.generation} MOEA iterations + five {args.method}
+    iterations. Two-sided Wilcoxon signed-rank tests is applied with Benjamini-Hochberg correction at 
+    {ALPHA:.0%}. Comparator arrows indicate a win, non-significant tie, or loss for {args.method}.
+    """
+    latex = table.to_latex(index=False, escape=True, caption=caption.replace("%", r"\%"))
+    for symbol, command in [("↑", r"$\uparrow$"), ("↔", r"$\leftrightarrow$"), ("↓", r"$\downarrow$")]:
+        latex = latex.replace(symbol, command)
+    prefix.with_suffix(".tex").write_text(latex)
+
+
+if __name__ == "__main__":
+    main()

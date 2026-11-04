@@ -203,7 +203,7 @@ convention: `State` passes the input directly to the callback.
 
 ## MMD tuning
 
-`scripts/tune_MMD.py` and `scripts/benchmark_MMD.py` support IDTLZ1–IDTLZ4,
+`scripts/tune_MMD/tune_MMD.py` and `scripts/tune_MMD/benchmark_MMD.py` support IDTLZ1–IDTLZ4,
 WFG1–WFG9, Eq1DTLZ1–Eq1DTLZ4, and Eq1IDTLZ1–Eq1IDTLZ4 with MOEA/D
 (`MOEAD` on the command line), NSGA-II, and NSGA-III. Both pass equality
 constraints and their first and second derivatives to Newton, along with
@@ -222,24 +222,23 @@ scores can be trusted: for example, NSGA-III run 1 of Eq1DTLZ2 stores
 reference-set exports must select objective columns explicitly, excluding
 constraints. The scripts do not silently replace these stored values.
 
-The WFG data in
-`mmd_data` contains runs 1–30 at generation 300 for every problem–algorithm
-pair: 810 populations, each with 300 points, 10 decision variables, and
-3 objectives. The tuner reads the problem dimensions from the stored data;
-WFG uses its default position parameter `k=4`.
+Benchmark populations and reference sets are stored in `data/`. Select the
+stored generation with `--generation` (600 by default). The tuner reads the
+problem dimensions from the stored data; WFG uses its default position
+parameter `k=4`. Example and fixture datasets are stored separately in `test_data/`.
 
 ```shell
-python scripts/tune_MMD.py WFG4 --algorithm MOEAD --data-path mmd_data --workers 15
-python scripts/tune_MMD.py Eq1DTLZ2 --data-path mmd_data --workers 15
-python scripts/benchmark_MMD.py Eq1IDTLZ2 --data-path mmd_data --matching
-sbatch scripts/tune_MMD.sh
+python scripts/tune_MMD/tune_MMD.py WFG4 --algorithm MOEAD --data-path data --workers 15
+python scripts/tune_MMD/tune_MMD.py Eq1DTLZ2 --data-path data --workers 15
+python scripts/tune_MMD/benchmark_MMD.py Eq1IDTLZ2 --data-path data --matching
+sbatch scripts/tune_MMD/tune_MMD.sh
 ```
 
 The command-line entry point uses MMD-Matching. Runs 1–20 tune the parameters
-and runs 21–30 validate them. The Slurm script has 16 tasks: WFG2–WFG9 and
-the eight Eq1 problems with NSGA-III, using 15 workers per task. Its data
-directory must contain the prepared populations and reference sets for all
-selected problems; other algorithm datasets may have missing runs.
+and runs 21–30 validate them. The campaign controller supplies the Slurm
+array indices and concurrency; each task uses 15 workers. Its data directory
+must contain the prepared populations and reference sets for the selected cases.
+See `scripts/tune_MMD/MMD_CAMPAIGN.md` for campaign commands and saved artifacts.
 
 The WFG hypervolume reference points in `scripts/ref_point.csv` are
 `(3, 5, 7)`, following the convention `r_i = 2i + 1` in Section IV-C of
@@ -247,28 +246,46 @@ The WFG hypervolume reference points in `scripts/ref_point.csv` are
 This point also exceeds every stored WFG objective value. It is used for
 hypervolume evaluation; the tuning objective remains averaged Hausdorff distance.
 
-## DpN benchmarks
+## Scientific benchmarks
 
-`scripts/benchmark_DpN.py` is the common runner for CF1–CF10, ZDT1–ZDT4/ZDT6,
-DTLZ1–DTLZ7, IDTLZ1–IDTLZ4, and CONV4_2F. It replaces the separate CF, CONV4,
-DTLZ, and DpN2 benchmark scripts and follows the MMD runner's command-line
-structure. DpN uses fixed IGD and Hessian regularization settings; no tuning
-configuration is loaded.
+`scripts/benchmark_DpN.py` and `scripts/benchmark_MMD.py` resolve problem classes
+by name from `hvd.problems`, using `getattr(problems, problem_name)`. Both read
+`n_var` and `n_obj` from the stored population files. Defaults are NSGA-III,
+`data/`, generation 600 and five Newton iterations.
 
 ```shell
-python scripts/benchmark_DpN.py IDTLZ1 --n-jobs 15
-python scripts/benchmark_DpN.py CF1 --algorithm SMS-EMOA --data-path data-reference/CF --max-iters 6
-python scripts/benchmark_DpN.py CONV4_2F --data-path data-reference/CONV4_2F --generation 400
+python scripts/benchmark_DpN.py IDTLZ1 --n-jobs 15 --type deltap --regularization --project-box-constraints --skip-plots --skip-populations
+python scripts/benchmark_MMD.py WFG2 --algorithm NSGA-II --config-file mmd_tuning_results/MMDNewton-MMDMatching-WFG2-NSGA-II-bounds-best.json --n-jobs 15
 ```
 
-Defaults are NSGA-III, `mmd_data`, generation 300, and five Newton iterations.
-The decision dimension comes from the stored population, and box bounds are
-included as inequality constraints. Every discovered run is processed; the
-old hard-coded run exclusions are removed, and execution errors propagate.
-`--results-dir` receives a summary CSV with run IDs, HV, IGD, GD, Jacobian
-counts, and wall-clock time in microseconds, plus initial/final objective
-populations. `--plot-dir` receives one PDF per run, including parallel-coordinate
-plots for four-objective problems.
+DpN processes every discovered instance. Its optional `--regularization` and
+`--project-box-constraints` flags control the solver settings. It writes a CSV
+with run ID, HV, IGD, GD and Jacobian calls; plots and population exports can be
+skipped with the flags above. On ALICE, the shell launchers accept `WFG` (WFG2–9,
+the default) or `IDTLZ` (IDTLZ1–4). Create the log folder before submitting:
+
+```shell
+mkdir -p results/logs
+sbatch scripts/benchmark_DpN.sh WFG
+sbatch scripts/benchmark_MMD.sh WFG
+# For IDTLZ, use --array=0-11%12 with either launcher:
+sbatch --array=0-11%12 scripts/benchmark_MMD.sh IDTLZ
+```
+
+The MMD launcher loads each pair's frozen `MMDNewton-MMDMatching-...-bounds-best.json`
+configuration from `mmd_tuning_results/`.
+
+The standalone MMD benchmark reads one configuration, executes instances 1–30
+and writes one CSV with run ID, HV, IGD, GD and Jacobian calls.
+It uses regularization and box projection from the saved configuration;
+`--regularization` / `--no-regularization` and `--project-box-constraints` /
+`--no-project-box-constraints` override those settings explicitly. `--output`
+sets an exact filename; otherwise `--results-dir` uses the existing
+`PROBLEM-MMDNMatching-ALGORITHM-GENERATION.csv` convention (or `MMDN` without matching).
+The campaign review and validation runner is separate, under `scripts/tune_MMD/`.
+
+AHD is `max(GD, IGD)`. The statistics script compares all 30 paired runs across
+IDTLZ1–4 and WFG2–9, including the stored initial MOEA baseline.
 
 ## Brief Explanation of the Analytical Computation
 

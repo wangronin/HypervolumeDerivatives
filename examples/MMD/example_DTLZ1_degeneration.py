@@ -40,7 +40,7 @@ max_iters = 7 * interval + 1
 
 problem = DTLZ1(n_var=7, boundary_constraints=True)
 pareto_front = problem.get_pareto_front()
-X = pd.read_csv("./data/DTLZ1/DTLZ1_degenerate.csv", header=None).values
+X = pd.read_csv("./test_data/DTLZ1/DTLZ1_degenerate.csv", header=None).values
 Y = np.array([problem.objective(x) for x in X])
 km = KMedoids(n_clusters=100, method="alternate", random_state=0, init="k-medoids++").fit(Y)
 X0 = X[km.medoid_indices_]

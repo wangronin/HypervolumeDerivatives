@@ -30,7 +30,7 @@ np.random.seed(66)
 f = IDTLZ2(n_var=12)
 max_iters = 15
 pareto_front = f.get_pareto_front()
-x0 = pd.read_csv("./data/IDTLZ2_X0.csv", header=None).values
+x0 = pd.read_csv("./test_data/IDTLZ2_X0.csv", header=None).values
 y0 = np.array([f.objective(x) for x in x0])
 N = len(x0)
 ref = np.array([5, 5, 5])

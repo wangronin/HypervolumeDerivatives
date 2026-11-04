@@ -168,7 +168,7 @@ gen_func = lambda scale: int(3.215 * scale)
 N = 30
 problem_names = sys.argv[1]
 algorithms = ("NSGA-II", "NSGA-III")
-newton = "MMD"
+newton = "MMDN"
 
 for problem_name in [problem_names]:
     print(problem_name)
@@ -220,9 +220,9 @@ for problem_name in [problem_names]:
         df = pd.DataFrame(data, columns=["IGD", "GD", "HV", "wall_clock_time"])
         df.to_csv(f"results/{problem_name}-{algorithm_name}-{gen}.csv", index=False)
         # data = pd.concat(data, axis=0)
-        # data.to_csv(f"./data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
-        # data.to_csv(f"./data/CONV4_{algorithm_name}.csv", index=False)
-        # data.to_csv(f"./data/{problem_name}_{algorithm_name}.csv", index=False)
+        # data.to_csv(f"./test_data/{problem_name.upper()}_{algorithm_name}.csv", index=False)
+        # data.to_csv(f"./test_data/CONV4_{algorithm_name}.csv", index=False)
+        # data.to_csv(f"./test_data/{problem_name}_{algorithm_name}.csv", index=False)
         # save to Matlab's data format
         # mdic = {"data": data.values, "columns": data.columns.values}
-        # savemat(f"./data/{problem_name.upper()}_{algorithm_name}.mat", mdic)
+        # savemat(f"./test_data/{problem_name.upper()}_{algorithm_name}.mat", mdic)

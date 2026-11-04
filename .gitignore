@@ -15,6 +15,7 @@
 *.txt
 *.pkl
 data/
+test_data/
 model/
 mmd_tuning_results/
 plots/

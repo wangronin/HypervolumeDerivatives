@@ -31,7 +31,7 @@ np.random.seed(66)
 f = CONV3()
 max_iters = 22
 pareto_front = f.get_pareto_front(N=10000)
-x0 = pd.read_csv("./data/CONV3_X0.csv", header=None).values
+x0 = pd.read_csv("./test_data/CONV3_X0.csv", header=None).values
 y0 = np.array([f.objective(x) for x in x0])
 N = len(x0)
 ref = np.array([30, 30, 30])

@@ -33,9 +33,9 @@ np.random.seed(66)
 f = IDTLZ2(n_var=12)
 max_iters = 10
 pareto_front = f.get_pareto_front()
-x0 = pd.read_csv("./data/IDTLZ2_X0.csv", header=None).values
+x0 = pd.read_csv("./test_data/IDTLZ2_X0.csv", header=None).values
 y0 = np.array([f.objective(x) for x in x0])
-ref = pd.read_csv("./data/IDTLZ2_reference.csv", header=None).values
+ref = pd.read_csv("./test_data/IDTLZ2_reference.csv", header=None).values
 N = len(x0)
 metrics = dict(GD=GenerationalDistance(ref=ref), IGD=InvertedGenerationalDistance(ref=ref))
 opt = DpN(

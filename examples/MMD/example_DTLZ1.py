@@ -38,10 +38,10 @@ problem = DTLZ1(n_var=7, boundary_constraints=True)
 pareto_front = problem.get_pareto_front()
 
 # read the reference set data
-ref_ = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_run_1_ref_1_gen0.csv", header=None).values
-X0 = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_x_gen0.csv", header=None).values
-Y0 = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_y_gen0.csv", header=None).values
-eta = {0: pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_run_1_eta_1_gen0.csv", header=None).values.ravel()}
+ref_ = pd.read_csv("./test_data/DTLZ1/DTLZ1_RANDOM_run_1_ref_1_gen0.csv", header=None).values
+X0 = pd.read_csv("./test_data/DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_x_gen0.csv", header=None).values
+Y0 = pd.read_csv("./test_data/DTLZ1/DTLZ1_RANDOM_run_1_lastpopu_y_gen0.csv", header=None).values
+eta = {0: pd.read_csv("./test_data/DTLZ1/DTLZ1_RANDOM_run_1_eta_1_gen0.csv", header=None).values.ravel()}
 Y_idx = None
 Y_label = np.array([0] * len(ref_))
 ref = {0: ref_}

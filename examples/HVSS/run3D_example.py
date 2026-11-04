@@ -34,7 +34,7 @@ rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
 
-path = "./data/HVSS/"
+path = "./test_data/HVSS/"
 
 
 class ParetoFrontConvex(CMOP):

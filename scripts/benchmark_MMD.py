@@ -1,166 +1,82 @@
-from __future__ import annotations
+"""Run one MMD Newton configuration on stored MOEA populations and save one CSV."""
 
 import argparse
 import json
+import random
 import sys
-import time
 from pathlib import Path
-
-from jax import config as jax_config
-
-jax_config.update("jax_enable_x64", True)
 
 import numpy as np
 import pandas as pd
+from jax import config as jax_config
 from joblib import Parallel, delayed
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+jax_config.update("jax_enable_x64", True)
 
+from hvd import problems
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import HV
 from hvd.mmd import MMD, MMDMatching
 from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
-from hvd.problems import (
-    CMOP,
-    IDTLZ1,
-    IDTLZ2,
-    IDTLZ3,
-    IDTLZ4,
-    WFG1,
-    WFG2,
-    WFG3,
-    WFG4,
-    WFG5,
-    WFG6,
-    WFG7,
-    WFG8,
-    WFG9,
-    Eq1DTLZ1,
-    Eq1DTLZ2,
-    Eq1DTLZ3,
-    Eq1DTLZ4,
-    Eq1IDTLZ1,
-    Eq1IDTLZ2,
-    Eq1IDTLZ3,
-    Eq1IDTLZ4,
-)
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
-from scripts.tune_MMD import MMDConfig
 from scripts.utils import (
     get_data_prefix,
     get_pareto_front,
     get_run_instances,
     kernel_theta,
-    plot,
     read_reference_set_data,
 )
 
-PROBLEMS = {
-    problem.__name__: problem
-    for problem in (
-        IDTLZ1,
-        IDTLZ2,
-        IDTLZ3,
-        IDTLZ4,
-        Eq1DTLZ1,
-        Eq1DTLZ2,
-        Eq1DTLZ3,
-        Eq1DTLZ4,
-        Eq1IDTLZ1,
-        Eq1IDTLZ2,
-        Eq1IDTLZ3,
-        Eq1IDTLZ4,
-        WFG1,
-        WFG2,
-        WFG3,
-        WFG4,
-        WFG5,
-        WFG6,
-        WFG7,
-        WFG8,
-        WFG9,
-    )
-}
-KERNELS = {
-    "rbf": RBF,
-    "rational_quadratic": RationalQuadratic,
-}
+PROBLEM_NAMES = [
+    name
+    for name in problems.__all__
+    if isinstance(getattr(problems, name), type) and name not in {"MOP", "CMOP"}
+]
 BOUNDARY_CONSTRAINTS = True
-DEFAULT_CONFIG: MMDConfig = {"kernel": "rbf", "theta_multiplier": 1.0, "regularization": False}
-DEFAULT_MAX_ITERS = 5
-DEFAULT_GENERATION = 300
-
-
-def get_config(args: argparse.Namespace) -> tuple[MMDConfig, argparse.Namespace]:
-    indicator = "MMDMatching" if args.matching else "MMD"
-    path = args.tuning_dir / f"MMDNewton-{indicator}-{args.problem}-{args.algorithm}-bounds-best.json"
-    result = {}
-    if path.is_file():
-        with path.open() as stream:
-            result = json.load(stream)
-    args.generation = (
-        args.generation if args.generation is not None else result.get("generation", DEFAULT_GENERATION)
-    )
-    args.max_iters = (
-        args.max_iters if args.max_iters is not None else result.get("max_iters", DEFAULT_MAX_ITERS)
-    )
-    return result.get("best_config", DEFAULT_CONFIG), args
+DEFAULT_NEWTON_MAX_ITERS = 5
+DEFAULT_MOEA_GENERATION = 600
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Benchmark MMD Newton on IDTLZ, WFG, Eq1DTLZ, and Eq1IDTLZ.")
-    parser.add_argument("problem", choices=PROBLEMS)
-    parser.add_argument("--algorithm", default="NSGA-III", choices=["NSGA-II", "NSGA-III", "MOEAD"])
-    parser.add_argument("--data-path", type=Path, default=ROOT / "mmd_data")
-    parser.add_argument("--tuning-dir", type=Path, default=ROOT / "mmd_tuning_results")
-    parser.add_argument("--generation", type=int, default=600)
-    parser.add_argument("--max-iters", type=int, default=5)
-    parser.add_argument("--matching", action="store_true", dest="matching")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("problem", choices=PROBLEM_NAMES)
+    parser.add_argument("--algorithm", choices=["NSGA-II", "NSGA-III", "MOEAD"], default="NSGA-III")
+    parser.add_argument("--config-file", type=Path, required=True)
+    parser.add_argument("--data-path", type=Path, default=ROOT / "data")
+    parser.add_argument("--generation", type=int, default=DEFAULT_MOEA_GENERATION)
+    parser.add_argument("--max-iters", type=int, default=DEFAULT_NEWTON_MAX_ITERS)
+    parser.add_argument("--regularization", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--project-box-constraints", action=argparse.BooleanOptionalAction, default=None)
+    parser.add_argument("--matching", action="store_true")
     parser.add_argument("--n-jobs", type=int, default=1)
-    parser.add_argument("--plot-dir", type=Path, default=ROOT / "plots")
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
     return parser
 
 
-def execute(
-    run: int,
-    args: argparse.Namespace,
-    config: MMDConfig,
-    problem: CMOP,
-    pareto_front: np.ndarray,
-    ref_point: np.ndarray,
-) -> dict[str, float | int]:
-    ref, x0, y0, y_indices, eta = read_reference_set_data(
+def execute(run, args, configuration, problem, pareto_front, ref_point):
+    random.seed(66 + run * 1009)
+    np.random.seed(66 + run * 1009)
+    ref, x0, y0, labels, eta = read_reference_set_data(
         args.data_path, args.problem, args.algorithm, run, args.generation, args.matching
     )
-    reference = ReferenceSet(ref=ref, eta=eta, Y_idx=y_indices)
-    theta = kernel_theta(config["theta_multiplier"], y0, np.vstack(list(ref.values())))
-    kernel = KERNELS[config["kernel"]](theta=theta)
-    metrics = dict(
-        GD=GenerationalDistance(pareto_front),
-        IGD=InvertedGenerationalDistance(pareto_front),
-        MMD=MMD(problem.n_obj, problem.n_obj, pareto_front, kernel=kernel),
-        HV=HV(ref_point),
-    )
-    print(f"run {run}: theta={theta}, precomputed eta={eta is not None}")
-    for key, val in metrics.items():
-        print(f"initial {key}: {val.compute(Y=y0)}")
-
-    started = time.perf_counter_ns()
-    indicator_type = MMDMatching if args.matching else MMD
-    indicator = indicator_type(
+    reference_set = ReferenceSet(ref=ref, eta=eta, Y_idx=labels)
+    theta = kernel_theta(configuration["theta_multiplier"], y0, np.vstack(list(ref.values())))
+    kernel = {"rbf": RBF, "rational_quadratic": RationalQuadratic}[configuration["kernel"]](theta=theta)
+    indicator = (MMDMatching if args.matching else MMD)(
         n_var=problem.n_var,
         n_obj=problem.n_obj,
-        ref=reference,
+        ref=reference_set,
         func=problem.objective,
         jac=problem.objective_jacobian,
         hessian=problem.objective_hessian,
         kernel=kernel,
-        **({"beta": config.get("beta", 0.25)} if args.matching else {}),
+        **({"beta": configuration.get("beta", 0.25)} if args.matching else {}),
     )
     optimizer = MMDN(
         n_var=problem.n_var,
@@ -179,66 +95,74 @@ def execute(
         xl=problem.xl,
         xu=problem.xu,
         max_iters=args.max_iters,
-        verbose=True,
-        metrics=metrics,
-        regularization=config["regularization"],
+        regularization=args.regularization,
+        project_box_constraints=args.project_box_constraints,
+        verbose=False,
     )
-    Y = get_non_dominated(optimizer.run()[1])
-    elapsed_microseconds = (time.perf_counter_ns() - started) / 1000.0
-    figure_name = args.plot_dir / f"{args.problem}_MMD_{args.algorithm}_run{run}_{args.generation}.pdf"
-    plot(y0, Y, reference.reference_set, pareto_front, figure_name, optimizer)
-    out = {key: val.compute(Y=Y) for key, val in metrics.items()}
-    out["Jac_calls"] = optimizer.state.n_jac_evals
-    out["wall_clock_time"] = elapsed_microseconds
-    return out
+    _, y, _ = optimizer.run()
+    if not np.isfinite(y).all():
+        raise ValueError(f"Run {run}: nonfinite final objectives")
+    y = get_non_dominated(y)
+    performance = {
+        "GD": GenerationalDistance(pareto_front).compute(Y=y),
+        "IGD": InvertedGenerationalDistance(pareto_front).compute(Y=y),
+        "HV": HV(ref_point).compute(Y=y),
+    }
+    return {"run": run, **performance, "Jac_calls": optimizer.state.n_jac_evals}
 
 
-def main() -> None:
+def get_config(args):
+    config_file = json.loads(args.config_file.read_text())
+    configuration = config_file.get("best_config", config_file)
+    if args.regularization is None:
+        args.regularization = configuration["regularization"]
+    if args.project_box_constraints is None:
+        args.project_box_constraints = config_file.get("project_box_constraints", True)
+    if config_file.get("indicator") == "MMDMatching":
+        args.matching = True
+    for key, expected in (("problem", args.problem), ("algorithm", args.algorithm)):
+        if key in config_file and config_file[key] != expected:
+            raise ValueError(f"Configuration {key} does not match {expected}")
+    return configuration, args
+
+
+def main():
     args = build_parser().parse_args()
-    config, args = get_config(args)
+    configuration, args = get_config(args)
     instances = get_run_instances(args.problem, args.algorithm, args.generation, args.data_path)
     if not instances:
         raise FileNotFoundError(
             f"No {args.problem} / {args.algorithm} runs at generation {args.generation} in {args.data_path}."
         )
-    # Use the stored population dimensions; WFG's default n_var is different.
     prefix = get_data_prefix(args.problem, args.algorithm, instances[0], args.generation, args.data_path)
-    n_var, n_obj = [
-        pd.read_csv(
-            args.data_path / f"{prefix}_lastpopu_{space}_gen{args.generation}.csv",
-            header=None,
-            nrows=1,
-        ).shape[1]
-        for space in ("x", "y")
-    ]
-    problem = PROBLEMS[args.problem](n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS)
-    pareto_front = get_pareto_front(problem)
-    ref_point = (
-        pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem")
-        .loc[args.problem]
-        .dropna()
-        .to_numpy(dtype=float)
+    pop_x_file = args.data_path / f"{prefix}_lastpopu_x_gen{args.generation}.csv"
+    pop_y_file = args.data_path / f"{prefix}_lastpopu_y_gen{args.generation}.csv"
+    n_var = pd.read_csv(pop_x_file, header=None, nrows=1).shape[1]
+    n_obj = pd.read_csv(pop_y_file, header=None, nrows=1).shape[1]
+    problem = getattr(problems, args.problem)(
+        n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS
     )
-
-    # make the plot and result folder
-    args.plot_dir.mkdir(parents=True, exist_ok=True)
+    pareto_front = get_pareto_front(problem)
+    ref_point = pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem")
+    ref_point = ref_point.loc[args.problem].dropna().to_numpy(dtype=float)
+    # create folders
     args.results_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"optimize {args.problem}")
-    print(f"configuration: {json.dumps(config, sort_keys=True)}")
     print(f"JAX 64-bit enabled: {jax_config.jax_enable_x64}")
     print(f"parallel benchmark workers: {args.n_jobs}")
-    # execute the algorithm
-    params = (args, config, problem, pareto_front, ref_point)
-    if args.n_jobs == 1:  # sequential
+    params = (args, configuration, problem, pareto_front, ref_point)
+    if args.n_jobs == 1:
         data = [execute(run, *params) for run in instances]
-    else:  # multi-process execution
+    else:
         data = Parallel(n_jobs=args.n_jobs)(delayed(execute)(run, *params) for run in instances)
-    # save the benchmarking data
-    columns = ["HV", "IGD", "GD", "MMD", "Jac_calls", "wall_clock_time"]
-    output = args.results_dir / f"{args.problem}-MMD-{args.algorithm}-{args.generation}.csv"
+
+    columns = ["run", "HV", "IGD", "GD", "Jac_calls"]
+    alg_name = "MMDNMatching" if args.matching else "MMDN"
+    output = args.output or args.results_dir / f"{args.problem}-{alg_name}-{args.algorithm}-{args.generation}.csv"
+    output.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(data, columns=columns).to_csv(output, index=False)
 
 
 if __name__ == "__main__":
-    np.random.seed(66)
     main()

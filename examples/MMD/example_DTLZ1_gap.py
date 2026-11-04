@@ -41,9 +41,9 @@ plot = False
 problem = DTLZ1(n_var=7, boundary_constraints=True)
 pareto_front = problem.get_pareto_front()
 
-ref_ = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_ref_1_gen0.csv", header=None).values
-X0 = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_x_gen0.csv", header=None).values
-Y0 = pd.read_csv("./data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_y_gen0.csv", header=None).values
+ref_ = pd.read_csv("./test_data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_ref_1_gen0.csv", header=None).values
+X0 = pd.read_csv("./test_data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_x_gen0.csv", header=None).values
+Y0 = pd.read_csv("./test_data/DTLZ1/DTLZ1_RANDOM_HOLE_run_1_lastpopu_y_gen0.csv", header=None).values
 # retrieve two components manually
 idx = Y0[:, 2] >= 0.307
 X_component1 = X0[idx]
