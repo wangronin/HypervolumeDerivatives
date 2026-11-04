@@ -6,12 +6,13 @@ import contextlib
 import fcntl
 import json
 import os
-import random
 import sys
+from argparse import Namespace
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-import pandas as pd
 from jax import config as jax_config
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,7 +26,13 @@ from hvd.mmd import MMD, MMDMatching
 from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
 from hvd.reference_set import ReferenceSet
-from scripts.utils import get_data_prefix, kernel_theta, read_reference_set_data
+from scripts.utils import (
+    MMDConfig,
+    get_dimensions_from_data,
+    kernel_theta,
+    read_reference_set_data,
+    set_random_seed,
+)
 
 PROBLEM_NAMES = [
     name
@@ -57,7 +64,7 @@ def study_name(problem: str, algorithm: str, matching: bool = True) -> str:
     return f"MMDNewton-{indicator}-{problem}-{algorithm}-bounds"
 
 
-def write_json(path: Path, value) -> None:
+def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n")
@@ -65,7 +72,7 @@ def write_json(path: Path, value) -> None:
 
 
 @contextlib.contextmanager
-def exclusive_lock(path: Path):
+def exclusive_lock(path: Path) -> Iterator[None]:
     """Prevent two jobs from adding trials to the same study simultaneously."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as stream:
@@ -76,22 +83,15 @@ def exclusive_lock(path: Path):
             fcntl.flock(stream, fcntl.LOCK_UN)
 
 
-def load_problem(problem_name: str, args, run: int):
-    prefix = get_data_prefix(problem_name, args.algorithm, run, args.generation, args.data_path)
-    n_var, n_obj = [
-        pd.read_csv(
-            args.data_path / f"{prefix}_lastpopu_{space}_gen{args.generation}.csv",
-            header=None,
-            nrows=1,
-        ).shape[1]
-        for space in ("x", "y")
-    ]
+def load_problem(problem_name: str, args: Namespace, run: int) -> problems.CMOP:
+    n_var, n_obj = get_dimensions_from_data(args, run, problem_name)
     return getattr(problems, problem_name)(n_var=n_var, n_obj=n_obj, boundary_constraints=True)
 
 
-def load_run(problem_name: str, args, run: int):
-    random.seed(66 + run * 1009)
-    np.random.seed(66 + run * 1009)
+def load_run(
+    problem_name: str, args: Namespace, run: int
+) -> tuple[dict[int, np.ndarray], np.ndarray, np.ndarray, list[np.ndarray] | None, dict[int, np.ndarray] | None]:
+    set_random_seed(66 + run * 1009)
     return read_reference_set_data(
         args.data_path, problem_name, args.algorithm, run, args.generation, args.matching
     )
@@ -100,13 +100,13 @@ def load_run(problem_name: str, args, run: int):
 def evaluate(
     run: int,
     problem_name: str,
-    args,
-    configuration: dict,
-    problem,
-    front,
-    report=None,
+    args: Namespace,
+    configuration: MMDConfig,
+    problem: problems.CMOP,
+    front: np.ndarray,
+    report: Callable[[float, int], None] | None = None,
     directory: Path | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Evaluate one configuration; optionally save the population for visual review.
 
     Input: one stored MOEA run and a fixed scoring front. Output: initial/final

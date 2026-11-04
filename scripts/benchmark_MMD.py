@@ -2,7 +2,6 @@
 
 import argparse
 import json
-import random
 import sys
 from pathlib import Path
 
@@ -17,26 +16,23 @@ if str(ROOT) not in sys.path:
 jax_config.update("jax_enable_x64", True)
 
 from hvd import problems
-from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
-from hvd.hypervolume import HV
 from hvd.mmd import MMD, MMDMatching
 from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
 from hvd.reference_set import ReferenceSet
-from hvd.utils import get_non_dominated
 from scripts.utils import (
-    get_data_prefix,
+    MMDConfig,
+    PROBLEM_NAMES,
+    compute_performance,
+    get_dimensions_from_data,
     get_pareto_front,
+    get_reference_point,
     get_run_instances,
     kernel_theta,
     read_reference_set_data,
+    set_random_seed,
 )
 
-PROBLEM_NAMES = [
-    name
-    for name in problems.__all__
-    if isinstance(getattr(problems, name), type) and name not in {"MOP", "CMOP"}
-]
 BOUNDARY_CONSTRAINTS = True
 DEFAULT_NEWTON_MAX_ITERS = 5
 DEFAULT_MOEA_GENERATION = 600
@@ -54,14 +50,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project-box-constraints", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--matching", action="store_true")
     parser.add_argument("--n-jobs", type=int, default=1)
+    parser.add_argument("--ref-point", nargs="+", type=float)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
     return parser
 
 
-def execute(run, args, configuration, problem, pareto_front, ref_point):
-    random.seed(66 + run * 1009)
-    np.random.seed(66 + run * 1009)
+def get_optimizer(
+    run: int, args: argparse.Namespace, configuration: MMDConfig, problem: problems.CMOP
+) -> MMDN:
+    """Build the configured MMD optimizer from one stored run."""
+    set_random_seed(66 + run * 1009)
     ref, x0, y0, labels, eta = read_reference_set_data(
         args.data_path, args.problem, args.algorithm, run, args.generation, args.matching
     )
@@ -78,7 +77,7 @@ def execute(run, args, configuration, problem, pareto_front, ref_point):
         kernel=kernel,
         **({"beta": configuration.get("beta", 0.25)} if args.matching else {}),
     )
-    optimizer = MMDN(
+    return MMDN(
         n_var=problem.n_var,
         n_obj=problem.n_obj,
         indicator=indicator,
@@ -99,19 +98,23 @@ def execute(run, args, configuration, problem, pareto_front, ref_point):
         project_box_constraints=args.project_box_constraints,
         verbose=False,
     )
+
+
+def execute(
+    run: int,
+    args: argparse.Namespace,
+    configuration: MMDConfig,
+    problem: problems.CMOP,
+    pareto_front: np.ndarray,
+    ref_point: np.ndarray,
+) -> dict[str, float | int]:
+    optimizer = get_optimizer(run, args, configuration, problem)
     _, y, _ = optimizer.run()
-    if not np.isfinite(y).all():
-        raise ValueError(f"Run {run}: nonfinite final objectives")
-    y = get_non_dominated(y)
-    performance = {
-        "GD": GenerationalDistance(pareto_front).compute(Y=y),
-        "IGD": InvertedGenerationalDistance(pareto_front).compute(Y=y),
-        "HV": HV(ref_point).compute(Y=y),
-    }
+    performance = compute_performance(y, pareto_front, ref_point)
     return {"run": run, **performance, "Jac_calls": optimizer.state.n_jac_evals}
 
 
-def get_config(args):
+def get_config(args: argparse.Namespace) -> tuple[MMDConfig, argparse.Namespace]:
     config_file = json.loads(args.config_file.read_text())
     configuration = config_file.get("best_config", config_file)
     if args.regularization is None:
@@ -126,7 +129,7 @@ def get_config(args):
     return configuration, args
 
 
-def main():
+def main() -> None:
     args = build_parser().parse_args()
     configuration, args = get_config(args)
     instances = get_run_instances(args.problem, args.algorithm, args.generation, args.data_path)
@@ -134,17 +137,12 @@ def main():
         raise FileNotFoundError(
             f"No {args.problem} / {args.algorithm} runs at generation {args.generation} in {args.data_path}."
         )
-    prefix = get_data_prefix(args.problem, args.algorithm, instances[0], args.generation, args.data_path)
-    pop_x_file = args.data_path / f"{prefix}_lastpopu_x_gen{args.generation}.csv"
-    pop_y_file = args.data_path / f"{prefix}_lastpopu_y_gen{args.generation}.csv"
-    n_var = pd.read_csv(pop_x_file, header=None, nrows=1).shape[1]
-    n_obj = pd.read_csv(pop_y_file, header=None, nrows=1).shape[1]
+    n_var, n_obj = get_dimensions_from_data(args, instances[0])
     problem = getattr(problems, args.problem)(
         n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS
     )
     pareto_front = get_pareto_front(problem)
-    ref_point = pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem")
-    ref_point = ref_point.loc[args.problem].dropna().to_numpy(dtype=float)
+    ref_point = get_reference_point(args, problem)
     # create folders
     args.results_dir.mkdir(parents=True, exist_ok=True)
 

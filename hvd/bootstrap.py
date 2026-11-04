@@ -74,6 +74,8 @@ def filter_outliers(data: List) -> np.ndarray:
     X, Y = data[0], data[1]
     idx = get_non_dominated(Y, return_index=True)
     X, Y = X[idx], Y[idx]
+    if len(Y) <= 3:
+        return X, Y
     idx = LocalOutlierFactor(n_neighbors=3).fit_predict(Y)
     X, Y = X[idx == 1], Y[idx == 1]
     if 11 < 2:
@@ -107,15 +109,18 @@ def bootstrap_reference_set(
             the stopping criteria)
     """
     opt_name: str = optimizer.__class__.__name__
+    if interval < 1 or last_n < 1 or optimizer.max_iters < 1:
+        raise ValueError("interval, last_n and max_iters must be positive")
     dim: int = optimizer.dim_p
     N: int = optimizer.N
     alpha: float = 0.05
     Y0: np.ndarray = optimizer.state.Y.copy()
     ref0: np.ndarray = optimizer.indicator.ref.reference_set.copy()
+    ref = optimizer.indicator.ref
     ref_list: list = []
     X_list: list = []
     Y_list: list = []
-    pareto_front: np.ndarray = problem.get_pareto_front()
+    pareto_front = problem.get_pareto_front() if plot else None
     problem_name: str = problem.__class__.__name__
 
     # if with_rsg:  # initialize the matlab backend
@@ -123,8 +128,6 @@ def bootstrap_reference_set(
     # eng.cd(r"./RSG/", nargout=0)
 
     for i in range(optimizer.max_iters):
-        X_list.append(optimizer.state.X.copy()[:, :dim])  # only keep the primal variables
-        Y_list.append(optimizer.state.Y.copy())
         if save_population:
             X, Y = optimizer.state.X, optimizer.state.Y
             pd.DataFrame(X).to_csv(f"X_{opt_name}_{problem_name}_iteration{i}.csv", index=False, header=False)
@@ -180,17 +183,26 @@ def bootstrap_reference_set(
             optimizer.indicator.ref = ref
             optimizer.indicator.compute(Y=optimizer.state.Y)
             # discount the weight of the spread term to reduce spread effect in the following iterations
-            optimizer.indicator.beta = optimizer.indicator.beta * 0.8
+            if hasattr(optimizer.indicator, "beta"):
+                optimizer.indicator.beta *= 0.8
 
         # the next iteration
         optimizer.newton_iteration()
         optimizer.log()
+        X_list.append(optimizer.state.X.copy()[:, :dim])
+        Y_list.append(optimizer.state.Y.copy())
 
     # filter out the outliers in the approximation set
     filtered = map(filter_outliers, zip(X_list[-last_n:], Y_list[-last_n:]))
     X_, Y_ = list(zip(*filtered))
     X_ = np.concatenate(X_, axis=0)
     Y_ = np.concatenate(Y_, axis=0)
+    _, unique = np.unique(Y_, axis=0, return_index=True)
+    X_, Y_ = X_[unique], Y_[unique]
+    if not len(Y_):
+        raise ValueError("Bootstrap filtering left no final population")
+    if len(Y_) <= N:
+        return X_, Y_, ref, ref_list
     km = KMedoids(n_clusters=N, method="alternate", random_state=42, init="k-medoids++").fit(Y_)
     X0_bootstrap = X_[km.medoid_indices_]
     Y0_bootstrap = Y_[km.medoid_indices_]

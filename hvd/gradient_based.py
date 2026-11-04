@@ -1,171 +1,156 @@
-import logging
+"""Multiobjective gradient descent with box constraints."""
+
 from collections import defaultdict
-from typing import Callable, Dict, List, Tuple, Union
+from typing import Callable
 
 import numpy as np
-from scipy.spatial.distance import cdist
+from scipy.optimize import minimize
 
 from .base import State
 from .utils import get_logger, set_bounds
 
 
-class Lara:
+def minimum_norm_weights(gradients: np.ndarray) -> np.ndarray:
+    """Find simplex weights minimizing ||sum_i weight_i * gradient_i||².
+
+    The negative weighted gradient is MGDA's common descent direction for any
+    number of objectives. A zero combination indicates Pareto stationarity.
+    See https://mgda.inria.fr/mgda.
+    """
+    gradients = np.asarray(gradients, dtype=float)
+    if gradients.ndim != 2 or not gradients.size or not np.isfinite(gradients).all():
+        raise ValueError("Expected a finite (n_objectives, n_variables) gradient matrix")
+    n_obj = len(gradients)
+    scale = np.linalg.norm(gradients, axis=1).max()
+    if scale == 0:
+        return np.full(n_obj, 1 / n_obj)
+    normalized = gradients / scale  # A common scale preserves the minimizer.
+    gram = normalized @ normalized.T
+    result = minimize(
+        lambda weights: 0.5 * weights @ gram @ weights,
+        np.full(n_obj, 1 / n_obj),
+        jac=lambda weights: gram @ weights,
+        bounds=[(0.0, 1.0)] * n_obj,
+        constraints={
+            "type": "eq",
+            "fun": lambda weights: weights.sum() - 1,
+            "jac": lambda weights: np.ones(n_obj),
+        },
+        method="SLSQP",
+        options={"ftol": 1e-12, "maxiter": 500},
+    )
+    if not result.success or not np.isfinite(result.x).all():
+        raise RuntimeError(f"Minimum-norm gradient calculation failed: {result.message}")
+    weights = np.maximum(result.x, 0)
+    return weights / weights.sum()
+
+
+class MGDA:
+    """Multiple-gradient descent with projected Armijo backtracking.
+
+    Each point follows the negative minimum-norm convex combination of its
+    objective gradients. Projected Armijo backtracking accepts a step only when
+    every objective satisfies its decrease condition. Intrinsic equality and
+    inequality constraints are outside this method; xl/xu enforce box bounds.
+    """
 
     def __init__(
         self,
         n_var: int,
         n_obj: int,
-        func: callable,
-        jac: callable,
-        xl: Union[List[float], np.ndarray],
-        xu: Union[List[float], np.ndarray],
+        func: Callable,
+        jac: Callable,
+        xl: float | list[float] | np.ndarray,
+        xu: float | list[float] | np.ndarray,
         N: int = 5,
-        X0: np.ndarray = None,
-        max_iters: Union[int, str] = np.inf,
-        xtol: float = 1e-3,
+        X0: np.ndarray | None = None,
+        max_iters: int | None = None,
+        xtol: float = 1e-8,
         verbose: bool = True,
-        metrics: Dict[str, Callable] = dict(),
-    ):
-        self.dim: int = n_var  # the number of primal variables
-        self.n_obj: int = n_obj  # the number of objectives
-        self.N: int = N  # the population size
-        self.xl: np.ndarray = xl
-        self.xu: np.ndarray = xu
-        self.state: State = State(self.dim, 0, 0, func, jac)
-        self._initialize(X0)
-        self._set_logging(verbose)
-        self.xtol: float = xtol
-        self.max_iters: int = self.N * 10 if max_iters is None else max_iters
-        self.stop_dict: Dict[str, float] = {}
-        self.metrics: Dict[str, Callable] = metrics
-        self.verbose: bool = verbose
-        self.eps: float = 1e-3 * np.max(self.xu - self.xl)
+        metrics: dict | None = None,
+        step_size: float = 1.0,
+        armijo: float = 1e-4,
+        max_backtracks: int = 40,
+    ) -> None:
+        self.dim, self.n_obj = n_var, n_obj
+        self.xl, self.xu = set_bounds(xl, n_var), set_bounds(xu, n_var)
+        if np.any(self.xl > self.xu):
+            raise ValueError("Lower bounds exceed upper bounds")
+        if step_size <= 0 or not 0 < armijo < 1 or max_backtracks < 1 or xtol < 0:
+            raise ValueError("Invalid line-search settings or tolerance")
+        if X0 is None:
+            if not np.isfinite(self.xl).all() or not np.isfinite(self.xu).all():
+                raise ValueError("Finite bounds are required to sample an initial population")
+            X0 = np.random.uniform(self.xl, self.xu, (N, n_var))
+        X0 = np.asarray(X0, dtype=float)
+        if X0.ndim != 2 or X0.shape[1] != n_var or not len(X0) or not np.isfinite(X0).all():
+            raise ValueError("Invalid initial population")
+        if np.any(X0 < self.xl) or np.any(X0 > self.xu):
+            raise ValueError("Initial population is outside the box bounds")
+        self.N = len(X0)
+        self.max_iters = self.N * 10 if max_iters is None else max_iters
+        self.xtol, self.initial_step_size = xtol, step_size
+        self.armijo, self.max_backtracks = armijo, max_backtracks
+        self.state = State(n_var, 0, 0, func, jac)
+        self.state.update(X0)
+        self.iter_count, self.stop_dict = 0, {}
+        self.verbose, self.metrics = verbose, metrics or {}
+        self.history_X, self.history_Y, self.history_R_norm = [], [], []
+        self.history_metrics = defaultdict(list)
+        self.logger = get_logger(logger_id=self.__class__.__name__, console=verbose)
 
-    def _initialize(self, X0: np.ndarray):
-        if X0 is not None:
-            X0 = np.asarray(X0)
-            X0 = np.clip(X0, self.xl, self.xu)
-            # NOTE: ad-hoc solution for CF2 and IDTLZ1 since the Jacobian on the box boundary is not defined
-            # on the decision boundary or the local Hessian is ill-conditioned.
-            if 11 < 2:
-                X0 = np.clip(X0 - self.xl, 1e-2, 1) + self.xl
-                X0 = np.clip(X0 - self.xu, -1, -1e-2) + self.xu
-            self.N = len(X0)
-        else:
-            # sample `x` u.a.r. in `[lb, ub]`
-            assert self.N is not None
-            assert all(~np.isinf(self.xl)) & all(~np.isinf(self.xu))
-            X0 = np.random.rand(self.N, self.dim) * (self.xu - self.xl) + self.xl  # (mu, dim_primal)
-        # initialize the state variables
-        self.state.update(X0)  # (mu, dim)
-        self.iter_count: int = 0
-
-    def _set_logging(self, verbose: bool):
-        """parameters for logging the history"""
-        self.verbose: bool = verbose
-        self.curr_indicator_value: float = None
-        self.history_Y: List[np.ndarray] = []
-        self.history_X: List[np.ndarray] = []
-        self.history_indicator_value: List[float] = []
-        self.history_R_norm: List[float] = []
-        self.history_metrics: Dict[str, List] = defaultdict(list)
-        self.history_medoids: Dict[int, List] = defaultdict(list)
-        self.logger: logging.Logger = get_logger(logger_id=f"{self.__class__.__name__}", console=self.verbose)
-
-    @property
-    def xl(self):
-        return self._xl
-
-    @xl.setter
-    def xl(self, lb):
-        self._xl = set_bounds(lb, self.dim)
-
-    @property
-    def xu(self):
-        return self._xu
-
-    @xu.setter
-    def xu(self, ub):
-        self._xu = set_bounds(ub, self.dim)
-
-    def run(self) -> Tuple[np.ndarray, np.ndarray, Dict]:
+    def run(self) -> tuple[np.ndarray, np.ndarray, dict[str, float | int]]:
         while not self.terminate():
             self.iteration()
             self.log()
         return self.state.primal, self.state.Y, self.stop_dict
 
-    def iteration(self):
-        # check for anomalies in `X` and `Y`
-        self._check_points_uniqueness()
-        # first compute the current indicator value
-        self.step_size = np.ones(self.N)
-        self.step = self._compute_step(self.state)
-        # constrain the search steps within the search box
-        self.step, max_step_size = self._handle_box_constraint(self.step, self.state)
-        self.step_size = np.clip(self.step_size, 0, max_step_size)
-        # Newton iteration and evaluation
-        self.state.update(self.state.X + self.step * self.step_size.reshape(-1, 1))
+    def _compute_step(self, state: State) -> np.ndarray:
+        if state.J.shape != (state.N, self.n_obj, self.dim):
+            raise ValueError("Objective Jacobian has an unexpected shape")
+        self.weights = np.array([minimum_norm_weights(jacobian) for jacobian in state.J])
+        return -np.einsum("ni,nij->nj", self.weights, state.J)
 
-    def log(self):
-        # TODO: maybe we should log the initial population
+    def iteration(self) -> None:
+        self.step = self._compute_step(self.state)
+        self.step_size = np.zeros(self.N)
+        population = self.state.primal.copy()
+        for index, direction in enumerate(self.step):
+            if np.linalg.norm(direction) <= self.xtol:
+                continue
+            alpha = self.initial_step_size
+            for _ in range(self.max_backtracks):
+                candidate = np.clip(self.state.primal[index] + alpha * direction, self.xl, self.xu)
+                displacement = candidate - self.state.primal[index]
+                slopes = self.state.J[index] @ displacement
+                if np.linalg.norm(displacement) <= self.xtol:
+                    break
+                if np.all(slopes < 0):
+                    values = State.evaluate(self.state.func, candidate)
+                    if np.isfinite(values).all() and np.all(
+                        values <= self.state.Y[index] + self.armijo * slopes
+                    ):
+                        population[index] = candidate
+                        self.step_size[index] = alpha
+                        break
+                alpha *= 0.5
+        displacement = np.linalg.norm(population - self.state.primal, axis=1)
+        if np.any(displacement > 0):
+            self.state.update(population)
         self.iter_count += 1
-        self.history_X += [self.state.primal.copy()]
-        self.history_Y += [self.state.Y.copy()]
-        self.history_R_norm += [np.median(np.linalg.norm(self.step, axis=1))]
-        # compute the performance metrics
-        for name, func in self.metrics.items():
-            self.history_metrics[name].append(func.compute(Y=self.state.Y))
+        if displacement.max() <= self.xtol:
+            self.stop_dict["xtol"] = float(displacement.max())
+
+    def log(self) -> None:
+        self.history_X.append(self.state.primal.copy())
+        self.history_Y.append(self.state.Y.copy())
+        self.history_R_norm.append(float(np.median(np.linalg.norm(self.step, axis=1))))
+        for name, metric in self.metrics.items():
+            self.history_metrics[name].append(metric.compute(Y=self.state.Y))
         if self.verbose:
-            self.logger.info(f"iteration {self.iter_count} ---")
-            self.logger.info(f"step size: {self.step_size.ravel()}")
-            self.logger.info(f"R norm: {self.history_R_norm[-1]}")
+            self.logger.info(f"iteration {self.iter_count}: gradient norm {self.history_R_norm[-1]:.6g}")
 
     def terminate(self) -> bool:
         if self.iter_count >= self.max_iters:
             self.stop_dict["iter_count"] = self.iter_count
-
         return bool(self.stop_dict)
-
-    def _compute_step(self, state: State) -> Tuple[np.ndarray, np.ndarray]:
-        R = np.zeros((state.N, state.n_var))
-        for i in range(state.N):
-            v = state.J[i]
-            # TODO: FIXIT!!
-            R[i] = -1 * np.sum([v[k] / np.linalg.norm(v[k]) for k in range(self.n_obj)], axis=0)
-        return R
-
-    def _handle_box_constraint(self, step: np.ndarray, state: State) -> Tuple[np.ndarray, np.ndarray]:
-        primal_vars, step_primal = state.primal, step[:, : self.dim]
-        # distance to the lower and upper boundary per dimension
-        dist_xl, dist_xu = np.abs(primal_vars - self.xl), np.abs(self.xu - primal_vars)
-        # if a point on a lower boundary and its has a negative step on this dimension
-        r, c = np.nonzero(np.isclose(dist_xl, 0, atol=1e-10, rtol=1e-10) & (step_primal < 0))
-        step_primal[r, c] = 0
-        # if a point on an upuper boundary and its has a positive step on this dimension
-        r, c = np.nonzero(np.isclose(dist_xu, 0, atol=1e-10, rtol=1e-10) & (step_primal > 0))
-        step_primal[r, c] = 0
-        s = np.c_[dist_xl / step_primal, -dist_xu / step_primal]
-        s[s >= 0] = np.inf
-        s = np.minimum(1, np.nanmin(np.abs(s), axis=1))
-        step[:, : self.dim] = step_primal
-        return step, min(s)
-
-    def _check_points_uniqueness(self):
-        """check uniqueness of decision and objective points.
-        if two points are identical up to a high precision, then we remove one of them.
-        """
-        primal_vars = self.state.primal
-        D = cdist(primal_vars, primal_vars)
-        drop_idx_X = set([])
-        for i in range(self.N):
-            if i not in drop_idx_X:
-                drop_idx_X |= set(np.nonzero(np.isclose(D[i, :], 0, rtol=self.eps))[0]) - set([i])
-
-        # TODO: get rid of weakly-dominated points
-        drop_idx_Y = set([])
-        drop_idx = drop_idx_X | drop_idx_Y
-        if len(drop_idx) > 0:
-            self.logger.info(f"{len(drop_idx)} points are removed due to duplication")
-        idx = list(set(range(self.N)) - drop_idx)
-        self.state = self.state[idx]
-        self.N = self.state.N

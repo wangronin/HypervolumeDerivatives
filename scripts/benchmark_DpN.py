@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import random
 import sys
 from pathlib import Path
 
@@ -25,12 +24,17 @@ from hvd.newton import DpN
 from hvd import problems
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
-from scripts.utils import get_data_prefix, get_pareto_front, get_run_instances, plot, read_reference_set_data
-
-PROBLEM_NAMES = [
-    name for name in problems.__all__
-    if isinstance(getattr(problems, name), type) and name not in {"MOP", "CMOP"}
-]
+from scripts.utils import (
+    PROBLEM_NAMES,
+    compute_performance,
+    get_dimensions_from_data,
+    get_pareto_front,
+    get_reference_point,
+    get_run_instances,
+    plot,
+    read_reference_set_data,
+    set_random_seed,
+)
 BOUNDARY_CONSTRAINTS = True
 DEFAULT_NEWTON_MAX_ITERS = 5
 DEFAULT_MOEA_GENERATION = 600
@@ -46,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generation", type=int, default=DEFAULT_MOEA_GENERATION)
     parser.add_argument("--max-iters", type=int, default=DEFAULT_NEWTON_MAX_ITERS)
     parser.add_argument("--n-jobs", type=int, default=1)
+    parser.add_argument("--ref-point", nargs="+", type=float)
     parser.add_argument("--type", choices=["gd", "igd", "deltap"], default="igd")
     parser.add_argument("--regularization", action="store_true")
     parser.add_argument("--project-box-constraints", action="store_true")
@@ -63,8 +68,7 @@ def execute(
     pareto_front: np.ndarray,
     ref_point: np.ndarray,
 ) -> dict[str, float | int]:
-    random.seed(66 + run * 1009)
-    np.random.seed(66 + run * 1009)
+    set_random_seed(66 + run * 1009)
     ref, x0, y0, y_indices, eta = read_reference_set_data(
         args.data_path, args.problem, args.algorithm, run, args.generation, matching=True
     )
@@ -112,7 +116,7 @@ def execute(
         objective_columns = [f"f{i + 1}" for i in range(problem.n_obj)]
         pd.DataFrame(y0, columns=objective_columns).to_csv(args.results_dir / f"{name}_y0.csv", index=False)
         pd.DataFrame(Y, columns=objective_columns).to_csv(args.results_dir / f"{name}_y.csv", index=False)
-    out = {key: val.compute(Y=Y) for key, val in metrics.items()}
+    out = compute_performance(Y, pareto_front, ref_point)
     out["run"] = run
     out["Jac_calls"] = optimizer.state.n_jac_evals
     return out
@@ -125,15 +129,10 @@ def main() -> None:
         raise FileNotFoundError(
             f"No {args.problem} / {args.algorithm} runs at generation {args.generation} in {args.data_path}."
         )
-    prefix = get_data_prefix(args.problem, args.algorithm, instances[0], args.generation, args.data_path)
-    pop_x_file = args.data_path / f"{prefix}_lastpopu_x_gen{args.generation}.csv"
-    pop_y_file = args.data_path / f"{prefix}_lastpopu_y_gen{args.generation}.csv"
-    n_var = pd.read_csv(pop_x_file, header=None, nrows=1).shape[1]
-    n_obj = pd.read_csv(pop_y_file, header=None, nrows=1).shape[1]
+    n_var, n_obj = get_dimensions_from_data(args, instances[0])
     problem = getattr(problems, args.problem)(n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS)
     pareto_front = get_pareto_front(problem)
-    ref_point = pd.read_csv(ROOT / "scripts" / "ref_point.csv", index_col="problem")
-    ref_point = ref_point.loc[args.problem].dropna().to_numpy(dtype=float)
+    ref_point = get_reference_point(args, problem)
     # create folders
     args.results_dir.mkdir(parents=True, exist_ok=True)
     if not args.skip_plots:

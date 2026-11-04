@@ -1,6 +1,7 @@
 import random
+from argparse import Namespace
 from pathlib import Path
-from typing import Dict, List, NotRequired, Tuple, TypedDict
+from typing import Any, Dict, List, NotRequired, TypedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,6 +9,25 @@ import pandas as pd
 from matplotlib import rcParams
 from scipy.spatial.distance import cdist
 from sklearn_extra.cluster import KMedoids
+
+from hvd import problems
+from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
+from hvd.hypervolume import HV
+from hvd.utils import get_non_dominated
+
+PROBLEM_NAMES = [
+    name
+    for name in problems.__all__
+    if isinstance(getattr(problems, name), type) and name not in {"MOP", "CMOP"}
+]
+
+
+class MMDConfig(TypedDict):
+    kernel: str
+    theta_multiplier: float
+    regularization: bool
+    beta: NotRequired[float]
+
 
 plt.style.use("ggplot")
 rcParams["font.size"] = 12
@@ -21,6 +41,63 @@ rcParams["xtick.major.size"] = 7
 rcParams["xtick.major.width"] = 1
 rcParams["ytick.major.size"] = 7
 rcParams["ytick.major.width"] = 1
+
+
+def set_random_seed(seed: int) -> None:
+    """Seed Python and NumPy together for reproducible per-run inputs."""
+    random.seed(seed)
+    np.random.seed(seed)
+
+
+def get_dimensions_from_data(
+    args: Namespace, run: int = 1, problem_name: str | None = None
+) -> tuple[int, int]:
+    """Return (n_var, n_obj) from one run's stored X/Y population files.
+
+    problem_name allows the tuner to process several problems with one args object.
+    """
+    prefix = get_data_prefix(
+        problem_name or args.problem, args.algorithm, run, args.generation, args.data_path
+    )
+    return tuple(
+        pd.read_csv(
+            args.data_path / f"{prefix}_lastpopu_{space}_gen{args.generation}.csv",
+            header=None,
+            nrows=1,
+        ).shape[1]
+        for space in ("x", "y")
+    )
+
+
+def get_reference_point(args: Namespace, problem: problems.MOP) -> np.ndarray:
+    """Return the CLI reference point, or its entry in ref_point.csv."""
+    reference = getattr(args, "ref_point", None)
+    if reference is None:
+        reference = pd.read_csv(Path(__file__).with_name("ref_point.csv"), index_col="problem")
+        reference = reference.loc[args.problem].dropna().to_numpy(dtype=float)
+    reference = np.asarray(reference, dtype=float)
+    if reference.shape != (problem.n_obj,):
+        raise ValueError(f"Supply --ref-point with {problem.n_obj} values, one per objective")
+    return reference
+
+
+def compute_performance(
+    y: np.ndarray | None, pareto_front: np.ndarray, ref_point: np.ndarray
+) -> dict[str, float]:
+    """Return HV, IGD and GD of the nondominated final objectives.
+
+    No feasible population yields unavailable metrics; nonfinite objectives are an error.
+    """
+    if y is None or not len(y):
+        return dict(HV=np.nan, IGD=np.nan, GD=np.nan)
+    if not np.isfinite(y).all():
+        raise ValueError("Nonfinite final objectives")
+    y = get_non_dominated(y)
+    return dict(
+        HV=HV(ref_point).compute(Y=y),
+        IGD=InvertedGenerationalDistance(pareto_front).compute(Y=y),
+        GD=GenerationalDistance(pareto_front).compute(Y=y),
+    )
 
 
 def kernel_theta(multiplier: float, approximation: np.ndarray, reference: np.ndarray) -> float:
@@ -50,7 +127,7 @@ def get_data_prefix(problem: str, algorithm: str, run: int, generation: int, dat
     return prefix
 
 
-def get_pareto_front(problem) -> np.ndarray:
+def get_pareto_front(problem: problems.MOP) -> np.ndarray:
     pareto_front = np.asarray(problem.get_pareto_front())
     if len(pareto_front) > 1000:
         model = KMedoids(n_clusters=1000, method="alternate", random_state=0, init="k-medoids++")
@@ -60,21 +137,21 @@ def get_pareto_front(problem) -> np.ndarray:
 
 
 def read_reference_set_data(
-    data_path: str,
+    data_path: Path,
     problem: str,
     moea: str,
     run: int,
     generation: int,
     matching: bool = True,
-) -> Tuple[Dict[int, np.ndarray], np.ndarray, np.ndarray, np.ndarray, Dict[int, np.ndarray]]:
+) -> tuple[dict[int, np.ndarray], np.ndarray, np.ndarray, list[np.ndarray] | None, dict[int, np.ndarray] | None]:
     """Load a reference set and the filtered final population of one run.
 
     Args:
-        path (str): path to the data folder
-        problem_name (str): problem name
-        emoa (str): EMOA algorithm name
+        data_path (Path): path to the data folder
+        problem (str): problem name
+        moea (str): MOEA algorithm name
         run (int): run ID
-        gen (int): the stopping generation of EMOA
+        generation (int): the stopping generation of MOEA
         matching (bool): whether the consumer requires one reference point
             per approximation point. Original MMD does not, so
             ``matching=False`` preserves the complete population and ignores
@@ -175,7 +252,7 @@ def plot(
     ref: np.ndarray,
     pareto_front: np.ndarray,
     fig_name: str | Path,
-    optimizer=None,
+    optimizer: Any | None = None,
     plot_trajectory: bool = False,
 ) -> None:
     ndim = Y0.shape[1]
@@ -206,10 +283,10 @@ def plot_2d(
     ref: np.ndarray,
     pareto_front: np.ndarray,
     hist_Y: List[np.ndarray],
-    history_medoids: List[np.ndarray],
-    history_metric: np.ndarray,
-    hist_R_norm: np.ndarray,
-    fig_name: str,
+    history_medoids: Dict[int, List[np.ndarray]],
+    history_metric: Dict[str, List[float]],
+    hist_R_norm: List[float],
+    fig_name: str | Path,
     plot_trajectory: bool = True,
 ) -> None:
     """plot the convergence results in 2D objective space for reference set-based methods, e.g., DpN.
@@ -220,9 +297,9 @@ def plot_2d(
         ref (np.ndarray): the initial reference set
         pareto_front (np.ndarray): target Pareto front
         hist_Y (List[np.ndarray]): history/trajectory of the approximation set
-        history_medoids (List[np.ndarray]): history/trajectory of medoids of the reference set
-        history_metric (np.ndarray): history/trajectory of performance metrics
-        hist_R_norm (np.ndarray): history/trajectory of the norm of the root-finding problem
+        history_medoids (Dict[int, List[np.ndarray]]): history of reference-set medoids
+        history_metric (Dict[str, List[float]]): history of performance metrics
+        hist_R_norm (List[float]): history of root-finding norms
         fig_name (str): name to save the figure
         plot_trajectory (bool, optional): if plotting the trajectory of approximation points. Defaults to True.
     """
@@ -305,10 +382,10 @@ def plot_3d(
     ref: np.ndarray,
     pareto_front: np.ndarray,
     hist_Y: List[np.ndarray],
-    history_medoids: List[np.ndarray],
-    history_metric: np.ndarray,
-    hist_R_norm: np.ndarray,
-    fig_name: str,
+    history_medoids: Dict[int, List[np.ndarray]],
+    history_metric: Dict[str, List[float]],
+    hist_R_norm: List[float],
+    fig_name: str | Path,
     plot_trajectory: bool = False,
 ) -> None:
     colors = plt.get_cmap("tab20").colors

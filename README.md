@@ -288,6 +288,74 @@ Visual candidate review and selection are handled separately under `scripts/tune
 AHD is `max(GD, IGD)`. The statistics script compares all 30 paired runs across
 IDTLZ1–4 and WFG2–9, including the stored initial MOEA baseline.
 
+### Gradient and bootstrap benchmarks
+
+`benchmark_MGDA.py` uses the `MGDA` method/file tag and implements
+[multiple-gradient descent (MGDA)](https://mgda.inria.fr/mgda): the negative
+minimum-norm convex combination of objective gradients, with box bounds and an
+Armijo line search for all objectives. It supports more than three objectives;
+intrinsic equality/inequality constraints are not handled by this method.
+
+`benchmark_MMD_bootstrap.py` accepts the same configuration files and solver
+options as `benchmark_MMD.py`. It uses the existing population-based reference
+refresh, without the removed RSG module. Defaults are nine Newton steps, refresh
+interval three, and resampling from the last three completed populations. The
+final Newton iteration is included in that resampling. Its output method tag is
+`MMDNBootstrap` or `MMDNMatchingBootstrap`, according to the configuration.
+
+```shell
+python scripts/benchmark_MGDA.py IDTLZ1 --algorithm NSGA-II --n-jobs 15
+python scripts/benchmark_MMD_bootstrap.py WFG2 --algorithm NSGA-II --config-file mmd_tuning_results/MMDNewton-MMDMatching-WFG2-NSGA-II-bounds-best.json --n-jobs 15
+```
+
+Both write one CSV with `run,HV,IGD,GD,Jac_calls` under `results/`, using the same
+problem/method/algorithm/generation convention. For a different number of
+objectives, supply `--ref-point` with one value per objective; stored populations
+determine the problem dimensions.
+
+### Fresh MOEA runs and population export
+
+`benchmark_MOEA.py` is the shared runner for both budgets. Each run starts with a
+fresh MOEA population, seeded by its run ID:
+
+```shell
+# Match each Newton run's budget: ceil(3.215 * that run's Jac_calls).
+python scripts/benchmark_MOEA.py IDTLZ1 --algorithm NSGA-II --budget newton --newton MMDNMatching --n-jobs 15
+# Fixed generations, with the final seven populations exported.
+python scripts/benchmark_MOEA.py WFG2 --algorithm MOEAD --budget fixed --generation 600 --save-populations --n-jobs 15
+```
+
+`--generation` selects the source Newton CSV in `newton` mode and the generation
+budget in `fixed` mode. Newton budgets use the matching run ID, with no median
+aggregation or added initialization budget. Pymoo stops at offspring-batch
+boundaries, so actual function evaluations can exceed the converted target.
+Population size defaults to 100/300/600
+for 2/3/4 objectives, and reference directions match the objective count.
+Use `--n-var`, `--n-obj`, `--pop-size`, and `--ref-point` to override dimensions,
+population size and the hypervolume reference point.
+
+Both budgets use `results/PROBLEM-ALGORITHM-GENERATION.csv`, with
+`run,HV,IGD,GD`. Use `--output` to retain separate files for different budgets
+or to preserve an existing initial MOEA baseline. Runs
+without a feasible solution retain their run ID and unavailable (`NaN`) metrics.
+`--output` selects an exact filename.
+
+`--save-populations` writes `PROBLEM_ALGORITHM.csv` and `.mat` in
+`--population-dir` (default `data/`). Columns identify `run`, `iteration`,
+decisions (`x*`), objectives (`f*`), and constraints (`h*`, `g*`) separately.
+`--last-generations` controls how many final populations to retain; CSV exports
+preserve 17 significant digits.
+
+```shell
+mkdir -p results/logs
+sbatch scripts/run_EA_save_population.sh
+```
+
+The launcher covers the original 21 problems (WFG1–9, IDTLZ1–4, Eq1IDTLZ1–4,
+Eq1DTLZ1–4) across NSGA-II, NSGA-III and MOEAD: 63 tasks, at most 20 concurrent.
+Each task runs 30 seeds using its 15 allocated CPUs. Extra command-line arguments
+are forwarded to the shared runner. Numerical runs on ALICE use Slurm allocations.
+
 ## Brief Explanation of the Analytical Computation
 
 The **hypervolume indicator** (HV) of a set of points is the m-dimensional Lebesgue measure of the space that is jointly dominated by a set of objective function vectors in $\mathbb{R}^m$ and bound from above by a reference point. HV is widely investigated in solving _multi-objective optimization problems_ (MOPs), where it is often used as a performance indicator for assessing the quality of _Evolutionay Multi-objective Optimization Algorithms_ (EMOAs), or employed to solve MOPs directly, e.g., [Hypervolume Indicator Gradient Algorithm](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Pz9c6XwAAAAJ&citation_for_view=Pz9c6XwAAAAJ:5nxA0vEk-isC) and [Hypervolume Indicator Netwon Method](https://scholar.google.com/citations?view_op=view_citation&hl=en&user=Pz9c6XwAAAAJ&citation_for_view=Pz9c6XwAAAAJ:QIV2ME_5wuYC).
