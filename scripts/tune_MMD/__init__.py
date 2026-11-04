@@ -1,1 +1,1 @@
-"""MMD parameter tuning and campaign review tools."""
+"""MMD parameter tuning, visual candidate review, selection, and reporting."""

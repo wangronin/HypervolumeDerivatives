@@ -203,7 +203,26 @@ convention: `State` passes the input directly to the callback.
 
 ## MMD tuning
 
-`scripts/tune_MMD/tune_MMD.py` and `scripts/tune_MMD/benchmark_MMD.py` support IDTLZ1–IDTLZ4,
+The tools in `scripts/tune_MMD/` follow an explicit workflow:
+**tune → inspect candidate plots → select → benchmark → report**.
+There is no online controller or auditing stage. See
+[scripts/tune_MMD/README.md](scripts/tune_MMD/README.md) for commands and outputs.
+
+```shell
+python scripts/tune_MMD/tune_MMD.py WFG2 --algorithm NSGA-II --workers 15 --output-dir mmd_tuning_results/new-study
+python scripts/tune_MMD/review_MMD.py review mmd_tuning_results/new-study WFG2 --algorithm NSGA-II
+```
+
+Defaults are generation 600, five Newton steps, 100 cumulative attempts,
+training runs 1–20 and held-out runs 21–30. Choose a configuration using its
+training score and visual inspection before benchmarking all available runs.
+The Slurm launcher accepts `WFG` (WFG2–9) or `IDTLZ` (IDTLZ1–4).
+
+Prepared populations/reference sets are stored in `data/`; examples and fixtures
+are in `test_data/`. Problem classes are resolved by name from `hvd.problems`,
+and dimensions come from the stored populations.
+
+`scripts/tune_MMD/tune_MMD.py` and `scripts/tune_MMD/review_MMD.py` support IDTLZ1–IDTLZ4,
 WFG1–WFG9, Eq1DTLZ1–Eq1DTLZ4, and Eq1IDTLZ1–Eq1IDTLZ4 with MOEA/D
 (`MOEAD` on the command line), NSGA-II, and NSGA-III. Both pass equality
 constraints and their first and second derivatives to Newton, along with
@@ -221,24 +240,6 @@ scores can be trusted: for example, NSGA-III run 1 of Eq1DTLZ2 stores
 `[f2, f3, h1]` in `lastpopu_y` instead of `[f1, f2, f3]`. Population and
 reference-set exports must select objective columns explicitly, excluding
 constraints. The scripts do not silently replace these stored values.
-
-Benchmark populations and reference sets are stored in `data/`. Select the
-stored generation with `--generation` (600 by default). The tuner reads the
-problem dimensions from the stored data; WFG uses its default position
-parameter `k=4`. Example and fixture datasets are stored separately in `test_data/`.
-
-```shell
-python scripts/tune_MMD/tune_MMD.py WFG4 --algorithm MOEAD --data-path data --workers 15
-python scripts/tune_MMD/tune_MMD.py Eq1DTLZ2 --data-path data --workers 15
-python scripts/tune_MMD/benchmark_MMD.py Eq1IDTLZ2 --data-path data --matching
-sbatch scripts/tune_MMD/tune_MMD.sh
-```
-
-The command-line entry point uses MMD-Matching. Runs 1–20 tune the parameters
-and runs 21–30 validate them. The campaign controller supplies the Slurm
-array indices and concurrency; each task uses 15 workers. Its data directory
-must contain the prepared populations and reference sets for the selected cases.
-See `scripts/tune_MMD/MMD_CAMPAIGN.md` for campaign commands and saved artifacts.
 
 The WFG hypervolume reference points in `scripts/ref_point.csv` are
 `(3, 5, 7)`, following the convention `r_i = 2i + 1` in Section IV-C of
@@ -282,7 +283,7 @@ It uses regularization and box projection from the saved configuration;
 `--no-project-box-constraints` override those settings explicitly. `--output`
 sets an exact filename; otherwise `--results-dir` uses the existing
 `PROBLEM-MMDNMatching-ALGORITHM-GENERATION.csv` convention (or `MMDN` without matching).
-The campaign review and validation runner is separate, under `scripts/tune_MMD/`.
+Visual candidate review and selection are handled separately under `scripts/tune_MMD/`.
 
 AHD is `max(GD, IGD)`. The statistics script compares all 30 paired runs across
 IDTLZ1–4 and WFG2–9, including the stored initial MOEA baseline.
