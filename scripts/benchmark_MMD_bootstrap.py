@@ -74,9 +74,7 @@ def main() -> None:
     else:
         records = Parallel(n_jobs=args.n_jobs)(delayed(execute)(run, *params) for run in instances)
     method = "MMDNMatchingBootstrap" if args.matching else "MMDNBootstrap"
-    output = (
-        args.output or args.results_dir / f"{args.problem}-{method}-{args.algorithm}-{args.generation}.csv"
-    )
+    output = args.results_dir / f"{args.problem}-{method}-{args.algorithm}-{args.generation}.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(records, columns=["run", "HV", "IGD", "GD", "Jac_calls"]).to_csv(output, index=False)
 

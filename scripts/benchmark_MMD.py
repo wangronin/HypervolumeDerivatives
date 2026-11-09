@@ -3,6 +3,7 @@
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -21,14 +22,15 @@ from hvd.mmd.kernels import RBF, RationalQuadratic
 from hvd.mmd_newton import MMDN
 from hvd.reference_set import ReferenceSet
 from scripts.utils import (
-    MMDConfig,
     PROBLEM_NAMES,
+    MMDConfig,
     compute_performance,
     get_dimensions_from_data,
     get_pareto_front,
     get_reference_point,
     get_run_instances,
     kernel_theta,
+    plot,
     read_reference_set_data,
     set_random_seed,
 )
@@ -51,7 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--matching", action="store_true")
     parser.add_argument("--n-jobs", type=int, default=1)
     parser.add_argument("--ref-point", nargs="+", type=float)
-    parser.add_argument("--output", type=Path)
+    parser.add_argument("--plot", action="store_true")
+    parser.add_argument("--plot-dir", type=Path, default=ROOT / "plots")
     parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
     return parser
 
@@ -109,9 +112,20 @@ def execute(
     ref_point: np.ndarray,
 ) -> dict[str, float | int]:
     optimizer = get_optimizer(run, args, configuration, problem)
+    y0 = optimizer.state.Y.copy()
+    initial_reference = optimizer.indicator.ref.reference_set.copy()
+    started = time.process_time_ns()
     _, y, _ = optimizer.run()
+    cpu_time = (time.process_time_ns() - started) / 1e9
+    if args.plot:
+        for values in optimizer.history_Y:
+            for metric, value in compute_performance(values, pareto_front, ref_point).items():
+                optimizer.history_metrics[metric].append(value)
+        method = "MMDNMatching" if args.matching else "MMDN"
+        name = f"{args.problem}_{method}_{args.algorithm}_run{run}_{args.generation}"
+        plot(y0, y, initial_reference, pareto_front, args.plot_dir / f"{name}.pdf", optimizer)
     performance = compute_performance(y, pareto_front, ref_point)
-    return {"run": run, **performance, "Jac_calls": optimizer.state.n_jac_evals}
+    return {"run": run, **performance, "Jac_calls": optimizer.state.n_jac_evals, "CPU_time": cpu_time}
 
 
 def get_config(args: argparse.Namespace) -> tuple[MMDConfig, argparse.Namespace]:
@@ -133,18 +147,15 @@ def main() -> None:
     args = build_parser().parse_args()
     configuration, args = get_config(args)
     instances = get_run_instances(args.problem, args.algorithm, args.generation, args.data_path)
-    if not instances:
-        raise FileNotFoundError(
-            f"No {args.problem} / {args.algorithm} runs at generation {args.generation} in {args.data_path}."
-        )
     n_var, n_obj = get_dimensions_from_data(args, instances[0])
     problem = getattr(problems, args.problem)(
         n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS
     )
     pareto_front = get_pareto_front(problem)
     ref_point = get_reference_point(args, problem)
-    # create folders
     args.results_dir.mkdir(parents=True, exist_ok=True)
+    if args.plot:
+        args.plot_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"optimize {args.problem}")
     print(f"JAX 64-bit enabled: {jax_config.jax_enable_x64}")
@@ -155,9 +166,9 @@ def main() -> None:
     else:
         data = Parallel(n_jobs=args.n_jobs)(delayed(execute)(run, *params) for run in instances)
 
-    columns = ["run", "HV", "IGD", "GD", "Jac_calls"]
+    columns = ["run", "HV", "IGD", "GD", "Jac_calls", "CPU_time"]
     alg_name = "MMDNMatching" if args.matching else "MMDN"
-    output = args.output or args.results_dir / f"{args.problem}-{alg_name}-{args.algorithm}-{args.generation}.csv"
+    output = args.results_dir / f"{args.problem}-{alg_name}-{args.algorithm}-{args.generation}.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(data, columns=columns).to_csv(output, index=False)
 

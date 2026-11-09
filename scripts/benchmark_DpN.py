@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from jax import config as jax_config
@@ -18,10 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from hvd import problems
 from hvd.delta_p import GenerationalDistance, InvertedGenerationalDistance
 from hvd.hypervolume import HV
 from hvd.newton import DpN
-from hvd import problems
 from hvd.reference_set import ReferenceSet
 from hvd.utils import get_non_dominated
 from scripts.utils import (
@@ -35,6 +36,7 @@ from scripts.utils import (
     read_reference_set_data,
     set_random_seed,
 )
+
 BOUNDARY_CONSTRAINTS = True
 DEFAULT_NEWTON_MAX_ITERS = 5
 DEFAULT_MOEA_GENERATION = 600
@@ -50,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--generation", type=int, default=DEFAULT_MOEA_GENERATION)
     parser.add_argument("--max-iters", type=int, default=DEFAULT_NEWTON_MAX_ITERS)
     parser.add_argument("--n-jobs", type=int, default=1)
+    parser.add_argument("--verbose", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--ref-point", nargs="+", type=float)
     parser.add_argument("--type", choices=["gd", "igd", "deltap"], default="igd")
     parser.add_argument("--regularization", action="store_true")
@@ -59,6 +62,40 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--plot-dir", type=Path, default=ROOT / "plots")
     parser.add_argument("--results-dir", type=Path, default=ROOT / "results")
     return parser
+
+
+def get_optimizer(
+    args: argparse.Namespace,
+    problem: problems.CMOP,
+    reference_set: ReferenceSet,
+    x0: np.ndarray,
+    metrics: dict,
+) -> DpN:
+    """Build DpN from the loaded population and reference set."""
+    return DpN(
+        dim=problem.n_var,
+        n_obj=problem.n_obj,
+        ref=reference_set,
+        func=problem.objective,
+        jac=problem.objective_jacobian,
+        hessian=problem.objective_hessian,
+        h=problem.eq_constraint,
+        h_jac=problem.eq_jacobian,
+        h_hessian=problem.eq_hessian,
+        g=problem.ieq_constraint,
+        g_jac=problem.ieq_jacobian,
+        g_hessian=problem.ieq_hessian,
+        N=len(x0),
+        x0=x0,
+        xl=problem.xl,
+        xu=problem.xu,
+        max_iters=args.max_iters,
+        type=args.type,
+        verbose=args.verbose,
+        metrics=metrics,
+        regularization=args.regularization,
+        project_box_constraints=args.project_box_constraints,
+    )
 
 
 def execute(
@@ -83,32 +120,11 @@ def execute(
     for key, val in metrics.items():
         print(f"initial {key}: {val.compute(Y=y0)}")
 
-    optimizer = DpN(
-        dim=problem.n_var,
-        n_obj=problem.n_obj,
-        ref=reference_set,
-        func=problem.objective,
-        jac=problem.objective_jacobian,
-        hessian=problem.objective_hessian,
-        h=problem.eq_constraint,
-        h_jac=problem.eq_jacobian,
-        h_hessian=problem.eq_hessian,
-        g=problem.ieq_constraint,
-        g_jac=problem.ieq_jacobian,
-        g_hessian=problem.ieq_hessian,
-        N=len(x0),
-        x0=x0,
-        xl=problem.xl,
-        xu=problem.xu,
-        max_iters=args.max_iters,
-        type=args.type,
-        verbose=True,
-        metrics=metrics,
-        regularization=args.regularization,
-        project_box_constraints=args.project_box_constraints,
-    )
-    # Use the nondominated subset to compute performance.
-    Y = get_non_dominated(optimizer.run()[1])
+    optimizer = get_optimizer(args, problem, reference_set, x0, metrics)
+    started = time.process_time_ns()
+    result = optimizer.run()[1]
+    cpu_time = (time.process_time_ns() - started) / 1e9
+    Y = get_non_dominated(result)
     name = f"{args.problem}_DpN_{args.algorithm}_run{run}_{args.generation}"
     if not args.skip_plots:
         plot(y0, Y, initial_reference, pareto_front, args.plot_dir / f"{name}.pdf", optimizer)
@@ -119,21 +135,19 @@ def execute(
     out = compute_performance(Y, pareto_front, ref_point)
     out["run"] = run
     out["Jac_calls"] = optimizer.state.n_jac_evals
+    out["CPU_time"] = cpu_time
     return out
 
 
 def main() -> None:
     args = build_parser().parse_args()
     instances = get_run_instances(args.problem, args.algorithm, args.generation, args.data_path)
-    if not instances:
-        raise FileNotFoundError(
-            f"No {args.problem} / {args.algorithm} runs at generation {args.generation} in {args.data_path}."
-        )
     n_var, n_obj = get_dimensions_from_data(args, instances[0])
-    problem = getattr(problems, args.problem)(n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS)
+    problem = getattr(problems, args.problem)(
+        n_var=n_var, n_obj=n_obj, boundary_constraints=BOUNDARY_CONSTRAINTS
+    )
     pareto_front = get_pareto_front(problem)
     ref_point = get_reference_point(args, problem)
-    # create folders
     args.results_dir.mkdir(parents=True, exist_ok=True)
     if not args.skip_plots:
         args.plot_dir.mkdir(parents=True, exist_ok=True)
@@ -147,8 +161,9 @@ def main() -> None:
     else:
         data = Parallel(n_jobs=args.n_jobs)(delayed(execute)(run, *params) for run in instances)
 
-    columns = ["run", "HV", "IGD", "GD", "Jac_calls"]
+    columns = ["run", "HV", "IGD", "GD", "Jac_calls", "CPU_time"]
     output = args.results_dir / f"{args.problem}-DpN-{args.algorithm}-{args.generation}.csv"
+    output.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(data, columns=columns).to_csv(output, index=False)
 
 

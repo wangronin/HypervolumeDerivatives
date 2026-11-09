@@ -1,171 +1,199 @@
+"""Measure single-point function, Jacobian and Hessian CPU times on ALICE.
+
+Warm up JAX before timing. Public problem methods return NumPy arrays, so
+each call finishes before the timer stops. Save raw samples, CSVs, a LaTeX
+table and basic machine information. Run with measure_CPU_time.sh.
+"""
+
+import argparse
+import gc
+import json
+import os
+import platform
 import sys
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
-sys.path.insert(0, "./")
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
-import matplotlib.pyplot as plt
+# Set these before importing NumPy or JAX. Slurm also binds the process to one CPU.
+for name in (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "TF_NUM_INTRAOP_THREADS",
+    "TF_NUM_INTEROP_THREADS",
+):
+    os.environ[name] = "1"
+os.environ["JAX_PLATFORMS"] = "cpu"
+os.environ["JAX_ENABLE_X64"] = "True"
+os.environ.setdefault("XLA_FLAGS", "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1")
+
+import jax
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from matplotlib import rcParams
 
-from hvd.problems import (
-    CF1,
-    CF2,
-    CF3,
-    CF4,
-    CF5,
-    CF6,
-    CF7,
-    CF8,
-    CF9,
-    CF10,
-    DTLZ1,
-    DTLZ2,
-    DTLZ3,
-    DTLZ4,
-    DTLZ5,
-    DTLZ6,
-    DTLZ7,
-    IDTLZ1,
-    IDTLZ2,
-    IDTLZ3,
-    IDTLZ4,
-    ZDT1,
-    ZDT2,
-    ZDT3,
-    ZDT4,
-    ZDT6,
-    MOP,
+from hvd import problems
+
+PROBLEM_NAMES = (
+    [f"ZDT{i}" for i in range(1, 5)]
+    + [f"DTLZ{i}" for i in range(1, 8)]
+    + [f"IDTLZ{i}" for i in range(1, 5)]
+    + [f"WFG{i}" for i in range(2, 10)]
 )
+CALLS = {"FE": "objective", "Jacobian": "objective_jacobian", "Hessian": "objective_hessian"}
 
-sns.set_theme(rc={"figure.figsize": (12, 6)})
-np.random.seed(42)
 
-plt.style.use("ggplot")
-rcParams["font.size"] = 17
-rcParams["xtick.direction"] = "out"
-rcParams["ytick.direction"] = "out"
-rcParams["text.usetex"] = True
-rcParams["legend.numpoints"] = 1
-rcParams["xtick.labelsize"] = 17
-rcParams["ytick.labelsize"] = 17
-rcParams["xtick.major.size"] = 7
-rcParams["xtick.major.width"] = 1
-rcParams["ytick.major.size"] = 7
-rcParams["ytick.major.width"] = 1
-
-N = 1e5
-res = []
-data_FE = []
-set_ = 1
-if set_ == 1:
-    problems_name = ["ZDT1", "ZDT2", "ZDT3", "ZDT4"] + [f"DTLZ{k}" for k in range(1, 8)]
-    dict_ = locals()
-    problems = [dict_[k]() for k in problems_name]
-else:
-    problems = [
-        CF1(),
-        CF2(),
-        CF3(),
-        CF4(),
-        CF5(),
-        CF6(),
-        CF7(),
-        CF8(),
-        CF9(),
-        CF10(),
-        IDTLZ1(),
-        IDTLZ2(),
-        IDTLZ3(),
-        IDTLZ4(),
-    ]
-    problems_name = [type(p).__name__ for p in problems]
-
-for problem in problems:
-    f = MOP.from_pymoo(problem)
-    FE_time = []
-    for i in range(int(N)):
-        r = problem.xu - problem.xl
-        x = r * np.random.rand(problem.n_var) + problem.xl
-        t0 = time.process_time_ns()
-        Y = f.objective(x)
-        t1 = time.process_time_ns()
-        if i > 0:  # the first iteration contains JIT computation time
-            FE_time.append((t1 - t0) / 1000.0)
-
-    data_FE += FE_time
-    res.append(
-        ["FE", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.quantile(FE_time, 0.9)]
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--problems", nargs="+", choices=PROBLEM_NAMES, default=PROBLEM_NAMES)
+    parser.add_argument(
+        "--samples", type=int, default=100_000, help="Measured calls per problem and call type"
     )
-data_FE = np.vstack([np.repeat(problems_name, N - 1), data_FE]).T
-
-N = 1e5
-data_AD = []
-for problem in problems:
-    f = MOP.from_pymoo(problem)
-    FE_time = []
-    func = f.objective
-    jac = f.objective_jacobian
-    hessian = f.objective_hessian
-    for i in range(int(N)):
-        r = problem.xu - problem.xl
-        x = r * np.random.rand(problem.n_var) + problem.xl
-        # record the CPU time of function evaluations
-        t0 = time.process_time_ns()
-        # Y = func(x)  # `(N, dim_m)`
-        # H = h(x)
-        # Jacobians
-        # YdX = jac(x)  # `(N, dim_m, dim_d)`
-        # Hessians
-        YdX2 = hessian(x)  # `(N, dim_m, dim_d, dim_d)`
-        # HdX = h_jac(x)
-        # HdX2 = h_hessian(x)
-        t1 = time.process_time_ns()
-        if i > 0:
-            FE_time.append((t1 - t0) / 1000.0)
-    data_AD += FE_time
-    res.append(
-        ["AD", type(problem).__name__, np.mean(FE_time), np.median(FE_time), np.quantile(FE_time, 0.9)]
+    parser.add_argument(
+        "--warmup", type=int, default=100, help="Unmeasured calls per call type, including JIT"
     )
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--output-dir", type=Path, default=ROOT / "results" / "cpu_time")
+    return parser
 
-data_AD = np.vstack([np.repeat(problems_name, N - 1), data_AD]).T
-data = pd.DataFrame(
-    np.c_[
-        ["function evaluation"] * len(data_FE) + ["automatic differentiation"] * len(data_AD),
-        np.vstack([data_FE, data_AD]),
-    ],
-    columns=["type", "problem", "time"],
-)
-data.time = pd.to_numeric(data.time)
-ratios = []
-for p in problems_name:
-    data_ = data[(data.problem == p)].groupby("type")["time"].mean()
-    ratios.append(data_["automatic differentiation"] / data_["function evaluation"])
-print(rf"CPU time ratio (AD/FE): {np.mean(ratios)}")
 
-df = pd.DataFrame(res, columns=["type", "problem", "mean_CPU", "median_CPU", "upper quantile"])
-df.to_csv("CPU_time.csv", index=False)
-print(df)
+def measure(function, points: np.ndarray, warmup: np.ndarray) -> np.ndarray:
+    """Return CPU nanoseconds per call, excluding compilation and garbage collection."""
+    for x in warmup:
+        value = function(x)
+    if not isinstance(value, np.ndarray) or not np.isfinite(value).all():
+        raise ValueError("Expected a finite NumPy result after warmup")
 
-from matplotlib.ticker import LogLocator
+    times = np.empty(len(points), dtype=np.int64)
+    gc.collect()
+    gc_was_enabled = gc.isenabled()
+    gc.disable()
+    try:
+        for i, x in enumerate(points):
+            start = time.process_time_ns()
+            value = function(x)
+            times[i] = time.process_time_ns() - start
+    finally:
+        if gc_was_enabled:
+            gc.enable()
+    if not np.isfinite(value).all() or np.any(times <= 0):
+        raise ValueError("Invalid measured result or CPU time")
+    return times
 
-data = data.astype({"time": "float64"})
-ax = sns.violinplot(
-    data=data, x="problem", y="time", hue="type", log_scale=True, split=True, gap=0.1, inner="quart"
-)
-ax.set_ylabel("CPU time (sec)")
-ax.yaxis.set_major_locator(LogLocator(base=10.0, numticks=10))
-ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=10))
-ax.set_ylim(2, 20)
-ax.get_legend().set_title("")
-plt.tight_layout()
-fig = ax.get_figure()
-fig.savefig("CPU_time.pdf")
-#  type   problem  mean_CPU  median_CPU   std_CPU
-# 0   FE  Eq1DTLZ1  0.000056    0.000054  0.000010
-# 1   FE  Eq1DTLZ2  0.000058    0.000056  0.000010
-# 2   FE  Eq1DTLZ3  0.000063    0.000060  0.000011
-# 3   AD  Eq1DTLZ1  0.065438    0.058103  0.016560
-# 4   AD  Eq1DTLZ2  0.058690    0.056689  0.006520
-# 5   AD  Eq1DTLZ3  0.063028    0.062523  0.002414
+
+def write_summary(directory: Path, records: list[dict]) -> None:
+    pd.DataFrame(records).to_csv(directory / "CPU_time.csv", index=False)
+    by_problem = {}
+    for record in records:
+        by_problem.setdefault(record["problem"], {})[record["type"]] = record
+    lines = [r"""% CPU times in microseconds; see metadata.json for CPU, software and method.
+\begin{tabular}{lrrrrrrrrrrr}
+\toprule
+\multirow{2}{*}{Problem} & \multirow{2}{*}{$n$} & \multirow{2}{*}{$m$} & \multicolumn{3}{c}{Function evaluation ($\mu$s)} & \multicolumn{3}{c}{Jacobian call ($\mu$s)} & \multicolumn{3}{c}{Hessian call ($\mu$s)} \\
+\cmidrule(lr){4-6}\cmidrule(lr){7-9}\cmidrule(lr){10-12}
+ & & & mean & median & 90\% & mean & median & 90\% & mean & median & 90\% \\
+\midrule"""]
+    ratios = []
+    for problem, calls in by_problem.items():
+        record = calls["FE"]
+        values = [f"{calls[call][stat]:.3f}" for call in CALLS for stat in ("mean_us", "median_us", "p90_us")]
+        lines.append(" & ".join([problem, str(record["n_var"]), str(record["n_obj"]), *values]) + r" \\")
+        ratios.append(
+            {
+                "problem": problem,
+                "Jacobian_over_FE": calls["Jacobian"]["mean_us"] / record["mean_us"],
+                "Hessian_over_FE": calls["Hessian"]["mean_us"] / record["mean_us"],
+            }
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    (directory / "CPU_time.tex").write_text("\n".join(lines) + "\n")
+    pd.DataFrame(ratios).to_csv(directory / "CPU_time_ratios.csv", index=False)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    if args.samples < 1 or args.warmup < 1:
+        raise ValueError("Sample and warmup counts must be positive")
+    directory = args.output_dir.resolve()
+    directory.mkdir(parents=True, exist_ok=True)
+    if (directory / "metadata.json").exists():
+        raise FileExistsError(f"Use a new output directory to preserve the existing run: {directory}")
+
+    cpuinfo = Path("/proc/cpuinfo")
+    cpu_models = [platform.processor()]
+    if cpuinfo.is_file():
+        cpu_models = sorted({
+            line.split(":", 1)[1].strip()
+            for line in cpuinfo.read_text().splitlines()
+            if line.startswith("model name")
+        })
+    metadata = {
+        "started_utc": datetime.now(timezone.utc).isoformat(),
+        "hostname": platform.node(),
+        "cpu_models": cpu_models,
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "jax": jax.__version__,
+        "clock": "time.process_time_ns",
+        "samples_per_call": args.samples,
+        "warmup_per_call": args.warmup,
+        "seed": args.seed,
+        "problems": args.problems,
+        "method": "Single-threaded float64 calls at uniform random inputs; identical points for "
+        "all three call types; JIT/warmup excluded; GC disabled while timing. "
+        "Dimensions are recorded in CPU_time.csv; DTLZ uses constructor defaults (11, 3).",
+        "status": "running",
+    }
+    metadata_file = directory / "metadata.json"
+    metadata_file.write_text(json.dumps(metadata, indent=2) + "\n")
+    print(f"Host: {metadata['hostname']}; CPU: {cpu_models}", flush=True)
+    records = []
+    try:
+        for name in args.problems:
+            kwargs = {"n_var": 10, "n_obj": 3} if name.startswith("WFG") else {}
+            problem = getattr(problems, name)(**kwargs, boundary_constraints=False)
+            rng = np.random.default_rng(np.random.SeedSequence([args.seed, PROBLEM_NAMES.index(name)]))
+            points = problem.xl + (problem.xu - problem.xl) * rng.random((args.samples, problem.n_var))
+            warmup = problem.xl + (problem.xu - problem.xl) * rng.random((args.warmup, problem.n_var))
+            raw = {"points": points}
+            for label, method in CALLS.items():
+                times = measure(getattr(problem, method), points, warmup)
+                raw[f"{label}_cpu_ns"] = times
+                us = times / 1000.0
+                record = dict(
+                    type=label,
+                    problem=name,
+                    n_var=problem.n_var,
+                    n_obj=problem.n_obj,
+                    samples=args.samples,
+                    mean_us=float(np.mean(us)),
+                    median_us=float(np.median(us)),
+                    p90_us=float(np.quantile(us, 0.9)),
+                    min_us=float(np.min(us)),
+                    max_us=float(np.max(us)),
+                )
+                records.append(record)
+                print(
+                    f"{name} n={problem.n_var} m={problem.n_obj} {label}: "
+                    f"mean={record['mean_us']:.3f}, median={record['median_us']:.3f}, p90={record['p90_us']:.3f} us",
+                    flush=True,
+                )
+            np.savez_compressed(directory / f"{name}_samples.npz", **raw)
+            write_summary(directory, records)
+            # Compiled executables are not needed by the following problem.
+            jax.clear_caches()
+        metadata.update(status="complete", completed_utc=datetime.now(timezone.utc).isoformat())
+    except BaseException as error:
+        metadata.update(status="failed", error=repr(error))
+        raise
+    finally:
+        metadata_file.write_text(json.dumps(metadata, indent=2) + "\n")
+
+
+if __name__ == "__main__":
+    main()

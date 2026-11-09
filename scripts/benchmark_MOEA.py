@@ -3,6 +3,7 @@
 import argparse
 import math
 import sys
+import time
 from collections import deque
 from pathlib import Path
 
@@ -32,6 +33,7 @@ from scripts.utils import (
     get_reference_point,
     set_random_seed,
 )
+
 ALGORITHMS = ["NSGA-II", "NSGA-III", "MOEAD", "SMS-EMOA"]
 
 
@@ -93,18 +95,14 @@ def get_algorithm(n_obj: int, name: str, pop_size: int, constrained: bool) -> Al
     return algorithm
 
 
-def get_budgets(args: argparse.Namespace, runs: list[int]) -> dict[int, int]:
+def get_budgets(args: argparse.Namespace, runs: list[int] | None = None) -> dict[int, int]:
     """Match each run ID to ceil(jacobian-cost * that run's Jac_calls)."""
     if args.budget == "fixed":
+        runs = list(range(1, args.runs + 1)) if runs is None else runs
         return {run: args.generation for run in runs}
     source = args.results_dir / f"{args.problem}-{args.newton}-{args.algorithm}-{args.generation}.csv"
     calls = pd.read_csv(source).set_index("run", verify_integrity=True)["Jac_calls"]
-    missing = set(runs) - set(calls.index)
-    if missing:
-        raise ValueError(f"Missing Jacobian counts for runs {sorted(missing)}: {source}")
-    values = calls.loc[runs].to_numpy(dtype=float)
-    if not np.isfinite(values).all() or np.any(values <= 0) or np.any(values != np.floor(values)):
-        raise ValueError("Jac_calls must contain finite positive integer counts")
+    runs = sorted(calls.index)[: args.runs] if runs is None else runs
     return {run: math.ceil(args.jacobian_cost * calls.loc[run]) for run in runs}
 
 
@@ -140,40 +138,39 @@ def execute(
     algorithm.setup(native, termination=termination, seed=run, verbose=False)
     history = deque(maxlen=args.last_generations)
 
+    started = time.process_time_ns()
     while algorithm.has_next():
         algorithm.next()
         if args.save_populations:
             history.append(population_frame(algorithm.pop, native, run, algorithm.n_gen - 1))
 
+    cpu_time = (time.process_time_ns() - started) / 1e9
     y = algorithm.result().F
     performance = compute_performance(y, pareto_front, ref_point)
-    record = {"run": run, **performance}
+    record = {"run": run, **performance, "CPU_time": cpu_time}
     return record, pd.concat(history, ignore_index=True) if history else None
 
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     dimensions = {
-        key: value
-        for key, value in {"n_var": args.n_var, "n_obj": args.n_obj}.items()
-        if value is not None
+        key: value for key, value in {"n_var": args.n_var, "n_obj": args.n_obj}.items() if value is not None
     }
     problem = getattr(problems, args.problem)(**dimensions, boundary_constraints=False)
     args.pop_size = args.pop_size or {2: 100, 3: 300, 4: 600}.get(problem.n_obj, 100 * problem.n_obj)
-    runs = list(range(1, args.runs + 1))
-    budgets = get_budgets(args, runs)
+    budgets = get_budgets(args)
     pareto_front = get_pareto_front(problem)
     ref_point = get_reference_point(args, problem)
 
     params = (args, problem, pareto_front, ref_point)
     if args.n_jobs == 1:
-        data = [execute(run, *params, budgets[run]) for run in runs]
+        data = [execute(run, *params, budgets[run]) for run in budgets]
     else:
-        data = Parallel(n_jobs=args.n_jobs)(delayed(execute)(run, *params, budgets[run]) for run in runs)
+        data = Parallel(n_jobs=args.n_jobs)(delayed(execute)(run, *params, budgets[run]) for run in budgets)
     # save the performance results
     output = args.output or args.results_dir / f"{args.problem}-{args.algorithm}-{args.generation}.csv"
     output.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame([record for record, _ in data], columns=["run", "HV", "IGD", "GD"]).to_csv(
+    pd.DataFrame([record for record, _ in data], columns=["run", "HV", "IGD", "GD", "CPU_time"]).to_csv(
         output, index=False
     )
     # save the population data

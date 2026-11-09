@@ -92,7 +92,7 @@ def compute_performance(
         return dict(HV=np.nan, IGD=np.nan, GD=np.nan)
     if not np.isfinite(y).all():
         raise ValueError("Nonfinite final objectives")
-    y = get_non_dominated(y)
+    y = get_non_dominated(np.unique(y, axis=0))
     return dict(
         HV=HV(ref_point).compute(Y=y),
         IGD=InvertedGenerationalDistance(pareto_front).compute(Y=y),
